@@ -177,14 +177,61 @@ static void MatchCanonicalGlyph(
         }
     }
 
-    // Structural rule: disambiguate '0' vs '8'
-    // '8' has a solid horizontal crossbar in the center; '0' is completely hollow.
-    if ((*best_char == '0' || *best_char == '6') && score_8 > 0.40f && raw_glyph != nullptr && gw >= 6 && gh >= 6) {
-        int cy = gh / 2;
-        int cx = gw / 2;
-        if (raw_glyph[cy * gw + cx] == 1) {
+    // Comprehensive Topological Disambiguation for 8, 3, 0, 6, 9
+    if (raw_glyph != nullptr && gw >= 5 && gh >= 6 && strchr(candidates, '8') != nullptr) {
+        // Upper loop left fill (y: 20% to 40%, x: left 35%)
+        int y_u1 = (int)(gh * 0.20f), y_u2 = (int)(gh * 0.40f) + 1;
+        int y_l1 = (int)(gh * 0.60f), y_l2 = (int)(gh * 0.80f) + 1;
+        int x_left = std::max(1, (int)(gw * 0.35f));
+
+        int up_count = 0, up_total = 0;
+        for (int y = y_u1; y < y_u2 && y < gh; ++y) {
+            for (int x = 0; x < x_left && x < gw; ++x) {
+                if (raw_glyph[y * gw + x]) up_count++;
+                up_total++;
+            }
+        }
+        float up_left_fill = (up_total > 0) ? (float)up_count / (float)up_total : 0.0f;
+
+        int lo_count = 0, lo_total = 0;
+        for (int y = y_l1; y < y_l2 && y < gh; ++y) {
+            for (int x = 0; x < x_left && x < gw; ++x) {
+                if (raw_glyph[y * gw + x]) lo_count++;
+                lo_total++;
+            }
+        }
+        float lo_left_fill = (lo_total > 0) ? (float)lo_count / (float)lo_total : 0.0f;
+
+        // Middle row crossbar
+        int mid_y = gh / 2;
+        int mid_count = 0;
+        for (int x = 0; x < gw; ++x) {
+            if (raw_glyph[mid_y * gw + x]) mid_count++;
+        }
+        float mid_row_fill = (float)mid_count / (float)gw;
+        uint8_t center_px = raw_glyph[mid_y * gw + (gw / 2)];
+
+        // Rule A: If classified as '3', but has solid left strokes in both upper and lower halves -> IT IS AN '8'
+        if (*best_char == '3' && up_left_fill > 0.35f && lo_left_fill > 0.25f && score_8 > 0.35f) {
             *best_char = '8';
-            *best_score = score_8;
+            *best_score = std::max(*best_score, score_8);
+        }
+        // Rule B: If classified as '0' or '6', but has a solid middle crossbar and left strokes -> IT IS AN '8'
+        else if ((*best_char == '0' || *best_char == '6') && center_px == 1 && mid_row_fill > 0.55f && score_8 > 0.35f) {
+            *best_char = '8';
+            *best_score = std::max(*best_score, score_8);
+        }
+        // Rule C: If classified as '8', but lower-left is completely open (lo_left_fill < 0.15) -> IT IS A '3' or '9'
+        else if (*best_char == '8' && lo_left_fill < 0.15f) {
+            if (up_left_fill < 0.15f) {
+                *best_char = '3';
+            } else {
+                *best_char = '9';
+            }
+        }
+        // Rule D: If classified as '8', but center is hollow -> IT IS A '0'
+        else if (*best_char == '8' && center_px == 0 && mid_row_fill < 0.40f) {
+            *best_char = '0';
         }
     }
 }
