@@ -135,57 +135,75 @@ def parse_exp(frame_bgr):
     if in_span:
         spans.append((start, len(col_sums)))
         
-    exp_digits = []
-    pct_chars = []
-    in_pct = False
-
-    for idx, (s, e) in enumerate(spans):
+    glyphs = []
+    for s, e in spans:
         g = clean_mask[:, s:e]
         ry = np.where(np.sum(g, axis=1) > 0)[0]
         rx = np.where(np.sum(g, axis=0) > 0)[0]
         if len(ry) == 0 or len(rx) == 0:
             continue
-        g_trim = g[ry[0]:ry[-1]+1, rx[0]:rx[-1]+1]
-        gw, gh = g_trim.shape[1], g_trim.shape[0]
-        
-        # Skip 1px noise slivers
-        if gw <= 1 and gh <= 4:
+        gt = g[ry[0]:ry[-1]+1, rx[0]:rx[-1]+1]
+        gw, gh = gt.shape[1], gt.shape[0]
+        if gw <= 1 and gh <= 3:
             continue
-            
+        glyphs.append((gw, gh, gt))
+
+    if not glyphs:
+        return None
+
+    first_few_h = [gh for gw, gh, _ in glyphs[:4] if gh > 4]
+    base_digit_h = np.median(first_few_h) if first_few_h else best_th * 0.85
+    base_digit_w = np.median([gw for gw, gh, _ in glyphs[:4] if gh > 4]) if first_few_h else best_th * 0.6
+
+    exp_digits = []
+    pct_chars = []
+    in_pct = False
+
+    for gw, gh, gt in glyphs:
         if not in_pct:
-            ch_br, s_br = match_glyph_ncc(g_trim, ["["])
-            ch_dig, s_dig = match_glyph_ncc(g_trim, "0123456789")
-            # Open bracket '[' only occurs after at least 1 EXP digit
-            if len(exp_digits) >= 1 and s_br > 0.50 and s_br > s_dig:
+            ch_br, s_br = match_glyph_ncc(gt, ["["])
+            ch_dig, s_dig = match_glyph_ncc(gt, "0123456789")
+            
+            is_bracket = False
+            if len(exp_digits) >= 1:
+                # Open bracket '[' is strictly taller than standard digits (~1.22x) and narrower (~0.5x)
+                if gh >= 1.08 * base_digit_h and gw <= 0.80 * base_digit_w:
+                    is_bracket = True
+                elif s_br > 0.35 and s_br > s_dig:
+                    is_bracket = True
+
+            if is_bracket:
                 in_pct = True
                 continue
             exp_digits.append(ch_dig)
         else:
-            # Inside bracket: check for decimal dot '.'
-            if gw <= max(3, int(best_th * 0.35)) and gh <= max(3, int(best_th * 0.35)):
+            # Inside bracket:
+            # 1. Decimal dot check (small bounding box)
+            if gw <= max(4, int(base_digit_h * 0.35)) and gh <= max(4, int(base_digit_h * 0.35)):
                 pct_chars.append(".")
                 continue
-            ch_cl, s_cl = match_glyph_ncc(g_trim, ["]"])
-            ch_other, s_other = match_glyph_ncc(g_trim, "0123456789%")
-            if s_cl > 0.45 and s_cl > s_other and len(pct_chars) >= 3:
-                pct_chars.append("]")
+            # 2. Percentage sign '%' check (wide bounding box)
+            ch_pct, s_pct = match_glyph_ncc(gt, ["%"])
+            ch_dig, s_dig = match_glyph_ncc(gt, "0123456789")
+            if (s_pct > 0.30 and s_pct > s_dig) or gw >= 1.3 * base_digit_w:
+                pct_chars.append("%")
                 break
-            pct_chars.append(ch_other)
-            if ch_other == "%":
-                # Percentage complete!
-                pct_chars.append("]")
+            # 3. Closing bracket ']' check or length termination
+            if (gh >= 1.08 * base_digit_h and gw <= 0.80 * base_digit_w) or len(pct_chars) >= 4:
                 break
+            pct_chars.append(ch_dig)
 
     exp_str = "".join(exp_digits)
-    pct_str = "".join(pct_chars)
+    pct_str = "".join(pct_chars).replace("%", "")
     
-    m_exp = re.search(r"(\d+)", exp_str)
-    m_pct = re.search(r"(\d+\.?\d*)", pct_str)
-    
-    if m_exp:
-        exp_val = int(m_exp.group(1))
-        pct_val = float(m_pct.group(1)) if m_pct else None
-        return exp_val, pct_val, f"{exp_str}[{pct_str}]"
+    if exp_str.isdigit():
+        exp_val = int(exp_str)
+        try:
+            pct_val = float(pct_str)
+        except Exception:
+            pct_val = None
+        pct_display = f"{pct_val:.2f}%" if pct_val is not None else "N/A"
+        return exp_val, pct_val, f"{exp_str}[{pct_display}]"
     return None
 
 def main():
