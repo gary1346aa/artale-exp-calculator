@@ -28,6 +28,7 @@ import cv2
 import json
 import numpy as np
 from windows_capture import WindowsCapture, Frame
+import exp_core
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROTOS_PATH = os.path.join(BASE_DIR, "data", "desktop_font_protos.json")
@@ -241,16 +242,18 @@ def main():
             print(f"\n[{now_str}] [WINDOW RESIZE] New Resolution: {cur_res[0]}x{cur_res[1]}", flush=True)
             last_res = cur_res
             
-        t0 = time.perf_counter()
-        parsed = parse_exp(bgr)
-        dt_ms = (time.perf_counter() - t0) * 1000.0
+        parsed = exp_core.parse_frame(bgr)
         
         if parsed:
-            exp_val, pct, raw_str = parsed
+            if len(parsed) == 4:
+                exp_val, pct, raw_str, dt_ms = parsed
+            else:
+                exp_val, pct, raw_str = parsed
+                dt_ms = 0.0
             pct_s = f"{pct:.2f}%" if pct is not None else "N/A"
-            print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] EXP: {exp_val:>12,d} [{pct_s:>6}] | Parse: {dt_ms:4.1f}ms | Status: LOCKED", flush=True)
+            print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] EXP: {exp_val:>12,d} [{pct_s:>6}] | C++ Core: {dt_ms:4.1f}ms | Status: LOCKED", flush=True)
         else:
-            print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] Status: Searching for EXP bar... ({dt_ms:4.1f}ms)", flush=True)
+            print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] Status: Searching for EXP bar...", flush=True)
 
     @capture.event
     def on_closed():
