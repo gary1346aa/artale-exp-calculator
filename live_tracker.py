@@ -2,6 +2,7 @@
 
 Samples at 1 FPS (zero CPU overhead), captures un-occluded DirectX swapchain
 frames directly from DWM, and adapts dynamically to live window resizing.
+Accommodates up to 10-digit EXP numbers and 2+2 percentage (e.g. 1234567890[99.99%]).
 """
 
 import ctypes
@@ -47,12 +48,12 @@ def parse_exp(bgr_img):
     bottom = bgr_img[-120:, :]
     gray = cv2.cvtColor(bottom, cv2.COLOR_BGR2GRAY)
     
-    # Multi-scale EXP. logo template match
+    # Multi-scale EXP. logo template match across dynamic window scales
     best_val = -1
     best_loc = None
     best_tw, best_th = 0, 0
     scale_base = h / 1000.0
-    scales = np.linspace(max(0.6, scale_base * 0.7), min(2.0, scale_base * 1.4), 9)
+    scales = np.linspace(max(0.6, scale_base * 0.7), min(2.0, scale_base * 1.4), 11)
     for s in scales:
         th, tw = int(tpl_exp.shape[0] * s), int(tpl_exp.shape[1] * s)
         if th >= bottom.shape[0] or tw >= bottom.shape[1]:
@@ -69,33 +70,30 @@ def parse_exp(bgr_img):
         return None
         
     lx, ly = best_loc
-    # Text region after EXP. logo
-    text_w = min(int(best_th * 18), bottom.shape[1] - (lx + best_tw))
-    text_crop = bottom[max(0, ly - 3) : min(bottom.shape[0], ly + best_th + 4), lx + best_tw : lx + best_tw + text_w]
+    # Text region after EXP. logo:
+    # Width accommodates at least 10 digits EXP + [99.99%] (approx 20 chars, up to ~500px)
+    text_w = min(int(best_th * 30), bottom.shape[1] - (lx + best_tw + 4))
+    y_start = max(0, ly - 6)
+    y_end = min(bottom.shape[0], ly + best_th + 1)
+    text_crop = bottom[y_start:y_end, lx + best_tw + 4 : lx + best_tw + 4 + text_w]
     tc_gray = cv2.cvtColor(text_crop, cv2.COLOR_BGR2GRAY)
     mask = (tc_gray > 175).astype(np.uint8)
-    
-    # Trim to valid text baseline
-    row_sums = np.sum(mask, axis=1)
-    valid_rows = np.where(row_sums > 3)[0]
-    if len(valid_rows) < 4:
-        return None
-    mask = mask[valid_rows[0]:valid_rows[-1]+1, :]
     
     # Connected components segmentation
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
     glyphs = []
     for i in range(1, num_labels):
         gx, gy, gw, gh, garea = stats[i]
-        if gw > int(best_th * 2.2) or gh < 3 or garea < 2:
+        if gh < 3 or garea < 2 or gw > 40:
             continue
         glyphs.append((gx, gy, gw, gh, mask[gy:gy+gh, gx:gx+gw]))
         
     glyphs.sort(key=lambda g: g[0])
     
     chars = []
+    found_open_bracket = False
     for gx, gy, gw, gh, crop in glyphs:
-        if gw <= 4 and gh <= 3:
+        if gw <= 4 and gh <= 4:
             chars.append(".")
             continue
         best_iou = -1
@@ -110,24 +108,21 @@ def parse_exp(bgr_img):
             if iou > best_iou:
                 best_iou = iou
                 best_ch = ch
+                
+        if best_ch == "[":
+            found_open_bracket = True
+        elif best_ch == "]" and found_open_bracket:
+            chars.append("]")
+            break
         chars.append(best_ch)
         
     raw_str = "".join(chars)
-    # Parse EXP and percent
-    m = re.match(r"^(\d+)\[(\d+)(?:\.(\d+))?", raw_str)
+    # Parse up to 10-digit EXP and percent (e.g. 1234567890[99.99%])
+    m = re.search(r"(\d+)\[(\d+\.?\d*)", raw_str)
     if m:
         exp_val = int(m.group(1))
-        pct_int = m.group(2)
-        pct_dec = m.group(3) or ""
-        if "." in raw_str:
-            pct_m = re.search(r"\[(\d+\.\d+)", raw_str)
-            pct = float(pct_m.group(1)) if pct_m else float(pct_int)
-        else:
-            if len(pct_int) >= 3 and pct_int.startswith("0"):
-                pct = float(pct_int[0] + "." + pct_int[1:3])
-            else:
-                pct = float(pct_int)
-        return exp_val, pct, raw_str
+        pct_val = float(m.group(2))
+        return exp_val, pct_val, raw_str
     elif raw_str:
         digits_only = "".join(c for c in raw_str.split("[")[0] if c.isdigit())
         if digits_only:
@@ -142,6 +137,7 @@ def main():
     print("=" * 80, flush=True)
     print("Sampling Rate : 1.0 frame / sec", flush=True)
     print("Target Window : 'MapleStory Worlds-Artale'", flush=True)
+    print("Capacity      : Up to 10 digits EXP + 2+2 % (e.g. 1234567890[99.99%])", flush=True)
     print("Features      : Un-occluded background capture + dynamic resize auto-adaptation", flush=True)
     print("Press Ctrl+C to exit.\n", flush=True)
 
@@ -175,7 +171,7 @@ def main():
         if parsed:
             exp_val, pct, raw_str = parsed
             pct_s = f"{pct:.2f}%" if pct is not None else "N/A"
-            print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] EXP: {exp_val:>10,d} [{pct_s:>6}] | Parse: {dt_ms:4.1f}ms | Status: LOCKED", flush=True)
+            print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] EXP: {exp_val:>12,d} [{pct_s:>6}] | Parse: {dt_ms:4.1f}ms | Status: LOCKED", flush=True)
         else:
             print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] Status: Searching for EXP bar... ({dt_ms:4.1f}ms)", flush=True)
 
