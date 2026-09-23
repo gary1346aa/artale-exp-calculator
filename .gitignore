@@ -13,3 +13,4 @@ bin/
 *.png
 !data/*.png
 hud_config.json
+debug_crops/

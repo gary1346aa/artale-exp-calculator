@@ -269,6 +269,14 @@ ARTALE_API int ParseExpFromBuffer(
     out_result->exp_percent = -1.0;
     out_result->success = 0;
     out_result->exp_string[0] = '\0';
+    out_result->crop_x = 0;
+    out_result->crop_y = 0;
+    out_result->crop_w = 0;
+    out_result->crop_h = 0;
+    out_result->logo_x = 0;
+    out_result->logo_y = 0;
+    out_result->logo_w = 0;
+    out_result->logo_h = 0;
 
     // 1. Crop bottom 15% strip
     int strip_h = std::max(80, (int)(height * 0.15f));
@@ -407,6 +415,15 @@ ARTALE_API int ParseExpFromBuffer(
     int tc_h = y_end - y_start;
     if (tc_w <= 0 || tc_h <= 0) return 0;
 
+    out_result->crop_x = x_start;
+    out_result->crop_y = strip_y_start + y_start;
+    out_result->crop_w = tc_w;
+    out_result->crop_h = tc_h;
+    out_result->logo_x = best_lx;
+    out_result->logo_y = strip_y_start + best_ly;
+    out_result->logo_w = best_tw;
+    out_result->logo_h = best_th;
+
     // Adaptive threshold: 140 for high/mid res, 132 for low-res
     uint8_t thresh_val = (best_th >= 16) ? 140 : 132;
 
@@ -420,7 +437,8 @@ ARTALE_API int ParseExpFromBuffer(
     }
 
     // 4. Horizontal column-sum projection
-    std::vector<artale::Span> spans;
+    std::vector<int> col_sums(tc_w, 0);
+    std::vector<artale::Span> raw_spans;
     bool in_span = false;
     int span_start = 0;
 
@@ -429,16 +447,61 @@ ARTALE_API int ParseExpFromBuffer(
         for (int y = 0; y < tc_h; ++y) {
             csum += mask[y * tc_w + x];
         }
+        col_sums[x] = csum;
         if (csum > 0 && !in_span) {
             in_span = true;
             span_start = x;
         } else if (csum == 0 && in_span) {
             in_span = false;
-            spans.push_back({span_start, x});
+            raw_spans.push_back({span_start, x});
         }
     }
     if (in_span) {
-        spans.push_back({span_start, tc_w});
+        raw_spans.push_back({span_start, tc_w});
+    }
+
+    // Width-aware valley splitting for merged digits (e.g. anti-aliased bridging between '8' and '4')
+    float exp_w = (float)best_th * 0.60f;
+    std::vector<artale::Span> spans;
+    bool found_bracket = false;
+
+    for (const auto& sp : raw_spans) {
+        int span_w = sp.end - sp.start;
+
+        // Quick check if this span is '['
+        int y_min = tc_h, y_max = -1;
+        for (int y = 0; y < tc_h; ++y) {
+            for (int x = sp.start; x < sp.end; ++x) {
+                if (mask[y * tc_w + x]) {
+                    if (y < y_min) y_min = y;
+                    if (y > y_max) y_max = y;
+                }
+            }
+        }
+        int gh = (y_max >= y_min) ? (y_max - y_min + 1) : 0;
+        if (gh >= (int)(best_th * 0.85f) && span_w <= (int)(exp_w * 0.65f)) {
+            found_bracket = true;
+        }
+
+        // If span contains 2 merged digits before the '[' bracket
+        if (!found_bracket && span_w >= (int)(exp_w * 1.45f) && span_w <= (int)(exp_w * 2.6f)) {
+            int m_st = (int)(span_w * 0.30f);
+            int m_en = (int)(span_w * 0.70f);
+            int min_idx = m_st;
+            int min_val = col_sums[sp.start + m_st];
+            for (int i = m_st + 1; i < m_en; ++i) {
+                if (col_sums[sp.start + i] < min_val) {
+                    min_val = col_sums[sp.start + i];
+                    min_idx = i;
+                }
+            }
+            if (min_val <= 3) {
+                spans.push_back({sp.start, sp.start + min_idx});
+                spans.push_back({sp.start + min_idx + 1, sp.end});
+                continue;
+            }
+        }
+        spans.push_back(sp);
     }
 
     // Trim glyphs to tight bounding boxes

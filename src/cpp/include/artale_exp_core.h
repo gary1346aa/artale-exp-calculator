@@ -26,6 +26,14 @@ typedef struct {
     int success;            // 1 if successfully locked and parsed, 0 otherwise
     float parse_time_ms;    // Processing latency in milliseconds
     char exp_string[64];    // Formatted raw string e.g. "772097[0.32%]"
+    int crop_x;             // Absolute text bounding box X in original frame
+    int crop_y;             // Absolute text bounding box Y in original frame
+    int crop_w;             // Text bounding box width
+    int crop_h;             // Text bounding box height
+    int logo_x;             // Absolute logo bounding box X in original frame
+    int logo_y;             // Absolute logo bounding box Y in original frame
+    int logo_w;             // Logo bounding box width
+    int logo_h;             // Logo bounding box height
 } ExpResult;
 
 /**

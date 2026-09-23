@@ -239,17 +239,19 @@ def main():
         
         bgr = frame.convert_to_bgr().frame_buffer
         cur_res = (bgr.shape[1], bgr.shape[0])
-        now_str = datetime.now().strftime("%H:%M:%S")
-        
-        if last_res != cur_res:
+        res_changed = (last_res != cur_res)
+        if res_changed:
             print(f"\n[{now_str}] [視窗尺寸變更] 當前解析度: {cur_res[0]}x{cur_res[1]}", flush=True)
             last_res = cur_res
             
         parsed = exp_core.parse_frame(bgr)
         
         if parsed:
-            if len(parsed) == 4:
-                exp_val, pct, raw_str, dt_ms = parsed
+            if res_changed:
+                exp_core.save_crop_debug(bgr, parsed)
+
+            if len(parsed) >= 4:
+                exp_val, pct, raw_str, dt_ms = parsed[:4]
             else:
                 exp_val, pct, raw_str = parsed
                 dt_ms = 0.0

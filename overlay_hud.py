@@ -45,9 +45,10 @@ class CaptureWorker(QThread):
         from windows_capture import WindowsCapture, Frame
 
         last_sample_time = 0.0
+        last_res = None
 
         def on_frame_arrived(frame: Frame, capture_control):
-            nonlocal last_sample_time
+            nonlocal last_sample_time, last_res
             if not self.running:
                 capture_control.stop()
                 return
@@ -59,9 +60,17 @@ class CaptureWorker(QThread):
 
             try:
                 bgr = frame.convert_to_bgr().frame_buffer
+                cur_res = (bgr.shape[1], bgr.shape[0])
+                res_changed = (last_res != cur_res)
+                if res_changed:
+                    last_res = cur_res
+
                 parsed = exp_core.parse_frame(bgr)
                 if parsed:
-                    exp_val, pct, raw_str, dt_ms = parsed
+                    if res_changed:
+                        exp_core.save_crop_debug(bgr, parsed)
+
+                    exp_val, pct, raw_str, dt_ms = parsed[:4]
                     self.frame_parsed.emit(exp_val, pct if pct is not None else -1.0, dt_ms)
                     self.status_changed.emit("即時監控中", True)
                 else:
