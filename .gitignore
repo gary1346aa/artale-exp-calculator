@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+.vscode/
+.idea/
+build/
+bin/
+*.exe
+*.dll
+*.dylib
+*.so
