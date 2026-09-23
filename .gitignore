@@ -10,4 +10,5 @@ bin/
 *.exe
 *.dll
 *.dylib
-*.so
+*.png
+!data/*.png
