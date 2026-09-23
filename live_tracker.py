@@ -29,6 +29,7 @@ import json
 import numpy as np
 from windows_capture import WindowsCapture, Frame
 import exp_core
+from metrics_engine import ExpMetricsEngine
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROTOS_PATH = os.path.join(BASE_DIR, "data", "desktop_font_protos.json")
@@ -225,6 +226,8 @@ def main():
         window_name="MapleStory Worlds-Artale"
     )
 
+    engine = ExpMetricsEngine()
+
     @capture.event
     def on_frame_arrived(frame: Frame, capture_control):
         global last_res, last_sample_time
@@ -239,7 +242,7 @@ def main():
         now_str = datetime.now().strftime("%H:%M:%S")
         
         if last_res != cur_res:
-            print(f"\n[{now_str}] [WINDOW RESIZE] New Resolution: {cur_res[0]}x{cur_res[1]}", flush=True)
+            print(f"\n[{now_str}] [視窗尺寸變更] 當前解析度: {cur_res[0]}x{cur_res[1]}", flush=True)
             last_res = cur_res
             
         parsed = exp_core.parse_frame(bgr)
@@ -250,10 +253,21 @@ def main():
             else:
                 exp_val, pct, raw_str = parsed
                 dt_ms = 0.0
-            pct_s = f"{pct:.2f}%" if pct is not None else "N/A"
-            print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] EXP: {exp_val:>12,d} [{pct_s:>6}] | C++ Core: {dt_ms:4.1f}ms | Status: LOCKED", flush=True)
+            
+            engine.add_sample(exp_val, pct)
+            m = engine.get_metrics()
+            
+            print(
+                f"[{now_str}] 經驗: {m['當前經驗']} | "
+                f"時長: {m['練功時長']} | "
+                f"總獲得: {m['總獲得經驗']} | "
+                f"時薪: {m['預估60分']} | "
+                f"升級預估: {m['升級預估時間']} | "
+                f"延遲: {dt_ms:4.1f}ms",
+                flush=True
+            )
         else:
-            print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] Status: Searching for EXP bar...", flush=True)
+            print(f"[{now_str}] [{cur_res[0]}x{cur_res[1]}] 狀態: 搜尋經驗條中...", flush=True)
 
     @capture.event
     def on_closed():

@@ -12,3 +12,4 @@ bin/
 *.dylib
 *.png
 !data/*.png
+hud_config.json
