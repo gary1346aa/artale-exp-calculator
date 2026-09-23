@@ -218,7 +218,11 @@ def main():
     print("Supported Res : Dynamic 720p ~ 4K+ with subpixel NCC matching", flush=True)
     print("Capacity      : Up to 10 digits EXP + 2+2 % (e.g. 1234567890[99.99%])", flush=True)
     print("Features      : Un-occluded background capture + dynamic resize auto-adaptation", flush=True)
-    print("Press Ctrl+C to exit.\n", flush=True)
+    if sys.platform == "win32":
+        user32 = ctypes.windll.user32
+        h_desk = user32.OpenDesktopW("Default", 0, False, 0x01FF)
+        if h_desk:
+            user32.SetThreadDesktop(h_desk)
 
     capture = WindowsCapture(
         cursor_capture=False,
@@ -232,6 +236,7 @@ def main():
     def on_frame_arrived(frame: Frame, capture_control):
         global last_res, last_sample_time
         now = time.time()
+        now_str = datetime.now().strftime("%H:%M:%S")
         # Enforce 1 FPS throttling
         if now - last_sample_time < sample_interval:
             return

@@ -216,8 +216,13 @@ static void MatchCanonicalGlyph(
             *best_char = '8';
             *best_score = std::max(*best_score, score_8);
         }
-        // Rule B: If classified as '0' or '6', but has a solid middle crossbar and left strokes -> IT IS AN '8'
-        else if ((*best_char == '0' || *best_char == '6') && center_px == 1 && mid_row_fill > 0.55f && score_8 > 0.35f) {
+        // Rule B1: If classified as '0' or '6', but has a solid middle crossbar and left strokes -> IT IS AN '8'
+        else if ((*best_char == '0' || *best_char == '6') && center_px == 1 && mid_row_fill > 0.48f && up_left_fill > 0.30f && lo_left_fill > 0.25f && score_8 > 0.35f) {
+            *best_char = '8';
+            *best_score = std::max(*best_score, score_8);
+        }
+        // Rule B2: If classified as '9', but has a solid lower-left stroke (which 9 never has) -> IT IS AN '8'
+        else if (*best_char == '9' && lo_left_fill > 0.30f && score_8 > 0.35f) {
             *best_char = '8';
             *best_score = std::max(*best_score, score_8);
         }
@@ -406,10 +411,13 @@ ARTALE_API int ParseExpFromBuffer(
     }
 
     // 3. Extract text region relative to logo coordinates
-    int y_start = std::max(0, best_ly - (int)(best_th * 0.28f));
-    int y_end = std::min(strip_h, best_ly + (int)(best_th * 1.05f));
-    int x_start = best_lx + best_tw + (int)(best_th * 0.45f);
-    int x_end = std::min(width, x_start + (int)(best_th * 32));
+    // Adaptive threshold: 140 for high/mid res, 132 for low-res
+    uint8_t thresh_val = (best_th >= 16) ? 140 : 132;
+
+    int y_start = std::max(0, best_ly - (int)(best_th * 0.45f));
+    int y_end = std::min(strip_h, y_start + best_th + 1);
+    int x_start = best_lx + best_tw + (int)(best_th * 0.35f);
+    int x_end = std::min(width, x_start + (int)(best_th * 13.0f));
 
     int tc_w = x_end - x_start;
     int tc_h = y_end - y_start;
@@ -423,9 +431,6 @@ ARTALE_API int ParseExpFromBuffer(
     out_result->logo_y = strip_y_start + best_ly;
     out_result->logo_w = best_tw;
     out_result->logo_h = best_th;
-
-    // Adaptive threshold: 140 for high/mid res, 132 for low-res
-    uint8_t thresh_val = (best_th >= 16) ? 140 : 132;
 
     std::vector<uint8_t> mask(tc_w * tc_h);
     for (int y = 0; y < tc_h; ++y) {
@@ -460,12 +465,22 @@ ARTALE_API int ParseExpFromBuffer(
         raw_spans.push_back({span_start, tc_w});
     }
 
-    // Width-aware valley splitting for merged digits (e.g. anti-aliased bridging between '8' and '4')
+    // Discard any trailing spans after a large gap (> 1.2 * best_th)
+    std::vector<artale::Span> trimmed_raw_spans;
+    int max_inter_glyph_gap = std::max(12, (int)(best_th * 1.2f));
+    for (size_t i = 0; i < raw_spans.size(); ++i) {
+        if (i > 0 && (raw_spans[i].start - raw_spans[i - 1].end) > max_inter_glyph_gap) {
+            break;
+        }
+        trimmed_raw_spans.push_back(raw_spans[i]);
+    }
+
+    // Width-aware valley splitting for merged digits (e.g. anti-aliased bridging between '8' and '4', or '[' and '0')
     float exp_w = (float)best_th * 0.60f;
     std::vector<artale::Span> spans;
     bool found_bracket = false;
 
-    for (const auto& sp : raw_spans) {
+    for (const auto& sp : trimmed_raw_spans) {
         int span_w = sp.end - sp.start;
 
         // Quick check if this span is '['
@@ -483,13 +498,13 @@ ARTALE_API int ParseExpFromBuffer(
             found_bracket = true;
         }
 
-        // If span contains 2 merged digits before the '[' bracket
-        if (!found_bracket && span_w >= (int)(exp_w * 1.45f) && span_w <= (int)(exp_w * 2.6f)) {
-            int m_st = (int)(span_w * 0.30f);
-            int m_en = (int)(span_w * 0.70f);
+        // If span contains 2 merged elements (e.g. 2 digits or '[' + digit)
+        if (span_w >= (int)(exp_w * 1.35f) && span_w <= (int)(exp_w * 2.8f)) {
+            int m_st = std::max(1, (int)(span_w * 0.20f));
+            int m_en = std::min(span_w - 1, (int)(span_w * 0.80f));
             int min_idx = m_st;
             int min_val = col_sums[sp.start + m_st];
-            for (int i = m_st + 1; i < m_en; ++i) {
+            for (int i = m_st + 1; i <= m_en; ++i) {
                 if (col_sums[sp.start + i] < min_val) {
                     min_val = col_sums[sp.start + i];
                     min_idx = i;
@@ -533,6 +548,13 @@ ARTALE_API int ParseExpFromBuffer(
         glyphs.push_back(std::move(gl));
     }
 
+    if (!spans.empty()) {
+        int first_x = spans.front().start;
+        int last_x = spans.back().end;
+        out_result->crop_x = x_start + first_x;
+        out_result->crop_w = std::min(tc_w - first_x, last_x - first_x + (int)(best_th * 0.15f));
+    }
+
     if (glyphs.empty()) {
         auto t1 = std::chrono::high_resolution_clock::now();
         out_result->parse_time_ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
@@ -562,6 +584,12 @@ ARTALE_API int ParseExpFromBuffer(
     alignas(32) float canon_zm[artale::CANON_SIZE];
 
     for (const auto& gl : glyphs) {
+        if (!in_pct) {
+            // Ignore comma punctuation in EXP number
+            if (gl.w <= (int)(base_w * 0.45f) && gl.h <= (int)(base_h * 0.45f)) {
+                continue;
+            }
+        }
         artale::ResizeBilinear(
             gl.data.data(), gl.w, gl.h, gl.w,
             canon_buf, artale::CANON_W, artale::CANON_H
