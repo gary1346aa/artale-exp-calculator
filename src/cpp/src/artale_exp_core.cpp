@@ -63,30 +63,36 @@ static inline float DotProduct384(const float* a, const float* b) {
 #endif
 }
 
-// Bilinear image resize (uint8 to float)
+// Bilinear image resize (uint8 to float) matching OpenCV INTER_LINEAR
 static void ResizeBilinear(
     const uint8_t* src, int sw, int sh, int s_stride,
     float* dst, int dw, int dh)
 {
-    float x_ratio = (sw > 1) ? (float)(sw - 1) / (float)dw : 0.0f;
-    float y_ratio = (sh > 1) ? (float)(sh - 1) / (float)dh : 0.0f;
+    float scale_x = (dw > 0) ? (float)sw / (float)dw : 0.0f;
+    float scale_y = (dh > 0) ? (float)sh / (float)dh : 0.0f;
 
     for (int y = 0; y < dh; ++y) {
-        float fy = y * y_ratio;
-        int y1 = (int)fy;
-        int y2 = (y1 < sh - 1) ? y1 + 1 : y1;
-        float y_diff = fy - y1;
+        float fy = (y + 0.5f) * scale_y - 0.5f;
+        int y1 = (int)std::floor(fy);
+        int y2 = y1 + 1;
+        float y_diff = fy - (float)y1;
+
+        int sy1 = std::max(0, std::min(sh - 1, y1));
+        int sy2 = std::max(0, std::min(sh - 1, y2));
 
         for (int x = 0; x < dw; ++x) {
-            float fx = x * x_ratio;
-            int x1 = (int)fx;
-            int x2 = (x1 < sw - 1) ? x1 + 1 : x1;
-            float x_diff = fx - x1;
+            float fx = (x + 0.5f) * scale_x - 0.5f;
+            int x1 = (int)std::floor(fx);
+            int x2 = x1 + 1;
+            float x_diff = fx - (float)x1;
 
-            float p1 = (float)src[y1 * s_stride + x1];
-            float p2 = (float)src[y1 * s_stride + x2];
-            float p3 = (float)src[y2 * s_stride + x1];
-            float p4 = (float)src[y2 * s_stride + x2];
+            int sx1 = std::max(0, std::min(sw - 1, x1));
+            int sx2 = std::max(0, std::min(sw - 1, x2));
+
+            float p1 = (float)src[sy1 * s_stride + sx1];
+            float p2 = (float)src[sy1 * s_stride + sx2];
+            float p3 = (float)src[sy2 * s_stride + sx1];
+            float p4 = (float)src[sy2 * s_stride + sx2];
 
             float val = p1 * (1.0f - x_diff) * (1.0f - y_diff) +
                         p2 * (x_diff) * (1.0f - y_diff) +
@@ -98,30 +104,36 @@ static void ResizeBilinear(
     }
 }
 
-// Bilinear resize uint8 to uint8
+// Bilinear resize uint8 to uint8 matching OpenCV INTER_LINEAR
 static void ResizeBilinearU8(
     const uint8_t* src, int sw, int sh, int s_stride,
     uint8_t* dst, int dw, int dh, int d_stride)
 {
-    float x_ratio = (sw > 1) ? (float)(sw - 1) / (float)dw : 0.0f;
-    float y_ratio = (sh > 1) ? (float)(sh - 1) / (float)dh : 0.0f;
+    float scale_x = (dw > 0) ? (float)sw / (float)dw : 0.0f;
+    float scale_y = (dh > 0) ? (float)sh / (float)dh : 0.0f;
 
     for (int y = 0; y < dh; ++y) {
-        float fy = y * y_ratio;
-        int y1 = (int)fy;
-        int y2 = (y1 < sh - 1) ? y1 + 1 : y1;
-        float y_diff = fy - y1;
+        float fy = (y + 0.5f) * scale_y - 0.5f;
+        int y1 = (int)std::floor(fy);
+        int y2 = y1 + 1;
+        float y_diff = fy - (float)y1;
+
+        int sy1 = std::max(0, std::min(sh - 1, y1));
+        int sy2 = std::max(0, std::min(sh - 1, y2));
 
         for (int x = 0; x < dw; ++x) {
-            float fx = x * x_ratio;
-            int x1 = (int)fx;
-            int x2 = (x1 < sw - 1) ? x1 + 1 : x1;
-            float x_diff = fx - x1;
+            float fx = (x + 0.5f) * scale_x - 0.5f;
+            int x1 = (int)std::floor(fx);
+            int x2 = x1 + 1;
+            float x_diff = fx - (float)x1;
 
-            float p1 = (float)src[y1 * s_stride + x1];
-            float p2 = (float)src[y1 * s_stride + x2];
-            float p3 = (float)src[y2 * s_stride + x1];
-            float p4 = (float)src[y2 * s_stride + x2];
+            int sx1 = std::max(0, std::min(sw - 1, x1));
+            int sx2 = std::max(0, std::min(sw - 1, x2));
+
+            float p1 = (float)src[sy1 * s_stride + sx1];
+            float p2 = (float)src[sy1 * s_stride + sx2];
+            float p3 = (float)src[sy2 * s_stride + sx1];
+            float p4 = (float)src[sy2 * s_stride + sx2];
 
             float val = p1 * (1.0f - x_diff) * (1.0f - y_diff) +
                         p2 * (x_diff) * (1.0f - y_diff) +
@@ -137,12 +149,15 @@ static void ResizeBilinearU8(
 static void MatchCanonicalGlyph(
     const float* canonical_zm, float norm,
     const char* candidates,
-    char* best_char, float* best_score)
+    char* best_char, float* best_score,
+    const uint8_t* raw_glyph = nullptr, int gw = 0, int gh = 0)
 {
     *best_char = '?';
     *best_score = -1.0f;
 
     if (norm < 1e-6f) return;
+
+    float score_8 = -1.0f;
 
     for (int i = 0; i < NUM_CANON_PROTOS; ++i) {
         const CanonicalGlyph& p = CANON_PROTOTYPES[i];
@@ -152,9 +167,24 @@ static void MatchCanonicalGlyph(
         float dot = DotProduct384(canonical_zm, p.values);
         float ncc = dot / (norm * p.norm);
 
+        if (p.id == '8') {
+            score_8 = ncc;
+        }
+
         if (ncc > *best_score) {
             *best_score = ncc;
             *best_char = p.id;
+        }
+    }
+
+    // Structural rule: disambiguate '0' vs '8'
+    // '8' has a solid horizontal crossbar in the center; '0' is completely hollow.
+    if ((*best_char == '0' || *best_char == '6') && score_8 > 0.40f && raw_glyph != nullptr && gw >= 6 && gh >= 6) {
+        int cy = gh / 2;
+        int cx = gw / 2;
+        if (raw_glyph[cy * gw + cx] == 1) {
+            *best_char = '8';
+            *best_score = score_8;
         }
     }
 }
@@ -211,8 +241,7 @@ ARTALE_API int ParseExpFromBuffer(
         }
     }
 
-    // 2. Ultra-fast normalized height search:
-    // Normalize search height to 80px for O(1) multi-resolution speed
+    // 2. Normalized height multi-scale template search
     constexpr int NORM_H = 80;
     float ds = (float)strip_h / (float)NORM_H;
     int sw = (int)((float)width / ds);
@@ -224,7 +253,7 @@ ARTALE_API int ParseExpFromBuffer(
         gray_small.data(), sw, sh, sw
     );
 
-    // Compute Integral Images of gray_small for O(1) patch sums and variance
+    // Integral Images for O(1) patch sums and variance
     std::vector<double> sat((sw + 1) * (sh + 1), 0.0);
     std::vector<double> sat2((sw + 1) * (sh + 1), 0.0);
 
@@ -240,7 +269,6 @@ ARTALE_API int ParseExpFromBuffer(
         }
     }
 
-    // Search 9 scales centered around base logo height in 80px space (6 to 12 px)
     constexpr int NUM_SCALES = 9;
     float s_min = 6.0f / (float)artale::TPL_EXP_HEIGHT;
     float s_max = 12.0f / (float)artale::TPL_EXP_HEIGHT;
@@ -288,15 +316,13 @@ ARTALE_API int ParseExpFromBuffer(
             for (int x = 0; x <= max_x; ++x) {
                 int x2 = x + tw;
 
-                // O(1) local patch mean and variance via Integral Images
                 double p_sum = sat[y2 * (sw + 1) + x2] - sat[y * (sw + 1) + x2] - sat[y2 * (sw + 1) + x] + sat[y * (sw + 1) + x];
                 double p_sqsum = sat2[y2 * (sw + 1) + x2] - sat2[y * (sw + 1) + x2] - sat2[y2 * (sw + 1) + x] + sat2[y * (sw + 1) + x];
                 double variance = p_sqsum - (p_sum * p_sum * inv_area);
-                if (variance <= 1.0) continue; // Flat background
+                if (variance <= 1.0) continue;
 
                 float p_norm = (float)std::sqrt(variance);
 
-                // Compute template dot product
                 float dot = 0.0f;
                 for (int ty = 0; ty < th; ++ty) {
                     const uint8_t* p_row = gray_small.data() + (y + ty) * sw + x;
@@ -321,12 +347,12 @@ ARTALE_API int ParseExpFromBuffer(
     if (best_val < 0.65f) {
         auto t1 = std::chrono::high_resolution_clock::now();
         out_result->parse_time_ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
-        return 0; // Logo not found
+        return 0;
     }
 
     // 3. Extract text region relative to logo coordinates
-    int y_start = std::max(0, best_ly - (int)(best_th * 0.35f));
-    int y_end = std::min(strip_h, best_ly + (int)(best_th * 1.50f));
+    int y_start = std::max(0, best_ly - (int)(best_th * 0.28f));
+    int y_end = std::min(strip_h, best_ly + (int)(best_th * 1.05f));
     int x_start = best_lx + best_tw + (int)(best_th * 0.45f);
     int x_end = std::min(width, x_start + (int)(best_th * 32));
 
@@ -334,28 +360,15 @@ ARTALE_API int ParseExpFromBuffer(
     int tc_h = y_end - y_start;
     if (tc_w <= 0 || tc_h <= 0) return 0;
 
-    // Binary threshold at 130
+    // Adaptive threshold: 140 for high/mid res, 132 for low-res
+    uint8_t thresh_val = (best_th >= 16) ? 140 : 132;
+
     std::vector<uint8_t> mask(tc_w * tc_h);
     for (int y = 0; y < tc_h; ++y) {
         const uint8_t* g_row = gray.data() + (y_start + y) * width + x_start;
         uint8_t* m_row = mask.data() + y * tc_w;
         for (int x = 0; x < tc_w; ++x) {
-            m_row[x] = (g_row[x] > 130) ? 1 : 0;
-        }
-    }
-
-    // Strip gauge bar line: find first zero gap below font baseline
-    int check_w = std::min(tc_w, (int)(best_th * 10));
-    int text_y2 = tc_h;
-    for (int y = 0; y < tc_h; ++y) {
-        int rsum = 0;
-        const uint8_t* m_row = mask.data() + y * tc_w;
-        for (int x = 0; x < check_w; ++x) {
-            rsum += m_row[x];
-        }
-        if (rsum == 0 && y > (int)(best_th * 0.6f)) {
-            text_y2 = y;
-            break;
+            m_row[x] = (g_row[x] > thresh_val) ? 1 : 0;
         }
     }
 
@@ -366,7 +379,7 @@ ARTALE_API int ParseExpFromBuffer(
 
     for (int x = 0; x < tc_w; ++x) {
         int csum = 0;
-        for (int y = 0; y < text_y2; ++y) {
+        for (int y = 0; y < tc_h; ++y) {
             csum += mask[y * tc_w + x];
         }
         if (csum > 0 && !in_span) {
@@ -385,8 +398,8 @@ ARTALE_API int ParseExpFromBuffer(
     std::vector<artale::Glyph> glyphs;
     for (const auto& sp : spans) {
         int gw = sp.end - sp.start;
-        int y_min = text_y2, y_max = -1;
-        for (int y = 0; y < text_y2; ++y) {
+        int y_min = tc_h, y_max = -1;
+        for (int y = 0; y < tc_h; ++y) {
             for (int x = sp.start; x < sp.end; ++x) {
                 if (mask[y * tc_w + x]) {
                     if (y < y_min) y_min = y;
@@ -396,7 +409,7 @@ ARTALE_API int ParseExpFromBuffer(
         }
         if (y_max < y_min) continue;
         int gh = y_max - y_min + 1;
-        if (gw <= 1 && gh <= 3) continue; // Skip single-pixel noise
+        if (gw <= 1 && gh <= 3) continue;
 
         artale::Glyph gl;
         gl.w = gw;
@@ -439,7 +452,6 @@ ARTALE_API int ParseExpFromBuffer(
     alignas(32) float canon_zm[artale::CANON_SIZE];
 
     for (const auto& gl : glyphs) {
-        // Resize to canonical 16x24
         artale::ResizeBilinear(
             gl.data.data(), gl.w, gl.h, gl.w,
             canon_buf, artale::CANON_W, artale::CANON_H
@@ -461,11 +473,10 @@ ARTALE_API int ParseExpFromBuffer(
             char ch_br = '?', ch_dig = '?';
             float s_br = 0.0f, s_dig = 0.0f;
             artale::MatchCanonicalGlyph(canon_zm, g_norm, "[", &ch_br, &s_br);
-            artale::MatchCanonicalGlyph(canon_zm, g_norm, "0123456789", &ch_dig, &s_dig);
+            artale::MatchCanonicalGlyph(canon_zm, g_norm, "0123456789", &ch_dig, &s_dig, gl.data.data(), gl.w, gl.h);
 
             bool is_bracket = false;
             if (!exp_str.empty()) {
-                // Morphological test: bracket is strictly taller & narrower
                 if (gl.h >= 1.08f * base_h && gl.w <= 0.80f * base_w) {
                     is_bracket = true;
                 } else if (s_br > 0.35f && s_br > s_dig) {
@@ -489,7 +500,7 @@ ARTALE_API int ParseExpFromBuffer(
             char ch_pct = '?', ch_dig = '?';
             float s_pct = 0.0f, s_dig = 0.0f;
             artale::MatchCanonicalGlyph(canon_zm, g_norm, "%", &ch_pct, &s_pct);
-            artale::MatchCanonicalGlyph(canon_zm, g_norm, "0123456789", &ch_dig, &s_dig);
+            artale::MatchCanonicalGlyph(canon_zm, g_norm, "0123456789", &ch_dig, &s_dig, gl.data.data(), gl.w, gl.h);
 
             // Check for '%'
             if ((s_pct > 0.30f && s_pct > s_dig) || gl.w >= 1.30f * base_w) {
@@ -498,7 +509,7 @@ ARTALE_API int ParseExpFromBuffer(
             }
 
             // Check for closing bracket ']'
-            if ((gl.h >= 1.08f * base_h && gl.w <= 0.80f * base_w) || pct_str.length() >= 4) {
+            if ((gl.h >= 1.08f * base_h && gl.w <= 0.80f * base_w) || pct_str.length() >= 8) {
                 break;
             }
 
