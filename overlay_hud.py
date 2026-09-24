@@ -25,6 +25,7 @@ from PyQt6.QtGui import (
     QPen,
 )
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QCheckBox,
     QDialog,
@@ -32,9 +33,12 @@ from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMenu,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -227,6 +231,7 @@ class MetricRow(QFrame):
   ):
     super().__init__(parent)
     self.is_highlight = is_highlight
+    self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     layout = QHBoxLayout(self)
     layout.setContentsMargins(6, 3, 6, 3)
     layout.setSpacing(10)
@@ -362,91 +367,184 @@ class SmoothButton(QPushButton):
 
 
 class GameModeSettingsDialog(QDialog):
-  """Dialog allowing the user to select which metrics to display in Game Mode."""
+  """Dialog allowing the user to select and drag-reorder metrics for Game Mode."""
 
-  def __init__(self, current_items: List[str], parent=None):
+  def __init__(
+      self, current_order: List[str], current_items: List[str], parent=None
+  ):
     super().__init__(parent)
-    self.setWindowTitle("遊戲模式顯示設定")
+    self.setWindowTitle("遊戲模式設定")
     self.setModal(True)
-    self.setFixedWidth(280)
+    self.setFixedWidth(340)
     self.setStyleSheet(f"""
-            QDialog {{
-                background-color: #181d28;
-                color: #e2e8f0;
-                font-family: {FONT_FAMILY};
-                font-size: 13px;
-            }}
-            QLabel {{
-                color: #94a3b8;
-                font-size: 12px;
-                margin-bottom: 6px;
-            }}
-            QCheckBox {{
-                color: #f1f5f9;
-                font-size: 13px;
-                padding: 3px 0;
-                spacing: 8px;
-            }}
-            QCheckBox::indicator {{
-                width: 16px;
-                height: 16px;
-                border-radius: 4px;
-                border: 1px solid rgba(255, 255, 255, 0.25);
-                background-color: rgba(255, 255, 255, 0.05);
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: #10b981;
-                border-color: #34d399;
-            }}
-            QPushButton {{
-                background-color: rgba(255, 255, 255, 0.1);
-                color: #e2e8f0;
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 6px;
-                padding: 6px 14px;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{
-                background-color: rgba(255, 255, 255, 0.2);
-            }}
-        """)
+        QDialog {{
+            background-color: #181d28;
+            color: #e2e8f0;
+            font-family: {FONT_FAMILY};
+            font-size: 13px;
+        }}
+        QLabel {{
+            color: #94a3b8;
+            font-size: 12px;
+        }}
+        QListWidget {{
+            background-color: #111827;
+            color: #f1f5f9;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            padding: 4px;
+            outline: none;
+        }}
+        QListWidget::item {{
+            padding: 6px 8px;
+            border-radius: 4px;
+            margin: 1px 0px;
+        }}
+        QListWidget::item:selected {{
+            background-color: rgba(16, 185, 129, 0.25);
+            color: #ffffff;
+        }}
+        QListWidget::item:hover {{
+            background-color: rgba(255, 255, 255, 0.06);
+        }}
+        QListWidget::indicator {{
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background-color: rgba(255, 255, 255, 0.05);
+        }}
+        QListWidget::indicator:checked {{
+            background-color: #10b981;
+            border-color: #34d399;
+        }}
+        QPushButton {{
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-family: {FONT_FAMILY};
+        }}
+        QPushButton:hover {{
+            background-color: rgba(255, 255, 255, 0.18);
+        }}
+    """)
 
     layout = QVBoxLayout(self)
     layout.setContentsMargins(18, 16, 18, 16)
-    layout.setSpacing(6)
+    layout.setSpacing(10)
 
-    lbl_info = QLabel("選擇欲在遊戲模式下顯示的資訊：")
-    layout.addWidget(lbl_info)
+    lbl_title = QLabel("遊戲模式顯示與排序")
+    lbl_title.setStyleSheet("color: #f1f5f9; font-weight: 700; font-size: 14px;")
+    layout.addWidget(lbl_title)
 
-    self.checkboxes = {}
-    for key in ALL_METRIC_KEYS:
-      cb = QCheckBox(key, self)
-      cb.setChecked(key in current_items)
-      layout.addWidget(cb)
-      self.checkboxes[key] = cb
+    lbl_hint = QLabel("勾選欲顯示的項目，可直接滑鼠拖曳或使用右側按鈕調整顯示順序：")
+    lbl_hint.setWordWrap(True)
+    layout.addWidget(lbl_hint)
 
-    btn_layout = QHBoxLayout()
-    btn_layout.setSpacing(10)
-    btn_layout.addStretch()
+    body_layout = QHBoxLayout()
+    body_layout.setSpacing(8)
 
-    btn_reset = QPushButton("預設值", self)
+    self.list_widget = QListWidget(self)
+    self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+    self.list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
+    self.list_widget.setDragDropOverwriteMode(False)
+    self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+
+    for name in current_order:
+      it = QListWidgetItem(name, self.list_widget)
+      it.setFlags(
+          Qt.ItemFlag.ItemIsEnabled
+          | Qt.ItemFlag.ItemIsSelectable
+          | Qt.ItemFlag.ItemIsUserCheckable
+          | Qt.ItemFlag.ItemIsDragEnabled
+      )
+      it.setCheckState(
+          Qt.CheckState.Checked if name in current_items else Qt.CheckState.Unchecked
+      )
+
+    body_layout.addWidget(self.list_widget)
+
+    btn_vbox = QVBoxLayout()
+    btn_vbox.setSpacing(6)
+    btn_up = QPushButton("▲ 上移", self)
+    btn_up.setToolTip("將選取的項目向上移動一位")
+    btn_up.clicked.connect(lambda: self._move_item(-1))
+
+    btn_down = QPushButton("▼ 下移", self)
+    btn_down.setToolTip("將選取的項目向下移動一位")
+    btn_down.clicked.connect(lambda: self._move_item(1))
+
+    btn_vbox.addWidget(btn_up)
+    btn_vbox.addWidget(btn_down)
+    btn_vbox.addStretch()
+    body_layout.addLayout(btn_vbox)
+
+    layout.addLayout(body_layout)
+
+    btn_bar = QHBoxLayout()
+    btn_bar.setSpacing(8)
+
+    btn_reset = QPushButton("恢復預設", self)
+    btn_reset.setToolTip("重置為預設順序與顯示項目")
     btn_reset.clicked.connect(self._reset_defaults)
-    btn_save = QPushButton("確認", self)
+
+    btn_cancel = QPushButton("取消", self)
+    btn_cancel.clicked.connect(self.reject)
+
+    btn_save = QPushButton("確認套用", self)
     btn_save.setStyleSheet(
-        "background-color: #10b981; color: #ffffff; font-weight: bold;"
+        "background-color: #10b981; color: #ffffff; font-weight: bold; border: 1px solid #059669;"
     )
     btn_save.clicked.connect(self.accept)
 
-    btn_layout.addWidget(btn_reset)
-    btn_layout.addWidget(btn_save)
-    layout.addLayout(btn_layout)
+    btn_bar.addWidget(btn_reset)
+    btn_bar.addStretch()
+    btn_bar.addWidget(btn_cancel)
+    btn_bar.addWidget(btn_save)
+    layout.addLayout(btn_bar)
+
+  def _move_item(self, direction: int):
+    r = self.list_widget.currentRow()
+    if r < 0:
+      return
+    nr = r + direction
+    if 0 <= nr < self.list_widget.count():
+      item = self.list_widget.takeItem(r)
+      self.list_widget.insertItem(nr, item)
+      self.list_widget.setCurrentRow(nr)
 
   def _reset_defaults(self):
-    for key, cb in self.checkboxes.items():
-      cb.setChecked(key in DEFAULT_GAME_MODE_KEYS)
+    self.list_widget.clear()
+    for name in ALL_METRIC_KEYS:
+      it = QListWidgetItem(name, self.list_widget)
+      it.setFlags(
+          Qt.ItemFlag.ItemIsEnabled
+          | Qt.ItemFlag.ItemIsSelectable
+          | Qt.ItemFlag.ItemIsUserCheckable
+          | Qt.ItemFlag.ItemIsDragEnabled
+      )
+      it.setCheckState(
+          Qt.CheckState.Checked
+          if name in DEFAULT_GAME_MODE_KEYS
+          else Qt.CheckState.Unchecked
+      )
 
-  def get_selected_items(self) -> List[str]:
-    return [key for key, cb in self.checkboxes.items() if cb.isChecked()]
+  def get_ordered_items(self) -> List[str]:
+    selected = [
+        self.list_widget.item(i).text()
+        for i in range(self.list_widget.count())
+        if self.list_widget.item(i).checkState() == Qt.CheckState.Checked
+    ]
+    return selected if selected else list(DEFAULT_GAME_MODE_KEYS)
+
+  def get_full_order(self) -> List[str]:
+    return [
+        self.list_widget.item(i).text()
+        for i in range(self.list_widget.count())
+    ]
 
 
 class ArtaleExpOverlay(QWidget):
@@ -456,6 +554,7 @@ class ArtaleExpOverlay(QWidget):
     super().__init__()
     self.engine = ExpMetricsEngine()
     self.is_game_mode = False
+    self.game_mode_order = list(ALL_METRIC_KEYS)
     self.game_mode_items = list(DEFAULT_GAME_MODE_KEYS)
     self.drag_position = QPoint()
 
@@ -614,11 +713,10 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.addWidget(self.sep1)
 
     # 3. Detailed Metrics Body
-    # Sequence: 練功時長 -> 1分鐘經驗 -> 預估10分 -> 累積10分 -> 預估60分 -> 累積60分 -> 累計經驗 -> 當前經驗 -> 升級預估時間
     self.details_container = QWidget(self)
-    details_layout = QVBoxLayout(self.details_container)
-    details_layout.setContentsMargins(0, 0, 0, 0)
-    details_layout.setSpacing(3)
+    self.details_layout = QVBoxLayout(self.details_container)
+    self.details_layout.setContentsMargins(0, 0, 0, 0)
+    self.details_layout.setSpacing(3)
 
     self.row_duration = MetricRow("練功時長", "00:00:00", self)
     self.row_1m = MetricRow("1分鐘經驗", "0", self)
@@ -633,38 +731,28 @@ class ArtaleExpOverlay(QWidget):
     self.row_current = MetricRow("當前經驗", "無資料", self)
     self.row_eta = MetricRow("升級預估時間", "待機中", self, is_highlight=True)
 
-    details_layout.addWidget(self.row_duration)
-    details_layout.addWidget(self.row_1m)
-    details_layout.addWidget(self.row_est_10m)
-    details_layout.addWidget(self.row_acc_10m)
-    details_layout.addWidget(self.row_est_60m)
-    details_layout.addWidget(self.row_acc_60m)
-    details_layout.addWidget(self.sep_summary)
-    details_layout.addWidget(self.row_accum)
-    details_layout.addWidget(self.row_current)
-    details_layout.addWidget(self.row_eta)
-    self.card_layout.addWidget(self.details_container)
-
-    # 4. EXP Progress Bar (placed at bottom)
+    # 4. EXP Progress Bar (managed dynamically with metrics)
     self.gauge_bar = QProgressBar(self)
     self.gauge_bar.setFixedHeight(8)
     self.gauge_bar.setTextVisible(False)
     self.gauge_bar.setRange(0, 10000)
     self.gauge_bar.setValue(0)
+    self.gauge_bar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     self.gauge_bar.setStyleSheet("""
             QProgressBar {
                 background-color: rgba(255, 255, 255, 0.08);
                 border-radius: 4px;
                 border: none;
-                margin-top: 4px;
-                margin-bottom: 2px;
+                margin-top: 3px;
+                margin-bottom: 3px;
             }
             QProgressBar::chunk {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #38bdf8);
                 border-radius: 4px;
             }
         """)
-    self.card_layout.addWidget(self.gauge_bar)
+
+    self.card_layout.addWidget(self.details_container)
 
     # 5. Hotkey Guidance Footer
     self.lbl_hotkey_hint = QLabel("[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式")
@@ -693,6 +781,8 @@ class ArtaleExpOverlay(QWidget):
         "升級預估時間": self.row_eta,
         "EXP 進度條": self.gauge_bar,
     }
+
+    self._apply_game_mode()
 
   def _create_separator(self) -> QFrame:
     sep = QFrame()
@@ -739,10 +829,13 @@ class ArtaleExpOverlay(QWidget):
     self._apply_game_mode()
 
   def _open_game_mode_settings(self):
-    """Opens dialog to configure which metric items to show in Game Mode."""
-    dialog = GameModeSettingsDialog(self.game_mode_items, self)
+    """Opens dialog to configure which metric items to show and their order in Game Mode."""
+    dialog = GameModeSettingsDialog(
+        self.game_mode_order, self.game_mode_items, self
+    )
     if dialog.exec() == QDialog.DialogCode.Accepted:
-      self.game_mode_items = dialog.get_selected_items()
+      self.game_mode_order = dialog.get_full_order()
+      self.game_mode_items = dialog.get_ordered_items()
       self._save_config()
       if self.is_game_mode:
         self._apply_game_mode()
@@ -773,7 +866,14 @@ class ArtaleExpOverlay(QWidget):
     menu.exec(event.globalPos())
 
   def _apply_game_mode(self):
-    """Applies normal full mode or game mode with user-selected metrics."""
+    """Applies normal full mode or game mode with user-selected metrics and custom ordering."""
+    # First, detach all metric widgets and separators from details_layout
+    for widget in self.metric_widgets.values():
+      self.details_layout.removeWidget(widget)
+      widget.hide()
+    self.details_layout.removeWidget(self.sep_summary)
+    self.sep_summary.hide()
+
     if self.is_game_mode:
       self.setFixedWidth(290)
       # Hide title text in game mode
@@ -782,20 +882,12 @@ class ArtaleExpOverlay(QWidget):
       self.btn_f9.setToolTip("切換至完整模式 [F9]")
       self.lbl_hotkey_hint.setText("[F7] 暫停  [F8] 重置  [F9] 完整模式")
 
-      # Show only the subset chosen by the user
-      for key, widget in self.metric_widgets.items():
-        widget.setVisible(key in self.game_mode_items)
-
-      # Show separator if both rate items and summary items are visible
-      has_top = any(
-          self.metric_widgets[k].isVisible()
-          for k in ["練功時長", "1分鐘經驗", "預估10分", "累積10分", "預估60分", "累積60分"]
-      )
-      has_bottom = any(
-          self.metric_widgets[k].isVisible()
-          for k in ["累計經驗", "當前經驗", "升級預估時間"]
-      )
-      self.sep_summary.setVisible(has_top and has_bottom)
+      # Add only the user-selected items in the user's custom dragged order
+      for key in self.game_mode_items:
+        if key in self.metric_widgets:
+          widget = self.metric_widgets[key]
+          self.details_layout.addWidget(widget)
+          widget.show()
     else:
       self.setFixedWidth(340)
       # Show title text in full mode
@@ -806,12 +898,40 @@ class ArtaleExpOverlay(QWidget):
           "[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
       )
 
-      # Show all items in full mode
-      for widget in self.metric_widgets.values():
+      # Add all widgets in standard full layout hierarchy:
+      # 練功時長 -> 1分鐘經驗 -> 預估10分 -> 累積10分 -> 預估60分 -> 累積60分 -> [sep] -> 累計經驗 -> 當前經驗 -> 升級預估時間 -> EXP 進度條
+      full_order_top = [
+          "練功時長",
+          "1分鐘經驗",
+          "預估10分",
+          "累積10分",
+          "預估60分",
+          "累積60分",
+      ]
+      full_order_bottom = [
+          "累計經驗",
+          "當前經驗",
+          "升級預估時間",
+          "EXP 進度條",
+      ]
+      for key in full_order_top:
+        widget = self.metric_widgets[key]
+        self.details_layout.addWidget(widget)
         widget.show()
+
+      self.details_layout.addWidget(self.sep_summary)
       self.sep_summary.show()
 
+      for key in full_order_bottom:
+        widget = self.metric_widgets[key]
+        self.details_layout.addWidget(widget)
+        widget.show()
+
+    # Tightly pack and shrink containers to eliminate any blank space or empty slots
+    self.details_container.adjustSize()
+    self.outer_card.adjustSize()
     self.adjustSize()
+    self.resize(self.width(), self.sizeHint().height())
     self._save_config()
 
   def keyPressEvent(self, event):
@@ -944,12 +1064,22 @@ class ArtaleExpOverlay(QWidget):
           x, y = cfg.get("x", 120), cfg.get("y", 120)
           self.move(x, y)
           self.is_game_mode = cfg.get("is_game_mode", False)
-          self.game_mode_items = cfg.get("game_mode_items", list(DEFAULT_GAME_MODE_KEYS))
+          self.game_mode_order = cfg.get(
+              "game_mode_order", list(ALL_METRIC_KEYS)
+          )
+          for k in ALL_METRIC_KEYS:
+            if k not in self.game_mode_order:
+              self.game_mode_order.append(k)
+          self.game_mode_items = cfg.get(
+              "game_mode_items", list(DEFAULT_GAME_MODE_KEYS)
+          )
           self._apply_game_mode()
       else:
         self.move(120, 120)
+        self._apply_game_mode()
     except Exception:
       self.move(120, 120)
+      self._apply_game_mode()
 
   def _save_config(self):
     try:
@@ -957,10 +1087,11 @@ class ArtaleExpOverlay(QWidget):
           "x": self.pos().x(),
           "y": self.pos().y(),
           "is_game_mode": self.is_game_mode,
+          "game_mode_order": self.game_mode_order,
           "game_mode_items": self.game_mode_items,
       }
       with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
     except Exception:
       pass
 
