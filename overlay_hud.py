@@ -302,11 +302,14 @@ class CaptureWorker(QThread):
         capture.event(on_closed)
         capture.start()
       except Exception:
-        time.sleep(2.0)
+        for _ in range(20):
+          if not self.running:
+            break
+          time.sleep(0.1)
 
   def stop(self):
     self.running = False
-    self.wait(1000)
+    self.wait(300)
 
 
 class VideoSimulationWorker(QThread):
@@ -764,10 +767,6 @@ def get_visible_windows() -> List[Tuple[int, str]]:
     return []
 
   user32 = ctypes.windll.user32
-  h_desk = user32.OpenDesktopW("Default", 0, False, 0x01FF)
-  if h_desk:
-    user32.SetThreadDesktop(h_desk)
-
   results = []
 
   def enum_cb(hwnd, lparam):
@@ -1642,7 +1641,9 @@ class ArtaleExpOverlay(QWidget):
       act_simple.triggered.connect(lambda: self._set_mode("simple"))
 
     action_settings = menu.addAction("⚙ 指標顯示與排列設定...")
-    action_settings.triggered.connect(self._open_game_mode_settings)
+    action_settings.triggered.connect(
+        lambda: QTimer.singleShot(0, self._open_game_mode_settings)
+    )
 
     menu.addSeparator()
 
@@ -1652,7 +1653,9 @@ class ArtaleExpOverlay(QWidget):
         else self.target_window_name[:18] + "..."
     )
     act_select_win = menu.addAction(f"🎯 選擇擷取視窗... ({win_label})")
-    act_select_win.triggered.connect(self._open_select_window_dialog)
+    act_select_win.triggered.connect(
+        lambda: QTimer.singleShot(0, self._open_select_window_dialog)
+    )
 
     if self.is_simulating:
       is_paused = self.video_worker.is_paused if self.video_worker else False
@@ -1674,10 +1677,36 @@ class ArtaleExpOverlay(QWidget):
       act_stop_sim.triggered.connect(self.stop_video_simulation)
 
       act_load_other = menu.addAction("📁 載入其他模擬影片...")
-      act_load_other.triggered.connect(self._open_video_file_dialog)
+      act_load_other.triggered.connect(
+          lambda: QTimer.singleShot(0, self._open_video_file_dialog)
+      )
     else:
+      default_clip = self.sim_video_path
+      if not default_clip or not os.path.isfile(default_clip):
+        sample = os.path.expanduser(
+            r"~\Videos\Discord Clips\MapleStory_Worlds_0d11c233-b226-4d1d-952b-0c741acf61c2.mp4"
+        )
+        if os.path.isfile(sample):
+          default_clip = sample
+
+      if default_clip and os.path.isfile(default_clip):
+        base_name = os.path.basename(default_clip)
+        label = (
+            f"▶ 快速模擬影片 ({base_name[:18]}...)"
+            if len(base_name) > 21
+            else f"▶ 快速模擬影片 ({base_name})"
+        )
+        act_quick_sim = menu.addAction(label)
+        act_quick_sim.triggered.connect(
+            lambda checked, p=default_clip: self.start_video_simulation(
+                p, self.sim_speed
+            )
+        )
+
       act_load_sim = menu.addAction("📁 載入模擬影片 (Simulate from Video)...")
-      act_load_sim.triggered.connect(self._open_video_file_dialog)
+      act_load_sim.triggered.connect(
+          lambda: QTimer.singleShot(0, self._open_video_file_dialog)
+      )
 
     menu.addSeparator()
     action_close = menu.addAction("✕ 關閉程式")
@@ -1701,7 +1730,7 @@ class ArtaleExpOverlay(QWidget):
 
   def _open_select_window_dialog(self):
     """Opens dialog to choose any open window for live capture."""
-    dlg = SelectWindowDialog(self.target_window_name, self.target_hwnd, self)
+    dlg = SelectWindowDialog(self.target_window_name, self.target_hwnd, None)
     if dlg.exec() == QDialog.DialogCode.Accepted:
       title, hwnd = dlg.get_selected()
       self.set_target_window(title, hwnd)
@@ -1774,10 +1803,11 @@ class ArtaleExpOverlay(QWidget):
         initial_dir = videos_dir
 
     file_path, _ = QFileDialog.getOpenFileName(
-        self,
+        None,
         "選擇 MapleStory / Artale 遊戲錄影影片",
         initial_dir,
         "影片檔案 (*.mp4 *.mkv *.avi *.mov);;所有檔案 (*.*)",
+        options=QFileDialog.Option.DontUseNativeDialog,
     )
     if file_path:
       self.start_video_simulation(file_path, self.sim_speed)
