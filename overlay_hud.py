@@ -657,7 +657,8 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.setSpacing(6)
 
     # 1. Top Header Bar: Title, State Badge, Window Controls
-    header_layout = QHBoxLayout()
+    self.header_widget = QWidget(self.outer_card)
+    header_layout = QHBoxLayout(self.header_widget)
     header_layout.setContentsMargins(0, 0, 0, 2)
     header_layout.setSpacing(5)
 
@@ -721,7 +722,7 @@ class ArtaleExpOverlay(QWidget):
     header_layout.addWidget(self.btn_f9)
     header_layout.addWidget(self.btn_settings)
     header_layout.addWidget(self.btn_close)
-    self.card_layout.addLayout(header_layout)
+    self.card_layout.addWidget(self.header_widget)
 
     # 2. Sub-header Bar: Status indicator dot + Status text on left, Auto-Start Toggle on right
     sub_layout = QHBoxLayout()
@@ -1037,38 +1038,57 @@ class ArtaleExpOverlay(QWidget):
           self.details_layout.addWidget(widget)
           widget.show()
 
-    # Tightly pack and shrink window height to eliminate any blank space or empty slots
+    self._update_focus_visibility()
+    self._save_config()
+
+  def _update_focus_visibility(self):
+    """Updates visibility of focus-dependent components (sliders, and in game mode: header & hotkey footer)."""
+    is_active = self.isActiveWindow()
+
+    # 1. Sliders: visible only when window is active (or dragging slider)
+    if is_active:
+      self.slider_panel.show()
+    else:
+      if not (self.slider_scale.isSliderDown() or self.slider_opacity.isSliderDown()):
+        self.slider_panel.hide()
+
+    # 2. In Game Mode: Header bar (badge + buttons) and Footer hotkey hint
+    # are hidden when window loses focus, and shown when window has focus.
+    # In Full Mode: Header and Footer are always visible.
+    if self.is_game_mode:
+      if is_active:
+        self.header_widget.show()
+        self.lbl_hotkey_hint.show()
+      else:
+        self.header_widget.hide()
+        self.lbl_hotkey_hint.hide()
+    else:
+      self.header_widget.show()
+      self.lbl_hotkey_hint.show()
+
     self.card_layout.activate()
     self.layout().activate()
     self.resize(self.width(), self.sizeHint().height())
-    self._save_config()
 
   def _set_sliders_visible(self, visible: bool):
-    """Show or collapse sliders panel based on window focus, recalculating layout height."""
-    if self.slider_panel.isVisible() == visible:
-      return
+    """Explicitly show/hide sliders and update layout."""
     if visible:
       self.slider_panel.show()
     else:
-      # If user is actively dragging a slider handle, wait until released
-      if self.slider_scale.isSliderDown() or self.slider_opacity.isSliderDown():
-        return
       self.slider_panel.hide()
-
     self.card_layout.activate()
     self.layout().activate()
     self.resize(self.width(), self.sizeHint().height())
 
   def changeEvent(self, event):
-    """Show sliders when window gains focus; collapse sliders when focus is lost."""
+    """Show/hide controls and sliders when window gains or loses focus."""
     if event.type() == QEvent.Type.ActivationChange:
-      self._set_sliders_visible(self.isActiveWindow())
+      self._update_focus_visibility()
     super().changeEvent(event)
 
   def _on_slider_released(self):
     self._save_config()
-    if not self.isActiveWindow():
-      self._set_sliders_visible(False)
+    self._update_focus_visibility()
 
   def _on_scale_changed(self, val: int):
     self.ui_scale = val / 100.0
@@ -1355,7 +1375,7 @@ class ArtaleExpOverlay(QWidget):
   def mousePressEvent(self, event):
     if not self.isActiveWindow():
       self.activateWindow()
-    self._set_sliders_visible(True)
+    self._update_focus_visibility()
     if event.button() == Qt.MouseButton.LeftButton:
       self.drag_position = (
           event.globalPosition().toPoint() - self.frameGeometry().topLeft()

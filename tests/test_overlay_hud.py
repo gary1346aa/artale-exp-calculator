@@ -211,6 +211,24 @@ class TestOverlayHud(unittest.TestCase):
     self.assertEqual(self.overlay.lbl_opacity_val.text(), "0%")
     self.assertAlmostEqual(self.overlay.windowOpacity(), 1.0)
 
+  def test_game_mode_focus_header_footer_hidden(self):
+    """Verify that in game mode, header bar and footer hotkey hint hide when not focused."""
+    self.overlay.on_f9()  # Enter Game Mode
+    self.assertTrue(self.overlay.is_game_mode)
+
+    # When unfocused: header, footer, and sliders must be hidden
+    self.overlay._update_focus_visibility()
+    if not self.overlay.isActiveWindow():
+      self.assertFalse(self.overlay.header_widget.isVisible())
+      self.assertFalse(self.overlay.lbl_hotkey_hint.isVisible())
+      self.assertFalse(self.overlay.slider_panel.isVisible())
+
+    # In Full Mode, header and footer are always visible even when unfocused
+    self.overlay.on_f9()  # Switch back to Full Mode
+    self.assertFalse(self.overlay.is_game_mode)
+    self.assertTrue(self.overlay.header_widget.isVisible())
+    self.assertTrue(self.overlay.lbl_hotkey_hint.isVisible())
+
 
 if __name__ == "__main__":
   unittest.main()
