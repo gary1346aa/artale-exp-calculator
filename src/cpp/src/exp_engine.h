@@ -33,7 +33,7 @@ struct CropParseResult {
   std::vector<RecognizedChar> characters;
 };
 
-// Internal preprocessed template representation for fast NCC evaluation.
+// Internal preprocessed template representation for NCC evaluation.
 struct PreparedTemplate {
   char character;
   int width;

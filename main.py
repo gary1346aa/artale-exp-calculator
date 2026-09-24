@@ -9,7 +9,7 @@ import sys
 import argparse
 
 def main():
-    parser = argparse.ArgumentParser(description="Artale Desktop Zero-GPU EXP Calculator")
+    parser = argparse.ArgumentParser(description="Artale Desktop EXP Calculator")
     parser.add_argument("--cli", action="store_true", help="Run in terminal CLI mode without GUI overlay")
     args = parser.parse_args()
 

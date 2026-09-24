@@ -1,6 +1,6 @@
 """Live Artale Desktop EXP Tracker via Windows Graphics Capture (WGC).
 
-Samples at 1 FPS (zero CPU overhead), captures un-occluded DirectX swapchain
+Samples at 1 FPS, captures un-occluded DirectX swapchain
 frames directly from DWM, and adapts dynamically to live window resizing across
 all resolutions (from 720p to 4K).
 """

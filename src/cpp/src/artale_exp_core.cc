@@ -234,7 +234,7 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width,
   artale::exp::BoundingBox text_box;
   artale::exp::BoundingBox logo_box;
 
-  // 1. Fast steady-state path: reuse cached crop coordinates
+  // 1. Steady-state path: reuse cached crop coordinates
   if (state.has_cached_crop) {
     text_box = state.cached_crop_box;
     logo_box = state.cached_logo_box;

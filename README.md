@@ -1,24 +1,23 @@
-# Artale EXP Calculator (楓之谷世界 Artale 零GPU極速經驗計算機)
+# Artale EXP Calculator (楓之谷世界 Artale 經驗計算機)
 
-專為 **MapleStory Worlds - Artale** 打造的極致輕量、零 GPU 開銷、非侵入式即時經驗計算機與懸浮 HUD。
+專為 **MapleStory Worlds - Artale** 打造的非侵入式即時經驗計算機與懸浮 HUD。
 
 ---
 
-## 🌟 核心特色 (Key Features)
+## 核心架構 (Features)
 
-1. **極致輕量，零 GPU 佔用 (Zero GPU, Ultra-Low CPU)**
-   - 全程運算皆在純 CPU 執行，完全不佔用顯卡 3D / Tensor 算力，不影響遊戲幀率。
-   - 採 1 FPS 節流取樣，單次光學字元辨識僅耗時 **~75ms**，其餘 925ms 處於完全休眠狀態。
+1. **CPU 辨識架構**
+   - 影像運算在 CPU 執行，不佔用顯卡 3D / Tensor 算力。
+   - 採 1 FPS 取樣辨識。
 
-2. **手刻向量化 SIMD 核心 (AVX2 / ARM NEON)**
-   - 核心以 C++20 編寫，實作 AVX2/FMA (x86_64) 與 NEON (Apple Silicon) 向量內聯指令 (Intrinsics)。
-   - 內建積分圖 (Integral Images / SAT)，以 $O(1)$ 複雜度完成多尺度 `EXP.` Logo 模板匹配。
-   - 像素點對點與標準 16x24 規範字形進行正規化互相關 (NCC) 比對。
+2. **SIMD 運算核心 (AVX2 / ARM NEON)**
+   - 核心以 C++ 編寫，提供 AVX2/FMA 與 NEON 向量指令支援。
+   - 實作滑動視窗 NCC (Normalized Cross-Correlation) 模板比對與動態規劃字元解碼。
 
-3. **非侵入式背景擷取 (Non-Invasive DWM DirectX Capture)**
+3. **非侵入式背景擷取 (Windows Graphics Capture)**
    - 採用 Windows 10/11 原生 **Windows Graphics Capture (WGC)** API。
-   - 從桌面視窗管理員 (DWM) 交換鏈直接讀取遊戲畫面，**不注入任何 DLL、不讀寫遊戲記憶體、零被封號風險**。
-   - 支援遊戲視窗被其他視窗遮擋、最小化邊界或動態縮放 (支援 720p 至 4K 全解析度)。
+   - 從桌面視窗管理員 (DWM) 交換鏈直接讀取畫面，不注入 DLL、不讀寫遊戲記憶體。
+   - 支援遊戲視窗被其他視窗遮擋、邊界調整或動態縮放。
 
 4. **現代半透明遊戲懸浮窗 (Modern Floating HUD Overlay)**
    - 採用 PyQt6 打造毛玻璃深色主題懸浮面板，置頂顯示 (Always-on-Top)、無邊框、任意拖曳移動。
@@ -80,14 +79,14 @@ artale_exp_calculator/
 │       ├── include/
 │       │   └── artale_exp_core.h     # C-ABI 跨語言導出介面
 │       ├── src/
-│       │   ├── artale_exp_core.cpp   # AVX2/NEON SIMD、積分圖、正規化字形匹配核心
-│       │   └── digit_prototypes.h    # 規範化 16x24 字形特徵矩陣
-│       └── CMakeLists.txt            # 跨平台 CMake 建置腳本
+│       │   ├── artale_exp_core.cc    # 影像前處理與座標快取
+│       │   ├── exp_engine.cc         # SIMD 雙線性插值與 NCC 字元辨識引擎
+│       │   └── exp_engine.h          # ExpEngine 類別定義
+│       └── CMakeLists.txt            # CMake 建置腳本
 ├── data/
 │   ├── desktop_font_protos.json      # 原始字形點陣庫
-│   └── real_exp_logo.png             # 42x14 EXP. 標誌錨點模板
-├── artale_exp_core.dll               # AVX2 預編譯靜態動態鏈結庫
-├── exp_core.py                       # CTypes 高效能橋接層 (自動 fallback)
+│   └── real_exp_logo.png             # 標誌模板
+├── exp_core.py                       # CTypes 橋接層 (自動 fallback)
 ├── metrics_engine.py                 # 滑動視窗速率與升級預估引擎 (繁中)
 ├── overlay_hud.py                    # PyQt6 現代無邊框毛玻璃懸浮窗
 ├── live_tracker.py                   # WGC 1 FPS 背景截圖監聽器

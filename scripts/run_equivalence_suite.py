@@ -1,4 +1,4 @@
-"""Validates 100% equivalence between C++ engine and Python reference engine.
+"""Validates equivalence between C++ engine and Python reference engine.
 
 Executes both engines on all 134 recorded window resolution datasets
 (debug_crops/raw_strip_*.png) and asserts:

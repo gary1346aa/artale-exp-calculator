@@ -1,4 +1,4 @@
-"""High-performance Artale EXP Core interface.
+"""Artale EXP Core interface.
 
 Loads the compiled native C++ SIMD engine (artale_exp_core.dll / libartale_exp.dylib)
 with AVX2 / NEON vectorization, with an automatic fallback to Python NumPy/OpenCV.
@@ -89,7 +89,7 @@ def _init_core():
 
 _init_core()
 
-# Default to high-performance C++ engine when available, allowing opt-out via USE_CPP=0
+# Default to C++ engine when available, allowing opt-out via USE_CPP=0
 _USE_CPP_OVERRIDE = os.environ.get("USE_CPP", "1") == "1"
 _use_cpp = _USE_CPP_OVERRIDE and (_core_dll is not None)
 
@@ -128,7 +128,7 @@ def _parse_frame_python(bgr_img) -> ParsedFrame | None:
         _cached_crop_box = None
         _cached_logo_box = None
 
-    # ULTRA-FAST PATH: If resolution has NOT changed and we have a cached bounding box, REUSE IT DIRECTLY!
+    # Cached path: If resolution has not changed and bounding box is cached, reuse it.
     if _cached_crop_box is not None:
         cx, cy, cw, ch = _cached_crop_box
         if cy + ch <= h and cx + cw <= w:
