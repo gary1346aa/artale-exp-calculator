@@ -107,6 +107,28 @@ class TestExpMetricsEngine(unittest.TestCase):
     engine.add_sample(1015000, 10.15, timestamp=110.0)
     self.assertEqual(engine.total_gained_exp, 5000)
 
+  def test_gains_formatting_without_percentage(self):
+    engine = ExpMetricsEngine()
+    engine.add_sample(1000000, 10.0, timestamp=100.0)
+    engine.start_measurement(timestamp=100.0)
+    engine.add_sample(1050000, 10.5, timestamp=160.0)
+
+    m = engine.get_metrics(now=160.0)
+    self.assertIn("累計經驗", m)
+    self.assertEqual(m["累計經驗"], "+50,000")
+    # Verify no percentages in any gain/rate fields
+    for key in [
+        "累計經驗",
+        "總獲得經驗",
+        "1分鐘經驗",
+        "預估10分",
+        "累積10分",
+        "預估60分",
+        "累積60分",
+    ]:
+      self.assertNotIn("%", m[key], f"Key {key} should not contain '%'")
+      self.assertTrue(m[key].startswith("+"), f"Key {key} should start with '+'")
+
 
 if __name__ == "__main__":
   unittest.main()

@@ -80,9 +80,9 @@ class ExpMetricsEngine:
     self.auto_start_enabled = not self.auto_start_enabled
     return self.auto_start_enabled
 
-  def start_measurement(self) -> bool:
+  def start_measurement(self, timestamp: Optional[float] = None) -> bool:
     """Starts or resumes measurement manually (F7) or automatically."""
-    now = time.time()
+    now = timestamp if timestamp is not None else time.time()
     if self.state == MeasurementState.RUNNING:
       return False
 
@@ -111,11 +111,13 @@ class ExpMetricsEngine:
 
     return True
 
-  def pause_measurement(self, disable_auto_start: bool = True) -> bool:
+  def pause_measurement(
+      self, disable_auto_start: bool = True, timestamp: Optional[float] = None
+  ) -> bool:
     """Stops/pauses the measurement (F7). Does not reset current measurement."""
     if self.state == MeasurementState.RUNNING:
       self.state = MeasurementState.PAUSED
-      self.pause_start_time = time.time()
+      self.pause_start_time = timestamp if timestamp is not None else time.time()
 
     if disable_auto_start:
       self.auto_start_enabled = False
@@ -267,9 +269,9 @@ class ExpMetricsEngine:
 
     return d_exp, d_pct, dt
 
-  def get_metrics(self) -> Dict[str, Any]:
+  def get_metrics(self, now: Optional[float] = None) -> Dict[str, Any]:
     """Generates all user-facing metrics formatted in Traditional Chinese."""
-    now = time.time()
+    now = now if now is not None else time.time()
 
     # Active measurement duration
     if self.state == MeasurementState.IDLE or self.measurement_start_time is None:
@@ -310,10 +312,11 @@ class ExpMetricsEngine:
     else:
       baseline_exp_str = "無資料"
 
-    # Total Gained EXP
-    total_gained_str = f"+{self.total_gained_exp:,d} (+{self.total_gained_pct:.2f}%)"
+    # Cumulative Gained EXP (no percentage)
+    accum_exp_str = f"+{self.total_gained_exp:,d}"
+    total_gained_str = accum_exp_str
 
-    # 1-minute rate metrics
+    # 1-minute rate metrics (no percentage)
     exp_1m, pct_1m, dt_1m = self._get_window_gain(60.0)
     rate_exp_per_sec = (exp_1m / dt_1m) if dt_1m > 5.0 else (
         self.total_gained_exp / elapsed if elapsed > 5.0 else 0.0)
@@ -321,22 +324,19 @@ class ExpMetricsEngine:
         self.total_gained_pct / elapsed if elapsed > 5.0 else 0.0)
 
     rate_1m_exp = int(rate_exp_per_sec * 60)
-    rate_1m_pct = rate_pct_per_sec * 60
-    rate_1m_str = f"+{rate_1m_exp:,d} (+{rate_1m_pct:.2f}%)"
+    rate_1m_str = f"+{rate_1m_exp:,d}"
 
-    # 10-minute projection & actual
+    # 10-minute projection & actual (no percentage)
     exp_10m_actual, pct_10m_actual, _ = self._get_window_gain(600.0)
-    accum_10m_str = f"+{exp_10m_actual:,d} (+{pct_10m_actual:.2f}%)"
+    accum_10m_str = f"+{exp_10m_actual:,d}"
     proj_10m_exp = int(rate_exp_per_sec * 600)
-    proj_10m_pct = rate_pct_per_sec * 600
-    proj_10m_str = f"+{proj_10m_exp:,d} (+{proj_10m_pct:.2f}%)"
+    proj_10m_str = f"+{proj_10m_exp:,d}"
 
-    # 60-minute projection & actual
+    # 60-minute projection & actual (no percentage)
     exp_60m_actual, pct_60m_actual, _ = self._get_window_gain(3600.0)
-    accum_60m_str = f"+{exp_60m_actual:,d} (+{pct_60m_actual:.2f}%)"
+    accum_60m_str = f"+{exp_60m_actual:,d}"
     proj_60m_exp = int(rate_exp_per_sec * 3600)
-    proj_60m_pct = rate_pct_per_sec * 3600
-    proj_60m_str = f"+{proj_60m_exp:,d} (+{proj_60m_pct:.2f}%)"
+    proj_60m_str = f"+{proj_60m_exp:,d}"
 
     # Level up ETA
     eta_str = "待機中"
@@ -373,6 +373,7 @@ class ExpMetricsEngine:
         "當前經驗": current_exp_str,
         "啟動初始": initial_exp_str,
         "本次基準": baseline_exp_str,
+        "累計經驗": accum_exp_str,
         "總獲得經驗": total_gained_str,
         "1分鐘經驗": rate_1m_str,
         "預估10分": proj_10m_str,

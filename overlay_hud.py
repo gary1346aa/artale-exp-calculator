@@ -36,8 +36,9 @@ CONFIG_FILE = os.path.join(
 )
 
 FONT_FAMILY = (
-    "'Google Sans', 'Google Sans Medium', 'Segoe UI', 'Microsoft JhengHei UI',"
-    " sans-serif"
+    "'Google Sans', 'Google Sans Medium', 'PingFang TC', 'PingFang HK',"
+    " -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei UI',"
+    " 'Microsoft JhengHei', sans-serif"
 )
 
 
@@ -182,7 +183,7 @@ class CaptureWorker(QThread):
 
 
 class MetricRow(QFrame):
-  """Reusable two-column key-value row for EXP metrics in Google Sans."""
+  """Reusable two-column key-value row for EXP metrics."""
 
   def __init__(
       self,
@@ -192,15 +193,16 @@ class MetricRow(QFrame):
       is_highlight: bool = False,
   ):
     super().__init__(parent)
+    self.is_highlight = is_highlight
     layout = QHBoxLayout(self)
-    layout.setContentsMargins(6, 2, 6, 2)
+    layout.setContentsMargins(6, 3, 6, 3)
     layout.setSpacing(10)
 
     self.lbl_title = QLabel(title)
     self.lbl_title.setStyleSheet(f"""
             QLabel {{
                 color: #94a3b8;
-                font-size: 12px;
+                font-size: 13px;
                 font-weight: 500;
                 font-family: {FONT_FAMILY};
             }}
@@ -208,11 +210,13 @@ class MetricRow(QFrame):
 
     self.lbl_value = QLabel(default_val)
     val_color = "#4ade80" if is_highlight else "#f1f5f9"
+    font_size = "16px" if is_highlight else "15px"
+    font_weight = "700" if is_highlight else "600"
     self.lbl_value.setStyleSheet(f"""
             QLabel {{
                 color: {val_color};
-                font-size: 13px;
-                font-weight: 600;
+                font-size: {font_size};
+                font-weight: {font_weight};
                 font-family: {FONT_FAMILY};
             }}
         """)
@@ -227,11 +231,13 @@ class MetricRow(QFrame):
   def set_value(self, val_str: str, color: Optional[str] = None):
     self.lbl_value.setText(val_str)
     if color:
+      font_size = "16px" if self.is_highlight else "15px"
+      font_weight = "700" if self.is_highlight else "600"
       self.lbl_value.setStyleSheet(f"""
                 QLabel {{
                     color: {color};
-                    font-size: 13px;
-                    font-weight: 600;
+                    font-size: {font_size};
+                    font-weight: {font_weight};
                     font-family: {FONT_FAMILY};
                 }}
             """)
@@ -277,7 +283,7 @@ class ArtaleExpOverlay(QWidget):
     self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
   def _init_ui(self):
-    self.setFixedWidth(320)
+    self.setFixedWidth(340)
 
     # Outer container with modern dark frosted glass styling
     self.outer_card = QFrame(self)
@@ -305,71 +311,61 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.setContentsMargins(14, 12, 14, 12)
     self.card_layout.setSpacing(6)
 
-    # 1. Top Header Bar
+    # 1. Top Header Bar: Title, State Badge, Window Controls
     header_layout = QHBoxLayout()
     header_layout.setContentsMargins(0, 0, 0, 2)
     header_layout.setSpacing(6)
 
     self.status_dot = QLabel("●")
-    self.status_dot.setStyleSheet("color: #eab308; font-size: 12px;")
+    self.status_dot.setStyleSheet("color: #eab308; font-size: 13px;")
 
     self.lbl_title = QLabel("ARTALE EXP")
     self.lbl_title.setStyleSheet(f"""
             QLabel {{
                 color: #e2e8f0;
-                font-size: 13px;
+                font-size: 14px;
                 font-weight: 700;
                 letter-spacing: 0.5px;
                 font-family: {FONT_FAMILY};
             }}
         """)
 
-    # State Badge: [計時中] / [暫停] / [待機]
+    # State Badge: [計時中] / [已暫停] / [待機中]
     self.lbl_state_badge = QLabel("待機中")
     self.lbl_state_badge.setStyleSheet(f"""
             QLabel {{
                 color: #94a3b8;
                 background-color: rgba(255, 255, 255, 0.08);
-                padding: 2px 6px;
+                padding: 2px 7px;
                 border-radius: 4px;
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: 600;
                 font-family: {FONT_FAMILY};
             }}
         """)
 
-    # Auto Start Toggle Button
-    self.btn_auto_start = QPushButton("⚡ 自動開始")
-    self.btn_auto_start.setToolTip(
-        "自動開始：開啟時，偵測到經驗值增加即自動開始計時 (F7暫停或F8重置時自動關閉一次)"
-    )
-    self.btn_auto_start.setFixedHeight(22)
-    self.btn_auto_start.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-    self._update_auto_start_button_style(False)
-    self.btn_auto_start.clicked.connect(self._toggle_auto_start)
-
-    # Hotkey action buttons
+    # Control buttons (F7, F8, F9, Close)
     self.btn_f7 = QPushButton("▶")
     self.btn_f7.setToolTip("開始 / 暫停 [F7]")
-    self.btn_f7.setFixedSize(22, 22)
+    self.btn_f7.setFixedSize(24, 24)
     self.btn_f7.setStyleSheet(self._button_style())
     self.btn_f7.clicked.connect(self.on_f7)
 
     self.btn_f8 = QPushButton("↺")
     self.btn_f8.setToolTip("重置本次計時 (不重置啟動初始經驗) [F8]")
-    self.btn_f8.setFixedSize(22, 22)
+    self.btn_f8.setFixedSize(24, 24)
     self.btn_f8.setStyleSheet(self._button_style())
     self.btn_f8.clicked.connect(self.on_f8)
 
     self.btn_f9 = QPushButton("◫")
     self.btn_f9.setToolTip("切換遊戲簡約模式 [F9]")
-    self.btn_f9.setFixedSize(22, 22)
+    self.btn_f9.setFixedSize(24, 24)
     self.btn_f9.setStyleSheet(self._button_style())
     self.btn_f9.clicked.connect(self.on_f9)
 
     self.btn_close = QPushButton("✕")
     self.btn_close.setToolTip("關閉程式")
-    self.btn_close.setFixedSize(22, 22)
+    self.btn_close.setFixedSize(24, 24)
     self.btn_close.setStyleSheet(self._button_style(is_close=True))
     self.btn_close.clicked.connect(self.close)
 
@@ -377,39 +373,50 @@ class ArtaleExpOverlay(QWidget):
     header_layout.addWidget(self.lbl_title)
     header_layout.addWidget(self.lbl_state_badge)
     header_layout.addStretch()
-    header_layout.addWidget(self.btn_auto_start)
     header_layout.addWidget(self.btn_f7)
     header_layout.addWidget(self.btn_f8)
     header_layout.addWidget(self.btn_f9)
     header_layout.addWidget(self.btn_close)
     self.card_layout.addLayout(header_layout)
 
-    # Subtitle / Status Message
+    # 2. Sub-header Bar: Status text on left, Auto-Start Toggle on right
+    sub_layout = QHBoxLayout()
+    sub_layout.setContentsMargins(0, 0, 0, 2)
+    sub_layout.setSpacing(6)
+
     self.lbl_status = QLabel("正在連線至遊戲視窗...")
     self.lbl_status.setStyleSheet(f"""
             QLabel {{
                 color: #64748b;
                 font-size: 11px;
                 font-family: {FONT_FAMILY};
-                margin-bottom: 2px;
             }}
         """)
-    self.card_layout.addWidget(self.lbl_status)
+
+    self.btn_auto_start = QPushButton("⚡ 自動開始 [OFF]")
+    self.btn_auto_start.setToolTip(
+        "自動開始：開啟時，偵測到經驗值增加即自動開始計時 (F7暫停或F8重置時自動關閉一次)"
+    )
+    self.btn_auto_start.setFixedHeight(24)
+    self.btn_auto_start.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+    self._update_auto_start_button_style(False)
+    self.btn_auto_start.clicked.connect(self._toggle_auto_start)
+
+    sub_layout.addWidget(self.lbl_status)
+    sub_layout.addStretch()
+    sub_layout.addWidget(self.btn_auto_start)
+    self.card_layout.addLayout(sub_layout)
 
     # Separator
     self.sep1 = self._create_separator()
     self.card_layout.addWidget(self.sep1)
 
-    # 2. Primary Highlights (Duration, Current, Baseline, Initial)
+    # 3. Primary Highlights: Duration, Accumulated EXP, Progress Bar
     self.row_duration = MetricRow("練功時長", "00:00:00", self)
-    self.row_current = MetricRow("當前經驗", "無資料", self)
-    self.row_baseline = MetricRow("本次基準", "無資料", self)
-    self.row_initial = MetricRow("啟動初始", "無資料", self)
+    self.row_accum = MetricRow("累計經驗", "+0", self, is_highlight=True)
 
     self.card_layout.addWidget(self.row_duration)
-    self.card_layout.addWidget(self.row_current)
-    self.card_layout.addWidget(self.row_baseline)
-    self.card_layout.addWidget(self.row_initial)
+    self.card_layout.addWidget(self.row_accum)
 
     # EXP Progress Bar
     self.gauge_bar = QProgressBar(self)
@@ -430,28 +437,28 @@ class ArtaleExpOverlay(QWidget):
         """)
     self.card_layout.addWidget(self.gauge_bar)
 
-    # 3. Game Mode Mini Summary Container (visible only in game mode)
+    # 4. Game Mode Mini Summary Container (visible only in game mode)
     self.game_mode_container = QWidget(self)
     gm_layout = QVBoxLayout(self.game_mode_container)
     gm_layout.setContentsMargins(0, 4, 0, 0)
     gm_layout.setSpacing(2)
 
-    self.lbl_gm_gained = QLabel("+0 (+0.00%)")
+    self.lbl_gm_gained = QLabel("+0")
     self.lbl_gm_gained.setStyleSheet(f"""
             QLabel {{
                 color: #4ade80;
-                font-size: 14px;
+                font-size: 16px;
                 font-weight: 700;
                 font-family: {FONT_FAMILY};
             }}
         """)
     self.lbl_gm_gained.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-    self.lbl_gm_rate = QLabel("時薪預估: +0/h | 升級: 待機中")
+    self.lbl_gm_rate = QLabel("時薪預估: +0 | 升級: 待機中")
     self.lbl_gm_rate.setStyleSheet(f"""
             QLabel {{
                 color: #94a3b8;
-                font-size: 11px;
+                font-size: 12px;
                 font-family: {FONT_FAMILY};
             }}
         """)
@@ -466,25 +473,19 @@ class ArtaleExpOverlay(QWidget):
     self.sep2 = self._create_separator()
     self.card_layout.addWidget(self.sep2)
 
-    # 4. Detailed Metrics Body (hidden in game mode)
+    # 5. Detailed Metrics Body (hidden in game mode)
     self.details_container = QWidget(self)
     details_layout = QVBoxLayout(self.details_container)
     details_layout.setContentsMargins(0, 0, 0, 0)
     details_layout.setSpacing(3)
 
-    self.row_total = MetricRow(
-        "總獲得經驗", "+0 (+0.00%)", self, is_highlight=True
-    )
-    self.row_1m = MetricRow("1分鐘經驗", "+0 (+0.00%)", self)
-    self.row_est_10m = MetricRow("預估10分", "+0 (+0.00%)", self)
-    self.row_acc_10m = MetricRow("累積10分", "+0 (+0.00%)", self)
-    self.row_est_60m = MetricRow(
-        "預估60分", "+0 (+0.00%)", self, is_highlight=True
-    )
-    self.row_acc_60m = MetricRow("累積60分", "+0 (+0.00%)", self)
+    self.row_1m = MetricRow("1分鐘經驗", "+0", self)
+    self.row_est_10m = MetricRow("預估10分", "+0", self)
+    self.row_acc_10m = MetricRow("累積10分", "+0", self)
+    self.row_est_60m = MetricRow("預估60分", "+0", self, is_highlight=True)
+    self.row_acc_60m = MetricRow("累積60分", "+0", self)
     self.row_eta = MetricRow("升級預估時間", "待機中", self, is_highlight=True)
 
-    details_layout.addWidget(self.row_total)
     details_layout.addWidget(self.row_1m)
     details_layout.addWidget(self.row_est_10m)
     details_layout.addWidget(self.row_acc_10m)
@@ -493,12 +494,12 @@ class ArtaleExpOverlay(QWidget):
     details_layout.addWidget(self.row_eta)
     self.card_layout.addWidget(self.details_container)
 
-    # 5. Hotkey Guidance Footer
+    # 6. Hotkey Guidance Footer
     self.lbl_hotkey_hint = QLabel("[F7] 開始/暫停  [F8] 重置  [F9] 遊戲簡約")
     self.lbl_hotkey_hint.setStyleSheet(f"""
             QLabel {{
                 color: #64748b;
-                font-size: 10px;
+                font-size: 11px;
                 font-family: {FONT_FAMILY};
                 padding-top: 4px;
             }}
@@ -522,9 +523,9 @@ class ArtaleExpOverlay(QWidget):
             QPushButton {{
                 background-color: transparent;
                 color: #94a3b8;
-                border-radius: 11px;
+                border-radius: 12px;
                 border: none;
-                font-size: 11px;
+                font-size: 12px;
                 font-weight: bold;
                 font-family: {FONT_FAMILY};
             }}
@@ -542,9 +543,9 @@ class ArtaleExpOverlay(QWidget):
                     background-color: rgba(16, 185, 129, 0.20);
                     color: #34d399;
                     border: 1px solid rgba(52, 211, 153, 0.40);
-                    border-radius: 11px;
-                    padding: 0 8px;
-                    font-size: 10px;
+                    border-radius: 12px;
+                    padding: 0 10px;
+                    font-size: 11px;
                     font-weight: 700;
                     font-family: {FONT_FAMILY};
                 }}
@@ -560,9 +561,9 @@ class ArtaleExpOverlay(QWidget):
                     background-color: rgba(255, 255, 255, 0.06);
                     color: #64748b;
                     border: 1px solid rgba(255, 255, 255, 0.08);
-                    border-radius: 11px;
-                    padding: 0 8px;
-                    font-size: 10px;
+                    border-radius: 12px;
+                    padding: 0 10px;
+                    font-size: 11px;
                     font-weight: 600;
                     font-family: {FONT_FAMILY};
                 }}
@@ -594,19 +595,17 @@ class ArtaleExpOverlay(QWidget):
 
   def _apply_game_mode(self):
     if self.is_game_mode:
-      self.setFixedWidth(280)
-      self.row_baseline.hide()
-      self.row_initial.hide()
+      self.setFixedWidth(290)
+      self.row_accum.hide()
       self.sep2.hide()
       self.details_container.hide()
       self.game_mode_container.show()
       self.btn_f9.setText("⊟")
       self.btn_f9.setToolTip("切換至完整面板模式 [F9]")
-      self.lbl_hotkey_hint.setText("[F7]暫停 [F8]重置 [F9]完整模式")
+      self.lbl_hotkey_hint.setText("[F7] 暫停  [F8] 重置  [F9] 完整模式")
     else:
-      self.setFixedWidth(320)
-      self.row_baseline.show()
-      self.row_initial.show()
+      self.setFixedWidth(340)
+      self.row_accum.show()
       self.sep2.show()
       self.details_container.show()
       self.game_mode_container.hide()
@@ -640,10 +639,10 @@ class ArtaleExpOverlay(QWidget):
     self.lbl_status.setText(msg)
     if is_locked:
       self.status_dot.setText("●")
-      self.status_dot.setStyleSheet("color: #4ade80; font-size: 12px;")
+      self.status_dot.setStyleSheet("color: #4ade80; font-size: 13px;")
     else:
       self.status_dot.setText("○")
-      self.status_dot.setStyleSheet("color: #eab308; font-size: 12px;")
+      self.status_dot.setStyleSheet("color: #eab308; font-size: 13px;")
 
   def _refresh_ui(self):
     m = self.engine.get_metrics()
@@ -659,9 +658,9 @@ class ArtaleExpOverlay(QWidget):
                     color: #34d399;
                     background-color: rgba(16, 185, 129, 0.18);
                     border: 1px solid rgba(52, 211, 153, 0.3);
-                    padding: 2px 6px;
+                    padding: 2px 7px;
                     border-radius: 4px;
-                    font-size: 10px;
+                    font-size: 11px;
                     font-weight: 700;
                     font-family: {FONT_FAMILY};
                 }}
@@ -671,9 +670,9 @@ class ArtaleExpOverlay(QWidget):
                 QPushButton {
                     background-color: rgba(239, 68, 68, 0.15);
                     color: #f87171;
-                    border-radius: 11px;
+                    border-radius: 12px;
                     border: none;
-                    font-size: 11px;
+                    font-size: 12px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
@@ -688,9 +687,9 @@ class ArtaleExpOverlay(QWidget):
                     color: #fbbf24;
                     background-color: rgba(245, 158, 11, 0.18);
                     border: 1px solid rgba(251, 191, 36, 0.3);
-                    padding: 2px 6px;
+                    padding: 2px 7px;
                     border-radius: 4px;
-                    font-size: 10px;
+                    font-size: 11px;
                     font-weight: 700;
                     font-family: {FONT_FAMILY};
                 }}
@@ -700,9 +699,9 @@ class ArtaleExpOverlay(QWidget):
                 QPushButton {
                     background-color: rgba(16, 185, 129, 0.15);
                     color: #34d399;
-                    border-radius: 11px;
+                    border-radius: 12px;
                     border: none;
-                    font-size: 11px;
+                    font-size: 12px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
@@ -716,9 +715,9 @@ class ArtaleExpOverlay(QWidget):
                 QLabel {{
                     color: #94a3b8;
                     background-color: rgba(255, 255, 255, 0.08);
-                    padding: 2px 6px;
+                    padding: 2px 7px;
                     border-radius: 4px;
-                    font-size: 10px;
+                    font-size: 11px;
                     font-weight: 600;
                     font-family: {FONT_FAMILY};
                 }}
@@ -728,10 +727,7 @@ class ArtaleExpOverlay(QWidget):
 
     # Values in detailed mode
     self.row_duration.set_value(m["練功時長"])
-    self.row_current.set_value(m["當前經驗"])
-    self.row_baseline.set_value(m["本次基準"])
-    self.row_initial.set_value(m["啟動初始"])
-    self.row_total.set_value(m["總獲得經驗"])
+    self.row_accum.set_value(m["累計經驗"])
     self.row_1m.set_value(m["1分鐘經驗"])
     self.row_est_10m.set_value(m["預估10分"])
     self.row_acc_10m.set_value(m["累積10分"])
@@ -740,7 +736,7 @@ class ArtaleExpOverlay(QWidget):
     self.row_eta.set_value(m["升級預估時間"])
 
     # Values in game mode
-    self.lbl_gm_gained.setText(f"獲得: {m['總獲得經驗']}")
+    self.lbl_gm_gained.setText(f"獲得: {m['累計經驗']}")
     self.lbl_gm_rate.setText(
         f"時薪預估: {m['預估60分']} | 升級: {m['升級預估時間']}"
     )
@@ -810,7 +806,7 @@ def main():
   app = QApplication(sys.argv)
 
   # Configure Google Sans font
-  app.setFont(QFont("Google Sans", 9))
+  app.setFont(QFont("Google Sans", 10))
 
   overlay = ArtaleExpOverlay()
   overlay.show()
