@@ -13,6 +13,7 @@ from overlay_hud import (
     DEFAULT_GAME_MODE_KEYS,
     ArtaleExpOverlay,
     GameModeSettingsDialog,
+    get_accum_exp_color,
 )
 
 # Shared QApplication for testing
@@ -228,6 +229,45 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.is_game_mode)
     self.assertTrue(self.overlay.header_widget.isVisible())
     self.assertTrue(self.overlay.lbl_hotkey_hint.isVisible())
+
+  def test_accum_exp_color_tiers_and_other_metrics_uncolored(self):
+    """Verify that only 累計經驗 has dynamic colors across 7 tiers, and other metrics are uncolored."""
+    # 7 Tiers check for get_accum_exp_color
+    self.assertEqual(get_accum_exp_color(0), "#FFFFFF")
+    self.assertEqual(get_accum_exp_color(19_999_999), "#FFFFFF")
+    self.assertEqual(get_accum_exp_color(20_000_000), "#FFCC00")
+    self.assertEqual(get_accum_exp_color(39_999_999), "#FFCC00")
+    self.assertEqual(get_accum_exp_color(40_000_000), "#66CCFF")
+    self.assertEqual(get_accum_exp_color(59_999_999), "#66CCFF")
+    self.assertEqual(get_accum_exp_color(60_000_000), "#FF80FF")
+    self.assertEqual(get_accum_exp_color(79_999_999), "#FF80FF")
+    self.assertEqual(get_accum_exp_color(80_000_000), "#FFFF66")
+    self.assertEqual(get_accum_exp_color(99_999_999), "#FFFF66")
+    self.assertEqual(get_accum_exp_color(100_000_000), "#66FF00")
+    self.assertEqual(get_accum_exp_color(119_999_999), "#66FF00")
+    self.assertEqual(get_accum_exp_color(120_000_000), "#FF66CC")
+    self.assertEqual(get_accum_exp_color(250_000_000), "#FF66CC")
+
+    # Verify that only row_accum is highlighted, while others are is_highlight=False
+    self.assertTrue(self.overlay.row_accum.is_highlight)
+    self.assertFalse(self.overlay.row_est_60m.is_highlight)
+    self.assertFalse(self.overlay.row_eta.is_highlight)
+    self.assertFalse(self.overlay.row_duration.is_highlight)
+    self.assertFalse(self.overlay.row_current.is_highlight)
+    self.assertFalse(self.overlay.row_1m.is_highlight)
+    self.assertFalse(self.overlay.row_est_10m.is_highlight)
+    self.assertFalse(self.overlay.row_acc_10m.is_highlight)
+    self.assertFalse(self.overlay.row_acc_60m.is_highlight)
+
+    # Simulate gained EXP in engine and verify UI refresh applies color to row_accum only
+    self.overlay.engine.total_gained_exp = 55_000_000
+    self.overlay._refresh_ui()
+    self.assertEqual(self.overlay.row_accum.current_color, "#66CCFF")
+    self.assertIn("#66CCFF", self.overlay.row_accum.lbl_value.styleSheet())
+
+    # Check uncolored row_est_60m uses neutral color
+    self.assertIsNone(self.overlay.row_est_60m.current_color)
+    self.assertIn("#f1f5f9", self.overlay.row_est_60m.lbl_value.styleSheet())
 
 
 if __name__ == "__main__":

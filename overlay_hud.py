@@ -86,6 +86,31 @@ DEFAULT_GAME_MODE_KEYS = [
 ]
 
 
+def get_accum_exp_color(val: int) -> str:
+  """Returns 7-tier hex color for gained accumulated EXP:
+  0 ~ 20M:    #FFFFFF (White)
+  20 ~ 40M:   #FFCC00 (Gold)
+  40 ~ 60M:   #66CCFF (Sky Blue)
+  60 ~ 80M:   #FF80FF (Pink)
+  80 ~ 100M:  #FFFF66 (Light Yellow)
+  100 ~ 120M: #66FF00 (Lime Green)
+  120M+:      #FF66CC (Rose Pink)
+  """
+  if val < 20_000_000:
+    return "#FFFFFF"
+  if val < 40_000_000:
+    return "#FFCC00"
+  if val < 60_000_000:
+    return "#66CCFF"
+  if val < 80_000_000:
+    return "#FF80FF"
+  if val < 100_000_000:
+    return "#FFFF66"
+  if val < 120_000_000:
+    return "#66FF00"
+  return "#FF66CC"
+
+
 class HotkeyWorker(QThread):
   """Global Windows hotkey listener for F7 (Start/Pause), F8 (Reset), F9 (Game Mode)."""
 
@@ -256,7 +281,7 @@ class MetricRow(QFrame):
         """)
 
     self.lbl_value = QLabel(default_val)
-    val_color = "#4ade80" if is_highlight else "#f1f5f9"
+    val_color = "#FFFFFF" if is_highlight else "#f1f5f9"
     font_size = "16px" if is_highlight else "15px"
     font_weight = "700" if is_highlight else "600"
     self.lbl_value.setStyleSheet(f"""
@@ -282,7 +307,7 @@ class MetricRow(QFrame):
     val_color = (
         self.current_color
         if self.current_color
-        else ("#4ade80" if self.is_highlight else "#f1f5f9")
+        else ("#FFFFFF" if self.is_highlight else "#f1f5f9")
     )
     font_weight = "700" if self.is_highlight else "600"
     self.layout.setContentsMargins(
@@ -315,7 +340,7 @@ class MetricRow(QFrame):
       val_size = max(11, int((16 if self.is_highlight else 15) * self.scale))
       font_weight = "700" if self.is_highlight else "600"
       fg_color = (
-          color if color else ("#4ade80" if self.is_highlight else "#f1f5f9")
+          color if color else ("#FFFFFF" if self.is_highlight else "#f1f5f9")
       )
       self.lbl_value.setStyleSheet(f"""
                 QLabel {{
@@ -773,14 +798,14 @@ class ArtaleExpOverlay(QWidget):
     self.row_1m = MetricRow("1分鐘經驗", "0", self)
     self.row_est_10m = MetricRow("預估10分", "0", self)
     self.row_acc_10m = MetricRow("累積10分", "0", self)
-    self.row_est_60m = MetricRow("預估60分", "0", self, is_highlight=True)
+    self.row_est_60m = MetricRow("預估60分", "0", self, is_highlight=False)
     self.row_acc_60m = MetricRow("累積60分", "0", self)
 
     self.sep_summary = self._create_separator()
 
     self.row_accum = MetricRow("累計經驗", "0", self, is_highlight=True)
     self.row_current = MetricRow("當前經驗", "無資料", self)
-    self.row_eta = MetricRow("升級預估時間", "-", self, is_highlight=True)
+    self.row_eta = MetricRow("升級預估時間", "-", self, is_highlight=False)
 
     # 4. EXP Progress Bar (managed dynamically with metrics)
     self.gauge_bar = QProgressBar(self)
@@ -1358,7 +1383,9 @@ class ArtaleExpOverlay(QWidget):
     # Values in detailed mode (same rows are reused in game mode!)
     self.row_duration.set_value(m["練功時長"])
     self.row_current.set_value(m["當前經驗"])
-    self.row_accum.set_value(m["累計經驗"])
+    accum_val = m.get("total_gained_exp", 0)
+    accum_color = get_accum_exp_color(accum_val)
+    self.row_accum.set_value(m["累計經驗"], color=accum_color)
     self.row_1m.set_value(m["1分鐘經驗"])
     self.row_est_10m.set_value(m["預估10分"])
     self.row_acc_10m.set_value(m["累積10分"])
