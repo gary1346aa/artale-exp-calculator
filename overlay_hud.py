@@ -1254,6 +1254,10 @@ class ArtaleExpOverlay(QWidget):
     self._init_ui()
     self._load_config()
 
+    qapp = QApplication.instance()
+    if qapp:
+      qapp.setQuitOnLastWindowClosed(False)
+
     # Refresh timer (1 Hz)
     self.ui_timer = QTimer(self)
     self.ui_timer.timeout.connect(self._refresh_ui)
@@ -2518,6 +2522,9 @@ class ArtaleExpOverlay(QWidget):
     ):
       self.video_worker.stop()
     event.accept()
+    qapp = QApplication.instance()
+    if qapp:
+      qapp.quit()
 
 
 def main(
@@ -2531,6 +2538,7 @@ def main(
     pass
 
   app = QApplication(sys.argv)
+  app.setQuitOnLastWindowClosed(False)
 
   # Configure font with anti-aliasing preference
   font = QFont()

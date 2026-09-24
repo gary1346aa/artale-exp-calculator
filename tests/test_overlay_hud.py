@@ -397,6 +397,13 @@ class TestOverlayHud(unittest.TestCase):
       self.assertFalse(self.overlay.is_simulating)
       self.assertIsNone(self.overlay.video_worker)
 
+  def test_dialog_closure_does_not_quit_app(self):
+    """Verify that closing dialogs does not shut down the application due to quitOnLastWindowClosed."""
+    qapp = QApplication.instance()
+    self.assertIsNotNone(qapp)
+    self.assertFalse(qapp.quitOnLastWindowClosed())
+
 
 if __name__ == "__main__":
   unittest.main()
+
