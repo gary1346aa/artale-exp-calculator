@@ -1,95 +1,124 @@
-# Artale EXP Calculator (楓之谷世界 Artale 經驗計算機)
+# Artale EXP Calculator
 
-專為 **MapleStory Worlds - Artale** 打造的非侵入式即時經驗計算機與懸浮 HUD。
-
----
-
-## 核心架構 (Features)
-
-1. **CPU 辨識架構**
-   - 影像運算在 CPU 執行，不佔用顯卡 3D / Tensor 算力。
-   - 採 1 FPS 取樣辨識。
-
-2. **SIMD 運算核心 (AVX2 / ARM NEON)**
-   - 核心以 C++ 編寫，提供 AVX2/FMA 與 NEON 向量指令支援。
-   - 實作滑動視窗 NCC (Normalized Cross-Correlation) 模板比對與動態規劃字元解碼。
-
-3. **非侵入式背景擷取 (Windows Graphics Capture)**
-   - 採用 Windows 10/11 原生 **Windows Graphics Capture (WGC)** API。
-   - 從桌面視窗管理員 (DWM) 交換鏈直接讀取畫面，不注入 DLL、不讀寫遊戲記憶體。
-   - 支援遊戲視窗被其他視窗遮擋、邊界調整或動態縮放。
-
-4. **現代半透明遊戲懸浮窗 (Modern Floating HUD Overlay)**
-   - 採用 PyQt6 打造毛玻璃深色主題懸浮面板，置頂顯示 (Always-on-Top)、無邊框、任意拖曳移動。
-   - 支援精簡模式切換、視窗位置自動記憶、暫停與重新統計功能。
-   - 全介面繁體中文 (TC) 呈現。
+A non-invasive real-time EXP tracker and floating HUD overlay designed for **MapleStory Worlds - Artale**.
 
 ---
 
-## 📊 監控指標 (Metrics)
+## Architecture & Features
 
-| 指標名稱 | 說明 |
+1. **CPU-Based Recognition Pipeline**
+   - OCR and image processing execute entirely on CPU without consuming GPU 3D or Tensor compute resources.
+   - Throttled 1 FPS sampling rate.
+
+2. **SIMD Vectorized Engine (AVX2 / ARM NEON)**
+   - Core engine written in C++ with AVX2/FMA and ARM NEON support.
+   - Bit-exact OpenCV-compliant bilinear resizing (`ResizeGray`).
+   - Vectorized sliding-window Normalized Cross-Correlation (`MatchTemplateNcc`) with rolling column sums and multi-register unrolling.
+   - Grammar-constrained dynamic programming beam search for character classification and bracket disambiguation.
+
+3. **Non-Invasive Screen Capture (Windows Graphics Capture)**
+   - Utilizes Windows 10/11 native **Windows Graphics Capture (WGC)** APIs via Desktop Window Manager (DWM).
+   - Reads directly from the DirectX swapchain without DLL injection or process memory access.
+   - Adapts to obscured windows, resolution changes, and multi-monitor setups (supporting 720p to 4K).
+
+4. **Translucent Gaming HUD Overlay**
+   - Built with PyQt6: frameless, dark translucent theme, always-on-top, draggable.
+   - Supports compact mode toggle, window position persistence, pause/resume, and session reset.
+   - Display localized in Traditional Chinese.
+
+---
+
+## Metrics Tracked
+
+| Metric | Description |
 | :--- | :--- |
-| **練功時長** | 本次連線/打怪累積時間 (格式 `HH:MM:SS`) |
-| **當前經驗** | 即時讀取之數值與百分比 (如 `822,784,172 (81.85%)`) |
-| **總獲得經驗** | 本次統計累積獲得之經驗總值與累積百分比 |
-| **1分鐘經驗** | 近 1 分鐘即時經驗獲得速率 |
-| **預估10分 / 累積10分** | 依即時速率預估 10 分鐘獲取量 / 過去 10 分鐘實際獲得量 |
-| **預估60分 / 累積60分** | 即時時薪預估 (EXP/h) / 過去 60 分鐘實際獲得量 |
-| **升級預估時間** | 依當前速率預估達到 100% 之所需時間 (例如 `2小時15分`) |
+| **Session Duration** | Elapsed hunting / training time (`HH:MM:SS`) |
+| **Current EXP** | Real-time EXP value and percentage (e.g. `822,784,172 (81.85%)`) |
+| **Total EXP Gained** | Total accumulated EXP and percentage gain in the current session |
+| **1-Minute Rate** | Estimated EXP rate based on the past 1 minute |
+| **10-Minute Projection / Actual** | Projected 10-minute rate vs. actual EXP gained in the last 10 minutes |
+| **60-Minute Projection / Actual** | Projected hourly rate (EXP/h) vs. actual EXP gained in the last 60 minutes |
+| **ETA to Level Up** | Estimated time remaining to reach the next level based on current rate |
 
 ---
 
-## 🚀 快速啟動 (Getting Started)
+## Getting Started
 
-### 1. 安裝環境依賴 (Python 3.10+)
+### 1. Requirements & Dependencies (Python 3.10+)
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 編譯 C++ SIMD 核心 (可選，已提供預編譯 DLL)
-若欲自行編譯或修改 C++ 核心演算法：
-- **Windows (Clang++ / MinGW-w64)**:
-  ```powershell
-  clang++ -O3 -mavx2 -mfma -shared -static -DARTALE_EXP_EXPORTS -Isrc/cpp/include -Isrc/cpp/src src/cpp/src/artale_exp_core.cpp -o artale_exp_core.dll
-  ```
-- **macOS (Apple Silicon NEON)**:
+### 2. Building the C++ Engine (Optional)
+
+Precompiled binaries are provided. To rebuild from source:
+
+- **Using Bazel (Recommended)**:
   ```bash
-  clang++ -O3 -shared -std=c++20 -DARTALE_EXP_EXPORTS -Isrc/cpp/include -Isrc/cpp/src src/cpp/src/artale_exp_core.cpp -o libartale_exp_core.dylib
+  bazel build //src/cpp:artale_exp_core_dll -c opt
   ```
 
-### 3. 啟動計算機
-- **懸浮面板模式 (推薦)**:
+- **Using Clang++ on Windows**:
+  ```powershell
+  clang++ -O3 -mavx2 -mfma -shared -static -std=c++17 -DARTALE_EXP_EXPORTS -Isrc/cpp/include -I. src/cpp/src/exp_engine.cc src/cpp/src/artale_exp_core.cc -o artale_exp_core.dll
+  ```
+
+- **Running Tests & Verification**:
+  ```bash
+  bazel test //tests:exp_engine_test -c opt
+  python scripts/run_equivalence_suite.py
+  ```
+
+### 3. Launching the Tracker
+
+- **Floating HUD Overlay Mode (Default)**:
   ```bash
   python main.py
   ```
-- **終端機純文字模式 (CLI)**:
+
+- **Terminal CLI Mode**:
   ```bash
   python main.py --cli
   ```
 
 ---
 
-## 📁 專案架構 (Project Structure)
+## Project Structure
 
 ```
 artale_exp_calculator/
 ├── src/
 │   └── cpp/
 │       ├── include/
-│       │   └── artale_exp_core.h     # C-ABI 跨語言導出介面
+│       │   └── artale_exp_core.h     # C-ABI export interface
 │       ├── src/
-│       │   ├── artale_exp_core.cc    # 影像前處理與座標快取
-│       │   ├── exp_engine.cc         # SIMD 雙線性插值與 NCC 字元辨識引擎
-│       │   └── exp_engine.h          # ExpEngine 類別定義
-│       └── CMakeLists.txt            # CMake 建置腳本
+│       │   ├── artale_exp_core.cc    # Preprocessing, caching, and C API bridge
+│       │   ├── exp_engine.cc         # SIMD bilinear resize, NCC matching, and DP decoder
+│       │   ├── exp_engine.h          # ExpEngine class definition
+│       │   ├── pristine_font_protos.h# Canonical font prototypes
+│       │   └── real_exp_logo.png     # Logo template data
+│       ├── BUILD.bazel               # Bazel build definitions
+│       └── CMakeLists.txt            # CMake build definitions
 ├── data/
-│   ├── desktop_font_protos.json      # 原始字形點陣庫
-│   └── real_exp_logo.png             # 標誌模板
-├── exp_core.py                       # CTypes 橋接層 (自動 fallback)
-├── metrics_engine.py                 # 滑動視窗速率與升級預估引擎 (繁中)
-├── overlay_hud.py                    # PyQt6 現代無邊框毛玻璃懸浮窗
-├── live_tracker.py                   # WGC 1 FPS 背景截圖監聽器
-├── main.py                           # 統一啟動入口
-└── requirements.txt                  # Python 相依清單
+│   ├── desktop_font_protos.json      # Raw prototype font definitions
+│   └── real_exp_logo.png             # Reference anchor template
+├── exp_core.py                       # Python ctypes binding layer with automatic fallback
+├── metrics_engine.py                 # Sliding-window rate engine & ETA calculation
+├── overlay_hud.py                    # PyQt6 floating HUD overlay
+├── live_tracker.py                   # WGC screen capture loop & frame dispatch
+├── main.py                           # Application entrypoint
+├── scripts/
+│   ├── generate_cpp_headers.py       # Header generator from JSON prototypes
+│   └── run_equivalence_suite.py      # Regression equivalence test suite
+├── tests/
+│   ├── BUILD.bazel                   # Bazel test target definitions
+│   ├── exp_engine_test.cc            # C++ Google Test test suite
+│   ├── test_block_equivalence.py     # Component-level C++ vs. OpenCV verification
+│   └── test_python_exp_engine.py     # Python engine unit tests
+├── benchmarks/
+│   ├── BUILD.bazel                   # Benchmark target definitions
+│   └── exp_engine_benchmark.cc       # Google Benchmark performance harness
+├── MODULE.bazel                      # Bazel dependencies configuration
+└── requirements.txt                  # Python dependencies
 ```
