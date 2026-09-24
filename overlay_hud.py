@@ -1499,16 +1499,6 @@ class ArtaleExpOverlay(QWidget):
 
 
 def main():
-  if sys.platform == "win32":
-    try:
-      # Enable Per-Monitor High DPI v2 Awareness to eliminate blurry scaling
-      ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    except Exception:
-      try:
-        ctypes.windll.user32.SetProcessDPIAware()
-      except Exception:
-        pass
-
   try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
   except Exception:
