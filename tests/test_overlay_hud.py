@@ -336,11 +336,11 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.engine.total_gained_exp = 1_234_000
     self.overlay._refresh_ui()
     accum_simple = self.overlay.simple_metric_widgets["累計經驗"]
-    self.assertEqual(accum_simple.lbl_value.text(), "123.4萬")
+    self.assertEqual(accum_simple.lbl_value.text(), "123.4 萬")
 
-    self.overlay.engine.total_gained_exp = 123_456_789  # 1.23億, Tier 7 (#FF66CC)
+    self.overlay.engine.total_gained_exp = 123_456_789  # 1.23 億, Tier 7 (#FF66CC)
     self.overlay._refresh_ui()
-    self.assertEqual(accum_simple.lbl_value.text(), "1.23億")
+    self.assertEqual(accum_simple.lbl_value.text(), "1.23 億")
     self.assertEqual(accum_simple.current_val_color, "#FF66CC")
     self.assertIn("#FF66CC", accum_simple.lbl_value.styleSheet())
 
@@ -403,7 +403,32 @@ class TestOverlayHud(unittest.TestCase):
     self.assertIsNotNone(qapp)
     self.assertFalse(qapp.quitOnLastWindowClosed())
 
+  def test_scale_and_opacity_controls_in_simple_mode(self):
+    """Verify that size (scale) and transparency (opacity) can be changed dynamically in Simple Mode."""
+    self.overlay._set_mode("simple")
+    self.assertEqual(self.overlay.current_mode, "simple")
+
+    # Change scale to 1.25x
+    self.overlay.set_ui_scale(1.25)
+    self.assertAlmostEqual(self.overlay.ui_scale, 1.25, places=2)
+    self.assertEqual(self.overlay.lbl_scale_val.text(), "125%")
+    self.assertEqual(self.overlay.slider_scale.value(), 125)
+
+    # Change opacity to 0.70 (30% transparency)
+    self.overlay.set_ui_opacity(0.70)
+    self.assertAlmostEqual(self.overlay.opacity_val, 0.70, places=2)
+    self.assertAlmostEqual(self.overlay.windowOpacity(), 0.70, places=2)
+    self.assertEqual(self.overlay.lbl_opacity_val.text(), "30%")
+    self.assertEqual(self.overlay.slider_opacity.value(), 30)
+
+    # Reset back to default
+    self.overlay.set_ui_scale(1.0)
+    self.overlay.set_ui_opacity(0.95)
+    self.assertAlmostEqual(self.overlay.ui_scale, 1.0, places=2)
+    self.assertAlmostEqual(self.overlay.opacity_val, 0.95, places=2)
+
 
 if __name__ == "__main__":
   unittest.main()
+
 

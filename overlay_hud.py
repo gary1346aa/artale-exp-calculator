@@ -107,10 +107,10 @@ SIMPLE_METRIC_CONFIG = {
 
 
 def format_chinese_exp(val: Optional[int | float]) -> str:
-  """Formats EXP numbers into simplified Chinese units:
+  """Formats EXP numbers into simplified Chinese units with space before unit:
   < 10,000:       e.g. '0', '9,500'
-  10,000 ~ 1億:   e.g. '123.4萬'
-  >= 1億:         e.g. '1.23億'
+  10,000 ~ 1億:   e.g. '123.4 萬'
+  >= 1億:         e.g. '1.23 億'
   """
   if val is None:
     return "--"
@@ -118,10 +118,10 @@ def format_chinese_exp(val: Optional[int | float]) -> str:
   abs_val = abs(val)
   if abs_val >= 100_000_000:
     num = abs_val / 100_000_000.0
-    return f"{sign}{num:.2f}億"
+    return f"{sign}{num:.2f} 億"
   elif abs_val >= 10_000:
     num = abs_val / 10_000.0
-    return f"{sign}{num:.1f}萬"
+    return f"{sign}{num:.1f} 萬"
   else:
     return f"{sign}{int(abs_val):,d}"
 
@@ -650,7 +650,7 @@ class SimpleMetricItem(QWidget):
     lbl_font_size = max(9, int(12 * scale))
     val_font_size = max(10, int(13 * scale))
     self.layout().setSpacing(max(2, int(4 * scale)))
-    val_min_w = max(40, int(70 * scale))
+    val_min_w = max(45, int(76 * scale))
     self.lbl_value.setMinimumWidth(val_min_w)
     self.lbl_label.setStyleSheet(f"""
         QLabel {{
@@ -1708,6 +1708,33 @@ class ArtaleExpOverlay(QWidget):
     action_settings.triggered.connect(
         lambda: QTimer.singleShot(0, self._open_game_mode_settings)
     )
+    menu.addSeparator()
+
+    # UI Scale submenu
+    cur_scale_pct = int(round(self.ui_scale * 100))
+    scale_menu = menu.addMenu(f"🔍 縮放大小 ({cur_scale_pct}%)")
+    for sc in [0.75, 0.85, 1.0, 1.15, 1.30, 1.50, 1.75]:
+      sc_pct = int(round(sc * 100))
+      label = f"{sc_pct}% (預設)" if sc == 1.0 else f"{sc_pct}%"
+      act_sc = scale_menu.addAction(label)
+      act_sc.setCheckable(True)
+      act_sc.setChecked(abs(self.ui_scale - sc) < 0.03)
+      act_sc.triggered.connect(lambda checked, s=sc: self.set_ui_scale(s))
+
+    # Opacity submenu
+    cur_opacity_pct = int(round(self.opacity_val * 100))
+    opacity_menu = menu.addMenu(f"👁 透明度 ({cur_opacity_pct}%)")
+    for op in [1.0, 0.95, 0.85, 0.70, 0.55, 0.40]:
+      op_pct = int(round(op * 100))
+      label = (
+          f"{op_pct}% (預設)"
+          if op == 0.95
+          else (f"{op_pct}% (不透明)" if op == 1.0 else f"{op_pct}%")
+      )
+      act_op = opacity_menu.addAction(label)
+      act_op.setCheckable(True)
+      act_op.setChecked(abs(self.opacity_val - op) < 0.03)
+      act_op.triggered.connect(lambda checked, o=op: self.set_ui_opacity(o))
 
     menu.addSeparator()
 
@@ -2079,17 +2106,53 @@ class ArtaleExpOverlay(QWidget):
     self._save_config()
     self._update_focus_visibility()
 
-  def _on_scale_changed(self, val: int):
-    self.ui_scale = val / 100.0
-    self.lbl_scale_val.setText(f"{val}%")
+  def set_ui_scale(self, scale: float):
+    """Sets UI scale safely and updates sliders, metrics, and window geometry."""
+    self.ui_scale = max(0.50, min(2.00, round(scale, 2)))
+    val_int = int(round(self.ui_scale * 100))
+    if hasattr(self, "slider_scale"):
+      self.slider_scale.blockSignals(True)
+      self.slider_scale.setValue(val_int)
+      self.slider_scale.blockSignals(False)
+    if hasattr(self, "lbl_scale_val"):
+      self.lbl_scale_val.setText(f"{val_int}%")
     self._apply_scaling()
+    self._save_config()
+
+  def set_ui_opacity(self, opacity: float):
+    """Sets window opacity safely and updates sliders and window opacity."""
+    self.opacity_val = max(0.20, min(1.00, round(opacity, 2)))
+    self.setWindowOpacity(self.opacity_val)
+    transparency_pct = int(round((1.0 - self.opacity_val) * 100))
+    if hasattr(self, "slider_opacity"):
+      self.slider_opacity.blockSignals(True)
+      self.slider_opacity.setValue(transparency_pct)
+      self.slider_opacity.blockSignals(False)
+    if hasattr(self, "lbl_opacity_val"):
+      self.lbl_opacity_val.setText(f"{transparency_pct}%")
+    self._save_config()
+
+  def _on_scale_changed(self, val: int):
+    self.set_ui_scale(val / 100.0)
 
   def _on_opacity_changed(self, val: int):
-    # val is transparency percentage (0% to 80%)
-    # Reversed to window opacity (1.0 down to 0.20)
-    self.opacity_val = max(0.1, (100 - val) / 100.0)
-    self.setWindowOpacity(self.opacity_val)
-    self.lbl_opacity_val.setText(f"{val}%")
+    self.set_ui_opacity((100 - val) / 100.0)
+
+  def wheelEvent(self, event):
+    """Mouse wheel shortcuts: Ctrl+Wheel to scale, Shift/Alt+Wheel for opacity."""
+    modifiers = event.modifiers()
+    delta = event.angleDelta().y()
+    if delta != 0:
+      step = 0.05 if delta > 0 else -0.05
+      if modifiers & Qt.KeyboardModifier.ControlModifier:
+        self.set_ui_scale(self.ui_scale + step)
+        event.accept()
+        return
+      elif modifiers & (Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.AltModifier):
+        self.set_ui_opacity(self.opacity_val + step)
+        event.accept()
+        return
+    super().wheelEvent(event)
 
   def _update_state_badge_style(self):
     s = self.ui_scale
