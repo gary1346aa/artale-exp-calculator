@@ -312,11 +312,11 @@ class ExpMetricsEngine:
     else:
       baseline_exp_str = "無資料"
 
-    # Cumulative Gained EXP (no percentage)
-    accum_exp_str = f"+{self.total_gained_exp:,d}"
+    # Cumulative Gained EXP (no percentage, no plus sign)
+    accum_exp_str = f"{self.total_gained_exp:,d}"
     total_gained_str = accum_exp_str
 
-    # 1-minute rate metrics (no percentage)
+    # 1-minute rate metrics (no percentage, no plus sign)
     exp_1m, pct_1m, dt_1m = self._get_window_gain(60.0)
     rate_exp_per_sec = (exp_1m / dt_1m) if dt_1m > 5.0 else (
         self.total_gained_exp / elapsed if elapsed > 5.0 else 0.0)
@@ -324,19 +324,19 @@ class ExpMetricsEngine:
         self.total_gained_pct / elapsed if elapsed > 5.0 else 0.0)
 
     rate_1m_exp = int(rate_exp_per_sec * 60)
-    rate_1m_str = f"+{rate_1m_exp:,d}"
+    rate_1m_str = f"{rate_1m_exp:,d}"
 
-    # 10-minute projection & actual (no percentage)
+    # 10-minute projection & actual (no percentage, no plus sign)
     exp_10m_actual, pct_10m_actual, _ = self._get_window_gain(600.0)
-    accum_10m_str = f"+{exp_10m_actual:,d}"
+    accum_10m_str = f"{exp_10m_actual:,d}"
     proj_10m_exp = int(rate_exp_per_sec * 600)
-    proj_10m_str = f"+{proj_10m_exp:,d}"
+    proj_10m_str = f"{proj_10m_exp:,d}"
 
-    # 60-minute projection & actual (no percentage)
+    # 60-minute projection & actual (no percentage, no plus sign)
     exp_60m_actual, pct_60m_actual, _ = self._get_window_gain(3600.0)
-    accum_60m_str = f"+{exp_60m_actual:,d}"
+    accum_60m_str = f"{exp_60m_actual:,d}"
     proj_60m_exp = int(rate_exp_per_sec * 3600)
-    proj_60m_str = f"+{proj_60m_exp:,d}"
+    proj_60m_str = f"{proj_60m_exp:,d}"
 
     # Level up ETA
     eta_str = "待機中"

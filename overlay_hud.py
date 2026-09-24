@@ -12,16 +12,27 @@ import json
 import os
 import sys
 import time
-from typing import Optional
+from typing import List, Optional
 
-from PyQt6.QtCore import QPoint, Qt, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QCursor, QFont, QFontDatabase
+from PyQt6.QtCore import QPoint, QRectF, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtGui import (
+    QBrush,
+    QColor,
+    QCursor,
+    QFont,
+    QFontDatabase,
+    QPainter,
+    QPen,
+)
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QDialog,
     QFrame,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
@@ -40,6 +51,28 @@ FONT_FAMILY = (
     " -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei UI',"
     " 'Microsoft JhengHei', sans-serif"
 )
+
+ALL_METRIC_KEYS = [
+    "練功時長",
+    "1分鐘經驗",
+    "預估10分",
+    "累積10分",
+    "預估60分",
+    "累積60分",
+    "累計經驗",
+    "當前經驗",
+    "升級預估時間",
+    "EXP 進度條",
+]
+
+DEFAULT_GAME_MODE_KEYS = [
+    "練功時長",
+    "預估60分",
+    "累計經驗",
+    "當前經驗",
+    "升級預估時間",
+    "EXP 進度條",
+]
 
 
 class HotkeyWorker(QThread):
@@ -243,6 +276,179 @@ class MetricRow(QFrame):
             """)
 
 
+class SmoothCard(QFrame):
+  """Custom container frame rendering high-precision anti-aliased rounded card and border."""
+
+  def __init__(self, parent=None):
+    super().__init__(parent)
+    self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+  def paintEvent(self, event):
+    painter = QPainter(self)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+    rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
+    bg_color = QColor(17, 22, 34, 245)
+    border_color = QColor(255, 255, 255, 28)
+
+    painter.setBrush(QBrush(bg_color))
+    painter.setPen(QPen(border_color, 1.2))
+    painter.drawRoundedRect(rect, 12.0, 12.0)
+
+
+class SmoothButton(QPushButton):
+  """QPushButton with vector-smoothed anti-aliased rounded background and borders."""
+
+  def __init__(self, text: str = "", parent=None, is_close: bool = False):
+    super().__init__(text, parent)
+    self.is_close = is_close
+    self.is_hovered = False
+    self.custom_bg = None
+    self.custom_border = None
+    self.custom_color = None
+    self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+  def enterEvent(self, event):
+    self.is_hovered = True
+    self.update()
+    super().enterEvent(event)
+
+  def leaveEvent(self, event):
+    self.is_hovered = False
+    self.update()
+    super().leaveEvent(event)
+
+  def set_custom_style(
+      self,
+      bg: Optional[QColor] = None,
+      border: Optional[QColor] = None,
+      text_color: Optional[QColor] = None,
+  ):
+    self.custom_bg = bg
+    self.custom_border = border
+    self.custom_color = text_color
+    self.update()
+
+  def paintEvent(self, event):
+    painter = QPainter(self)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+
+    rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
+    radius = min(rect.width(), rect.height()) / 2.0
+
+    if self.custom_bg:
+      bg = self.custom_bg
+      border = self.custom_border if self.custom_border else QColor(0, 0, 0, 0)
+      fg = self.custom_color if self.custom_color else QColor("#ffffff")
+      if self.is_hovered:
+        bg = bg.lighter(130)
+    elif self.is_close:
+      bg = QColor(239, 68, 68, 200) if self.is_hovered else QColor(255, 255, 255, 0)
+      border = QColor(239, 68, 68, 120) if self.is_hovered else QColor(255, 255, 255, 0)
+      fg = QColor("#ffffff") if self.is_hovered else QColor("#94a3b8")
+    else:
+      bg = QColor(255, 255, 255, 35) if self.is_hovered else QColor(255, 255, 255, 12)
+      border = QColor(255, 255, 255, 50) if self.is_hovered else QColor(255, 255, 255, 20)
+      fg = QColor("#ffffff") if self.is_hovered else QColor("#94a3b8")
+
+    painter.setBrush(QBrush(bg))
+    painter.setPen(QPen(border, 1.0))
+    painter.drawRoundedRect(rect, radius, radius)
+
+    painter.setPen(fg)
+    painter.setFont(self.font())
+    painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
+
+
+class GameModeSettingsDialog(QDialog):
+  """Dialog allowing the user to select which metrics to display in Game Mode."""
+
+  def __init__(self, current_items: List[str], parent=None):
+    super().__init__(parent)
+    self.setWindowTitle("遊戲模式顯示設定")
+    self.setModal(True)
+    self.setFixedWidth(280)
+    self.setStyleSheet(f"""
+            QDialog {{
+                background-color: #181d28;
+                color: #e2e8f0;
+                font-family: {FONT_FAMILY};
+                font-size: 13px;
+            }}
+            QLabel {{
+                color: #94a3b8;
+                font-size: 12px;
+                margin-bottom: 6px;
+            }}
+            QCheckBox {{
+                color: #f1f5f9;
+                font-size: 13px;
+                padding: 3px 0;
+                spacing: 8px;
+            }}
+            QCheckBox::indicator {{
+                width: 16px;
+                height: 16px;
+                border-radius: 4px;
+                border: 1px solid rgba(255, 255, 255, 0.25);
+                background-color: rgba(255, 255, 255, 0.05);
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: #10b981;
+                border-color: #34d399;
+            }}
+            QPushButton {{
+                background-color: rgba(255, 255, 255, 0.1);
+                color: #e2e8f0;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.2);
+            }}
+        """)
+
+    layout = QVBoxLayout(self)
+    layout.setContentsMargins(18, 16, 18, 16)
+    layout.setSpacing(6)
+
+    lbl_info = QLabel("選擇欲在遊戲模式下顯示的資訊：")
+    layout.addWidget(lbl_info)
+
+    self.checkboxes = {}
+    for key in ALL_METRIC_KEYS:
+      cb = QCheckBox(key, self)
+      cb.setChecked(key in current_items)
+      layout.addWidget(cb)
+      self.checkboxes[key] = cb
+
+    btn_layout = QHBoxLayout()
+    btn_layout.setSpacing(10)
+    btn_layout.addStretch()
+
+    btn_reset = QPushButton("預設值", self)
+    btn_reset.clicked.connect(self._reset_defaults)
+    btn_save = QPushButton("確認", self)
+    btn_save.setStyleSheet(
+        "background-color: #10b981; color: #ffffff; font-weight: bold;"
+    )
+    btn_save.clicked.connect(self.accept)
+
+    btn_layout.addWidget(btn_reset)
+    btn_layout.addWidget(btn_save)
+    layout.addLayout(btn_layout)
+
+  def _reset_defaults(self):
+    for key, cb in self.checkboxes.items():
+      cb.setChecked(key in DEFAULT_GAME_MODE_KEYS)
+
+  def get_selected_items(self) -> List[str]:
+    return [key for key, cb in self.checkboxes.items() if cb.isChecked()]
+
+
 class ArtaleExpOverlay(QWidget):
   """Main floating HUD overlay widget supporting Normal and Game Mode."""
 
@@ -250,6 +456,7 @@ class ArtaleExpOverlay(QWidget):
     super().__init__()
     self.engine = ExpMetricsEngine()
     self.is_game_mode = False
+    self.game_mode_items = list(DEFAULT_GAME_MODE_KEYS)
     self.drag_position = QPoint()
 
     self._init_window_flags()
@@ -285,17 +492,9 @@ class ArtaleExpOverlay(QWidget):
   def _init_ui(self):
     self.setFixedWidth(340)
 
-    # Outer container with modern dark frosted glass styling
-    self.outer_card = QFrame(self)
+    # Outer container with modern vector-smoothed dark glass styling
+    self.outer_card = SmoothCard(self)
     self.outer_card.setObjectName("outerCard")
-    self.outer_card.setStyleSheet(f"""
-            QFrame#outerCard {{
-                background-color: rgba(18, 22, 31, 0.94);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 12px;
-                font-family: {FONT_FAMILY};
-            }}
-        """)
 
     shadow = QGraphicsDropShadowEffect(self)
     shadow.setBlurRadius(20)
@@ -314,10 +513,10 @@ class ArtaleExpOverlay(QWidget):
     # 1. Top Header Bar: Title, State Badge, Window Controls
     header_layout = QHBoxLayout()
     header_layout.setContentsMargins(0, 0, 0, 2)
-    header_layout.setSpacing(6)
+    header_layout.setSpacing(5)
 
     self.status_dot = QLabel("●")
-    self.status_dot.setStyleSheet("color: #eab308; font-size: 13px;")
+    self.status_dot.setStyleSheet("color: #eab308; font-size: 13px; background: transparent;")
 
     self.lbl_title = QLabel("ARTALE EXP")
     self.lbl_title.setStyleSheet(f"""
@@ -327,6 +526,7 @@ class ArtaleExpOverlay(QWidget):
                 font-weight: 700;
                 letter-spacing: 0.5px;
                 font-family: {FONT_FAMILY};
+                background: transparent;
             }}
         """)
 
@@ -344,29 +544,30 @@ class ArtaleExpOverlay(QWidget):
             }}
         """)
 
-    # Control buttons (F7, F8, F9, Close)
-    self.btn_f7 = QPushButton("▶")
+    # Vector-smoothed Control buttons (F7, F8, F9, Settings, Close)
+    self.btn_f7 = SmoothButton("▶", self)
     self.btn_f7.setToolTip("開始 / 暫停 [F7]")
     self.btn_f7.setFixedSize(24, 24)
-    self.btn_f7.setStyleSheet(self._button_style())
     self.btn_f7.clicked.connect(self.on_f7)
 
-    self.btn_f8 = QPushButton("↺")
+    self.btn_f8 = SmoothButton("↺", self)
     self.btn_f8.setToolTip("重置本次計時 (不重置啟動初始經驗) [F8]")
     self.btn_f8.setFixedSize(24, 24)
-    self.btn_f8.setStyleSheet(self._button_style())
     self.btn_f8.clicked.connect(self.on_f8)
 
-    self.btn_f9 = QPushButton("◫")
+    self.btn_f9 = SmoothButton("◫", self)
     self.btn_f9.setToolTip("切換遊戲模式 [F9]")
     self.btn_f9.setFixedSize(24, 24)
-    self.btn_f9.setStyleSheet(self._button_style())
     self.btn_f9.clicked.connect(self.on_f9)
 
-    self.btn_close = QPushButton("✕")
+    self.btn_settings = SmoothButton("⚙", self)
+    self.btn_settings.setToolTip("遊戲模式顯示設定")
+    self.btn_settings.setFixedSize(24, 24)
+    self.btn_settings.clicked.connect(self._open_game_mode_settings)
+
+    self.btn_close = SmoothButton("✕", self, is_close=True)
     self.btn_close.setToolTip("關閉程式")
     self.btn_close.setFixedSize(24, 24)
-    self.btn_close.setStyleSheet(self._button_style(is_close=True))
     self.btn_close.clicked.connect(self.close)
 
     header_layout.addWidget(self.status_dot)
@@ -376,6 +577,7 @@ class ArtaleExpOverlay(QWidget):
     header_layout.addWidget(self.btn_f7)
     header_layout.addWidget(self.btn_f8)
     header_layout.addWidget(self.btn_f9)
+    header_layout.addWidget(self.btn_settings)
     header_layout.addWidget(self.btn_close)
     self.card_layout.addLayout(header_layout)
 
@@ -390,15 +592,15 @@ class ArtaleExpOverlay(QWidget):
                 color: #64748b;
                 font-size: 11px;
                 font-family: {FONT_FAMILY};
+                background: transparent;
             }}
         """)
 
-    self.btn_auto_start = QPushButton("⚡ 自動開始 [OFF]")
+    self.btn_auto_start = SmoothButton("⚡ 自動開始 [OFF]", self)
     self.btn_auto_start.setToolTip(
         "自動開始：開啟時，偵測到經驗值增加即自動開始計時 (F7暫停或F8重置時自動關閉一次)"
     )
     self.btn_auto_start.setFixedHeight(24)
-    self.btn_auto_start.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
     self._update_auto_start_button_style(False)
     self.btn_auto_start.clicked.connect(self._toggle_auto_start)
 
@@ -411,39 +613,7 @@ class ArtaleExpOverlay(QWidget):
     self.sep1 = self._create_separator()
     self.card_layout.addWidget(self.sep1)
 
-    # 3. Game Mode Container (visible only in game mode)
-    self.game_mode_container = QWidget(self)
-    gm_layout = QVBoxLayout(self.game_mode_container)
-    gm_layout.setContentsMargins(0, 4, 0, 4)
-    gm_layout.setSpacing(4)
-
-    self.lbl_gm_gained = QLabel("+0")
-    self.lbl_gm_gained.setStyleSheet(f"""
-            QLabel {{
-                color: #4ade80;
-                font-size: 16px;
-                font-weight: 700;
-                font-family: {FONT_FAMILY};
-            }}
-        """)
-    self.lbl_gm_gained.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-    self.lbl_gm_rate = QLabel("時薪預估: +0 | 升級: 待機中")
-    self.lbl_gm_rate.setStyleSheet(f"""
-            QLabel {{
-                color: #94a3b8;
-                font-size: 12px;
-                font-family: {FONT_FAMILY};
-            }}
-        """)
-    self.lbl_gm_rate.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-    gm_layout.addWidget(self.lbl_gm_gained)
-    gm_layout.addWidget(self.lbl_gm_rate)
-    self.card_layout.addWidget(self.game_mode_container)
-    self.game_mode_container.hide()
-
-    # 4. Detailed Metrics Body (hidden in game mode)
+    # 3. Detailed Metrics Body
     # Sequence: 練功時長 -> 1分鐘經驗 -> 預估10分 -> 累積10分 -> 預估60分 -> 累積60分 -> 累計經驗 -> 當前經驗 -> 升級預估時間
     self.details_container = QWidget(self)
     details_layout = QVBoxLayout(self.details_container)
@@ -451,15 +621,15 @@ class ArtaleExpOverlay(QWidget):
     details_layout.setSpacing(3)
 
     self.row_duration = MetricRow("練功時長", "00:00:00", self)
-    self.row_1m = MetricRow("1分鐘經驗", "+0", self)
-    self.row_est_10m = MetricRow("預估10分", "+0", self)
-    self.row_acc_10m = MetricRow("累積10分", "+0", self)
-    self.row_est_60m = MetricRow("預估60分", "+0", self, is_highlight=True)
-    self.row_acc_60m = MetricRow("累積60分", "+0", self)
+    self.row_1m = MetricRow("1分鐘經驗", "0", self)
+    self.row_est_10m = MetricRow("預估10分", "0", self)
+    self.row_acc_10m = MetricRow("累積10分", "0", self)
+    self.row_est_60m = MetricRow("預估60分", "0", self, is_highlight=True)
+    self.row_acc_60m = MetricRow("累積60分", "0", self)
 
     self.sep_summary = self._create_separator()
 
-    self.row_accum = MetricRow("累計經驗", "+0", self, is_highlight=True)
+    self.row_accum = MetricRow("累計經驗", "0", self, is_highlight=True)
     self.row_current = MetricRow("當前經驗", "無資料", self)
     self.row_eta = MetricRow("升級預估時間", "待機中", self, is_highlight=True)
 
@@ -475,7 +645,7 @@ class ArtaleExpOverlay(QWidget):
     details_layout.addWidget(self.row_eta)
     self.card_layout.addWidget(self.details_container)
 
-    # 5. EXP Progress Bar (placed at bottom)
+    # 4. EXP Progress Bar (placed at bottom)
     self.gauge_bar = QProgressBar(self)
     self.gauge_bar.setFixedHeight(8)
     self.gauge_bar.setTextVisible(False)
@@ -496,7 +666,7 @@ class ArtaleExpOverlay(QWidget):
         """)
     self.card_layout.addWidget(self.gauge_bar)
 
-    # 6. Hotkey Guidance Footer
+    # 5. Hotkey Guidance Footer
     self.lbl_hotkey_hint = QLabel("[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式")
     self.lbl_hotkey_hint.setStyleSheet(f"""
             QLabel {{
@@ -504,10 +674,25 @@ class ArtaleExpOverlay(QWidget):
                 font-size: 11px;
                 font-family: {FONT_FAMILY};
                 padding-top: 4px;
+                background: transparent;
             }}
         """)
     self.lbl_hotkey_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.card_layout.addWidget(self.lbl_hotkey_hint)
+
+    # Metric key to widget mapping for Game Mode customization
+    self.metric_widgets = {
+        "練功時長": self.row_duration,
+        "1分鐘經驗": self.row_1m,
+        "預估10分": self.row_est_10m,
+        "累積10分": self.row_acc_10m,
+        "預估60分": self.row_est_60m,
+        "累積60分": self.row_acc_60m,
+        "累計經驗": self.row_accum,
+        "當前經驗": self.row_current,
+        "升級預估時間": self.row_eta,
+        "EXP 進度條": self.gauge_bar,
+    }
 
   def _create_separator(self) -> QFrame:
     sep = QFrame()
@@ -517,63 +702,21 @@ class ArtaleExpOverlay(QWidget):
     )
     return sep
 
-  def _button_style(self, is_close: bool = False) -> str:
-    hover_bg = (
-        "rgba(239, 68, 68, 0.8)" if is_close else "rgba(255, 255, 255, 0.15)"
-    )
-    return f"""
-            QPushButton {{
-                background-color: transparent;
-                color: #94a3b8;
-                border-radius: 12px;
-                border: none;
-                font-size: 12px;
-                font-weight: bold;
-                font-family: {FONT_FAMILY};
-            }}
-            QPushButton:hover {{
-                background-color: {hover_bg};
-                color: #ffffff;
-            }}
-        """
-
   def _update_auto_start_button_style(self, enabled: bool):
     if enabled:
       self.btn_auto_start.setText("⚡ 自動開始 [ON]")
-      self.btn_auto_start.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: rgba(16, 185, 129, 0.20);
-                    color: #34d399;
-                    border: 1px solid rgba(52, 211, 153, 0.40);
-                    border-radius: 12px;
-                    padding: 0 10px;
-                    font-size: 11px;
-                    font-weight: 700;
-                    font-family: {FONT_FAMILY};
-                }}
-                QPushButton:hover {{
-                    background-color: rgba(16, 185, 129, 0.35);
-                    color: #ffffff;
-                }}
-            """)
+      self.btn_auto_start.set_custom_style(
+          bg=QColor(16, 185, 129, 45),
+          border=QColor(52, 211, 153, 100),
+          text_color=QColor("#34d399"),
+      )
     else:
       self.btn_auto_start.setText("⚡ 自動開始 [OFF]")
-      self.btn_auto_start.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: rgba(255, 255, 255, 0.06);
-                    color: #64748b;
-                    border: 1px solid rgba(255, 255, 255, 0.08);
-                    border-radius: 12px;
-                    padding: 0 10px;
-                    font-size: 11px;
-                    font-weight: 600;
-                    font-family: {FONT_FAMILY};
-                }}
-                QPushButton:hover {{
-                    background-color: rgba(255, 255, 255, 0.12);
-                    color: #e2e8f0;
-                }}
-            """)
+      self.btn_auto_start.set_custom_style(
+          bg=QColor(255, 255, 255, 15),
+          border=QColor(255, 255, 255, 30),
+          text_color=QColor("#94a3b8"),
+      )
 
   def _toggle_auto_start(self):
     enabled = self.engine.toggle_auto_start()
@@ -591,27 +734,83 @@ class ArtaleExpOverlay(QWidget):
     self._refresh_ui()
 
   def on_f9(self):
-    """F9 Hotkey handler: Toggle Game Mode (simple HUD)."""
+    """F9 Hotkey handler: Toggle Game Mode (customizable HUD)."""
     self.is_game_mode = not self.is_game_mode
     self._apply_game_mode()
 
+  def _open_game_mode_settings(self):
+    """Opens dialog to configure which metric items to show in Game Mode."""
+    dialog = GameModeSettingsDialog(self.game_mode_items, self)
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+      self.game_mode_items = dialog.get_selected_items()
+      self._save_config()
+      if self.is_game_mode:
+        self._apply_game_mode()
+
+  def contextMenuEvent(self, event):
+    """Right-click menu on the HUD overlay."""
+    menu = QMenu(self)
+    menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: #181d28;
+                color: #e2e8f0;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 8px;
+                padding: 4px;
+                font-family: {FONT_FAMILY};
+                font-size: 12px;
+            }}
+            QMenu::item {{
+                padding: 6px 18px;
+                border-radius: 4px;
+            }}
+            QMenu::item:selected {{
+                background-color: rgba(255, 255, 255, 0.12);
+            }}
+        """)
+    action_settings = menu.addAction("⚙ 遊戲模式顯示設定...")
+    action_settings.triggered.connect(self._open_game_mode_settings)
+    menu.exec(event.globalPos())
+
   def _apply_game_mode(self):
+    """Applies normal full mode or game mode with user-selected metrics."""
     if self.is_game_mode:
       self.setFixedWidth(290)
-      self.details_container.hide()
-      self.game_mode_container.show()
+      # Hide title text in game mode
+      self.lbl_title.hide()
       self.btn_f9.setText("⊟")
       self.btn_f9.setToolTip("切換至完整模式 [F9]")
       self.lbl_hotkey_hint.setText("[F7] 暫停  [F8] 重置  [F9] 完整模式")
+
+      # Show only the subset chosen by the user
+      for key, widget in self.metric_widgets.items():
+        widget.setVisible(key in self.game_mode_items)
+
+      # Show separator if both rate items and summary items are visible
+      has_top = any(
+          self.metric_widgets[k].isVisible()
+          for k in ["練功時長", "1分鐘經驗", "預估10分", "累積10分", "預估60分", "累積60分"]
+      )
+      has_bottom = any(
+          self.metric_widgets[k].isVisible()
+          for k in ["累計經驗", "當前經驗", "升級預估時間"]
+      )
+      self.sep_summary.setVisible(has_top and has_bottom)
     else:
       self.setFixedWidth(340)
-      self.details_container.show()
-      self.game_mode_container.hide()
+      # Show title text in full mode
+      self.lbl_title.show()
       self.btn_f9.setText("◫")
       self.btn_f9.setToolTip("切換遊戲模式 [F9]")
       self.lbl_hotkey_hint.setText(
           "[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
       )
+
+      # Show all items in full mode
+      for widget in self.metric_widgets.values():
+        widget.show()
+      self.sep_summary.show()
+
     self.adjustSize()
     self._save_config()
 
@@ -637,10 +836,10 @@ class ArtaleExpOverlay(QWidget):
     self.lbl_status.setText(msg)
     if is_locked:
       self.status_dot.setText("●")
-      self.status_dot.setStyleSheet("color: #4ade80; font-size: 13px;")
+      self.status_dot.setStyleSheet("color: #4ade80; font-size: 13px; background: transparent;")
     else:
       self.status_dot.setText("○")
-      self.status_dot.setStyleSheet("color: #eab308; font-size: 13px;")
+      self.status_dot.setStyleSheet("color: #eab308; font-size: 13px; background: transparent;")
 
   def _refresh_ui(self):
     m = self.engine.get_metrics()
@@ -664,20 +863,11 @@ class ArtaleExpOverlay(QWidget):
                 }}
             """)
       self.btn_f7.setText("⏸")
-      self.btn_f7.setStyleSheet("""
-                QPushButton {
-                    background-color: rgba(239, 68, 68, 0.15);
-                    color: #f87171;
-                    border-radius: 12px;
-                    border: none;
-                    font-size: 12px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: rgba(239, 68, 68, 0.35);
-                    color: #ffffff;
-                }
-            """)
+      self.btn_f7.set_custom_style(
+          bg=QColor(239, 68, 68, 38),
+          border=QColor(239, 68, 68, 80),
+          text_color=QColor("#f87171"),
+      )
     elif self.engine.is_paused:
       self.lbl_state_badge.setText("已暫停")
       self.lbl_state_badge.setStyleSheet(f"""
@@ -693,20 +883,11 @@ class ArtaleExpOverlay(QWidget):
                 }}
             """)
       self.btn_f7.setText("▶")
-      self.btn_f7.setStyleSheet("""
-                QPushButton {
-                    background-color: rgba(16, 185, 129, 0.15);
-                    color: #34d399;
-                    border-radius: 12px;
-                    border: none;
-                    font-size: 12px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: rgba(16, 185, 129, 0.35);
-                    color: #ffffff;
-                }
-            """)
+      self.btn_f7.set_custom_style(
+          bg=QColor(16, 185, 129, 38),
+          border=QColor(52, 211, 153, 80),
+          text_color=QColor("#34d399"),
+      )
     else:
       self.lbl_state_badge.setText("待機中")
       self.lbl_state_badge.setStyleSheet(f"""
@@ -721,9 +902,9 @@ class ArtaleExpOverlay(QWidget):
                 }}
             """)
       self.btn_f7.setText("▶")
-      self.btn_f7.setStyleSheet(self._button_style())
+      self.btn_f7.set_custom_style(None, None, None)
 
-    # Values in detailed mode
+    # Values in detailed mode (same rows are reused in game mode!)
     self.row_duration.set_value(m["練功時長"])
     self.row_current.set_value(m["當前經驗"])
     self.row_accum.set_value(m["累計經驗"])
@@ -733,12 +914,6 @@ class ArtaleExpOverlay(QWidget):
     self.row_est_60m.set_value(m["預估60分"])
     self.row_acc_60m.set_value(m["累積60分"])
     self.row_eta.set_value(m["升級預估時間"])
-
-    # Values in game mode
-    self.lbl_gm_gained.setText(f"獲得: {m['累計經驗']}")
-    self.lbl_gm_rate.setText(
-        f"時薪預估: {m['預估60分']} | 升級: {m['升級預估時間']}"
-    )
 
     # Gauge Progress Bar
     if "raw_pct" in m and m["raw_pct"] is not None:
@@ -769,6 +944,7 @@ class ArtaleExpOverlay(QWidget):
           x, y = cfg.get("x", 120), cfg.get("y", 120)
           self.move(x, y)
           self.is_game_mode = cfg.get("is_game_mode", False)
+          self.game_mode_items = cfg.get("game_mode_items", list(DEFAULT_GAME_MODE_KEYS))
           self._apply_game_mode()
       else:
         self.move(120, 120)
@@ -781,6 +957,7 @@ class ArtaleExpOverlay(QWidget):
           "x": self.pos().x(),
           "y": self.pos().y(),
           "is_game_mode": self.is_game_mode,
+          "game_mode_items": self.game_mode_items,
       }
       with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
@@ -797,6 +974,16 @@ class ArtaleExpOverlay(QWidget):
 
 
 def main():
+  if sys.platform == "win32":
+    try:
+      # Enable Per-Monitor High DPI v2 Awareness to eliminate blurry scaling
+      ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+      try:
+        ctypes.windll.user32.SetProcessDPIAware()
+      except Exception:
+        pass
+
   try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
   except Exception:
@@ -804,8 +991,20 @@ def main():
 
   app = QApplication(sys.argv)
 
-  # Configure Google Sans font
-  app.setFont(QFont("Google Sans", 10))
+  # Configure font with anti-aliasing preference
+  font = QFont()
+  font.setFamilies([
+      "Google Sans",
+      "PingFang TC",
+      "PingFang HK",
+      "Microsoft JhengHei UI",
+      "Segoe UI",
+      "sans-serif",
+  ])
+  font.setPointSize(10)
+  font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
+  font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
+  app.setFont(font)
 
   overlay = ArtaleExpOverlay()
   overlay.show()
@@ -814,3 +1013,4 @@ def main():
 
 if __name__ == "__main__":
   main()
+

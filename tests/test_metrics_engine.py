@@ -115,8 +115,8 @@ class TestExpMetricsEngine(unittest.TestCase):
 
     m = engine.get_metrics(now=160.0)
     self.assertIn("累計經驗", m)
-    self.assertEqual(m["累計經驗"], "+50,000")
-    # Verify no percentages in any gain/rate fields
+    self.assertEqual(m["累計經驗"], "50,000")
+    # Verify no percentages and no plus signs in any gain/rate fields
     for key in [
         "累計經驗",
         "總獲得經驗",
@@ -127,7 +127,7 @@ class TestExpMetricsEngine(unittest.TestCase):
         "累積60分",
     ]:
       self.assertNotIn("%", m[key], f"Key {key} should not contain '%'")
-      self.assertTrue(m[key].startswith("+"), f"Key {key} should start with '+'")
+      self.assertNotIn("+", m[key], f"Key {key} should not contain '+'")
 
 
 if __name__ == "__main__":
