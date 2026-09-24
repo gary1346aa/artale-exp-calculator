@@ -126,6 +126,65 @@ class TestOverlayHud(unittest.TestCase):
     self.assertEqual(dlg.get_full_order(), ALL_METRIC_KEYS)
     self.assertEqual(dlg.get_ordered_items(), DEFAULT_GAME_MODE_KEYS)
 
+  def test_eta_displays_dash_when_not_measuring(self):
+    """Verify that 升級預估時間 shows '-' instead of '待機中' when not measuring."""
+    m = self.overlay.engine.get_metrics()
+    self.assertEqual(m["升級預估時間"], "-")
+    self.overlay._refresh_ui()
+    self.assertEqual(self.overlay.row_eta.lbl_value.text(), "-")
+
+  def test_full_mode_honors_custom_order(self):
+    """Verify that changing metric order also affects Full Mode layout."""
+    custom_order = [
+        "當前經驗",
+        "EXP 進度條",
+        "累計經驗",
+        "升級預估時間",
+        "練功時長",
+        "1分鐘經驗",
+        "預估10分",
+        "累積10分",
+        "預估60分",
+        "累積60分",
+    ]
+    self.overlay.is_game_mode = False
+    self.overlay.game_mode_order = list(custom_order)
+    self.overlay._apply_game_mode()
+
+    layout_widgets = [
+        self.overlay.details_layout.itemAt(i).widget()
+        for i in range(self.overlay.details_layout.count())
+    ]
+    actual_order = []
+    for w in layout_widgets:
+      for k, v in self.overlay.metric_widgets.items():
+        if v is w:
+          actual_order.append(k)
+          break
+
+    self.assertEqual(actual_order, custom_order)
+
+  def test_hover_sliders_and_scaling(self):
+    """Verify size scale and opacity sliders update window properties."""
+    # Initially hidden
+    self.assertFalse(self.overlay.slider_panel.isVisible())
+
+    # Simulate mouse hover
+    self.overlay.slider_panel.show()
+    self.assertTrue(self.overlay.slider_panel.isVisible())
+
+    # Test scale slider
+    self.overlay.slider_scale.setValue(120)
+    self.assertAlmostEqual(self.overlay.ui_scale, 1.2)
+    self.assertEqual(self.overlay.lbl_scale_val.text(), "120%")
+    self.assertEqual(self.overlay.width(), int(340 * 1.2))
+
+    # Test opacity slider
+    self.overlay.slider_opacity.setValue(80)
+    self.assertAlmostEqual(self.overlay.opacity_val, 0.8)
+    self.assertEqual(self.overlay.lbl_opacity_val.text(), "80%")
+    self.assertAlmostEqual(self.overlay.windowOpacity(), 0.8)
+
 
 if __name__ == "__main__":
   unittest.main()

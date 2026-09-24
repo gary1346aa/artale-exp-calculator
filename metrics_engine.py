@@ -339,7 +339,7 @@ class ExpMetricsEngine:
     proj_60m_str = f"{proj_60m_exp:,d}"
 
     # Level up ETA
-    eta_str = "待機中"
+    eta_str = "-"
     if self.state == MeasurementState.RUNNING:
       if cur_pct is not None:
         if cur_pct >= 100.0:

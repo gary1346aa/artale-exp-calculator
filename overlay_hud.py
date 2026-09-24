@@ -30,7 +30,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
     QFrame,
-    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -39,6 +38,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSizePolicy,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -266,6 +266,28 @@ class MetricRow(QFrame):
     layout.addStretch()
     layout.addWidget(self.lbl_value)
 
+  def update_scale(self, scale: float):
+    title_size = max(9, int(13 * scale))
+    val_size = max(11, int((16 if self.is_highlight else 15) * scale))
+    val_color = "#4ade80" if self.is_highlight else "#f1f5f9"
+    font_weight = "700" if self.is_highlight else "600"
+    self.lbl_title.setStyleSheet(f"""
+            QLabel {{
+                color: #94a3b8;
+                font-size: {title_size}px;
+                font-weight: 500;
+                font-family: {FONT_FAMILY};
+            }}
+        """)
+    self.lbl_value.setStyleSheet(f"""
+            QLabel {{
+                color: {val_color};
+                font-size: {val_size}px;
+                font-weight: {font_weight};
+                font-family: {FONT_FAMILY};
+            }}
+        """)
+
   def set_value(self, val_str: str, color: Optional[str] = None):
     self.lbl_value.setText(val_str)
     if color:
@@ -436,11 +458,13 @@ class GameModeSettingsDialog(QDialog):
     layout.setContentsMargins(18, 16, 18, 16)
     layout.setSpacing(10)
 
-    lbl_title = QLabel("遊戲模式顯示與排序")
+    lbl_title = QLabel("指標顯示與排列設定")
     lbl_title.setStyleSheet("color: #f1f5f9; font-weight: 700; font-size: 14px;")
     layout.addWidget(lbl_title)
 
-    lbl_hint = QLabel("勾選欲顯示的項目，可直接滑鼠拖曳或使用右側按鈕調整顯示順序：")
+    lbl_hint = QLabel(
+        "可直接滑鼠拖曳或使用右側按鈕調整排列順序（完整模式與遊戲模式皆套用此順序）；左側勾選框決定是否於遊戲模式顯示："
+    )
     lbl_hint.setWordWrap(True)
     layout.addWidget(lbl_hint)
 
@@ -556,6 +580,8 @@ class ArtaleExpOverlay(QWidget):
     self.is_game_mode = False
     self.game_mode_order = list(ALL_METRIC_KEYS)
     self.game_mode_items = list(DEFAULT_GAME_MODE_KEYS)
+    self.ui_scale = 1.0
+    self.opacity_val = 0.95
     self.drag_position = QPoint()
 
     self._init_window_flags()
@@ -589,17 +615,14 @@ class ArtaleExpOverlay(QWidget):
     self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
   def _init_ui(self):
-    self.setFixedWidth(340)
+    self.setFixedWidth(int(340 * self.ui_scale))
 
     # Outer container with modern vector-smoothed dark glass styling
+    # (Note: Avoid QGraphicsDropShadowEffect here because on Windows layered translucent
+    # windows, external shadow bounding boxes trigger negative/out-of-bounds dirty rects
+    # resulting in 'UpdateLayeredWindowIndirect failed: The parameter is incorrect.')
     self.outer_card = SmoothCard(self)
     self.outer_card.setObjectName("outerCard")
-
-    shadow = QGraphicsDropShadowEffect(self)
-    shadow.setBlurRadius(20)
-    shadow.setColor(QColor(0, 0, 0, 180))
-    shadow.setOffset(0, 4)
-    self.outer_card.setGraphicsEffect(shadow)
 
     main_layout = QVBoxLayout(self)
     main_layout.setContentsMargins(0, 0, 0, 0)
@@ -613,9 +636,6 @@ class ArtaleExpOverlay(QWidget):
     header_layout = QHBoxLayout()
     header_layout.setContentsMargins(0, 0, 0, 2)
     header_layout.setSpacing(5)
-
-    self.status_dot = QLabel("●")
-    self.status_dot.setStyleSheet("color: #eab308; font-size: 13px; background: transparent;")
 
     self.lbl_title = QLabel("ARTALE EXP")
     self.lbl_title.setStyleSheet(f"""
@@ -660,7 +680,7 @@ class ArtaleExpOverlay(QWidget):
     self.btn_f9.clicked.connect(self.on_f9)
 
     self.btn_settings = SmoothButton("⚙", self)
-    self.btn_settings.setToolTip("遊戲模式顯示設定")
+    self.btn_settings.setToolTip("指標顯示與排列設定")
     self.btn_settings.setFixedSize(24, 24)
     self.btn_settings.clicked.connect(self._open_game_mode_settings)
 
@@ -669,7 +689,6 @@ class ArtaleExpOverlay(QWidget):
     self.btn_close.setFixedSize(24, 24)
     self.btn_close.clicked.connect(self.close)
 
-    header_layout.addWidget(self.status_dot)
     header_layout.addWidget(self.lbl_title)
     header_layout.addWidget(self.lbl_state_badge)
     header_layout.addStretch()
@@ -680,10 +699,16 @@ class ArtaleExpOverlay(QWidget):
     header_layout.addWidget(self.btn_close)
     self.card_layout.addLayout(header_layout)
 
-    # 2. Sub-header Bar: Status text on left, Auto-Start Toggle on right
+    # 2. Sub-header Bar: Status indicator dot + Status text on left, Auto-Start Toggle on right
     sub_layout = QHBoxLayout()
     sub_layout.setContentsMargins(0, 0, 0, 2)
     sub_layout.setSpacing(6)
+
+    self.status_dot = QLabel("●")
+    self.status_dot.setToolTip("遊戲視窗與經驗條鎖定狀態指示燈")
+    self.status_dot.setStyleSheet(
+        "color: #eab308; font-size: 13px; background: transparent;"
+    )
 
     self.lbl_status = QLabel("正在連線至遊戲視窗...")
     self.lbl_status.setStyleSheet(f"""
@@ -703,6 +728,7 @@ class ArtaleExpOverlay(QWidget):
     self._update_auto_start_button_style(False)
     self.btn_auto_start.clicked.connect(self._toggle_auto_start)
 
+    sub_layout.addWidget(self.status_dot)
     sub_layout.addWidget(self.lbl_status)
     sub_layout.addStretch()
     sub_layout.addWidget(self.btn_auto_start)
@@ -729,7 +755,7 @@ class ArtaleExpOverlay(QWidget):
 
     self.row_accum = MetricRow("累計經驗", "0", self, is_highlight=True)
     self.row_current = MetricRow("當前經驗", "無資料", self)
-    self.row_eta = MetricRow("升級預估時間", "待機中", self, is_highlight=True)
+    self.row_eta = MetricRow("升級預估時間", "-", self, is_highlight=True)
 
     # 4. EXP Progress Bar (managed dynamically with metrics)
     self.gauge_bar = QProgressBar(self)
@@ -754,7 +780,89 @@ class ArtaleExpOverlay(QWidget):
 
     self.card_layout.addWidget(self.details_container)
 
-    # 5. Hotkey Guidance Footer
+    # 5. Sliders Panel (Size & Opacity, only shown on mouse hover)
+    self.slider_panel = QFrame(self.outer_card)
+    self.slider_panel.setStyleSheet(f"""
+        QFrame {{
+            background: transparent;
+            border: none;
+            padding-top: 2px;
+        }}
+        QLabel {{
+            color: #94a3b8;
+            font-size: 11px;
+            font-family: {FONT_FAMILY};
+        }}
+        QSlider::groove:horizontal {{
+            height: 4px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+        }}
+        QSlider::sub-page:horizontal {{
+            background: #10b981;
+            border-radius: 2px;
+        }}
+        QSlider::handle:horizontal {{
+            background: #34d399;
+            border: 1px solid #ffffff;
+            width: 12px;
+            height: 12px;
+            margin-top: -4px;
+            margin-bottom: -4px;
+            border-radius: 6px;
+        }}
+        QSlider::handle:horizontal:hover {{
+            background: #6ee7b7;
+        }}
+    """)
+    sl_layout = QVBoxLayout(self.slider_panel)
+    sl_layout.setContentsMargins(2, 2, 2, 2)
+    sl_layout.setSpacing(4)
+
+    sl_layout.addWidget(self._create_separator())
+
+    row_scale = QHBoxLayout()
+    row_scale.setSpacing(6)
+    lbl_scale_title = QLabel("縮放")
+    self.lbl_scale_val = QLabel(f"{int(self.ui_scale * 100)}%")
+    self.lbl_scale_val.setFixedWidth(36)
+    self.lbl_scale_val.setAlignment(
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
+    self.slider_scale = QSlider(Qt.Orientation.Horizontal)
+    self.slider_scale.setRange(75, 140)
+    self.slider_scale.setValue(int(self.ui_scale * 100))
+    self.slider_scale.valueChanged.connect(self._on_scale_changed)
+    self.slider_scale.sliderReleased.connect(self._on_slider_released)
+
+    row_scale.addWidget(lbl_scale_title)
+    row_scale.addWidget(self.slider_scale)
+    row_scale.addWidget(self.lbl_scale_val)
+    sl_layout.addLayout(row_scale)
+
+    row_opacity = QHBoxLayout()
+    row_opacity.setSpacing(6)
+    lbl_opacity_title = QLabel("不透明")
+    self.lbl_opacity_val = QLabel(f"{int(self.opacity_val * 100)}%")
+    self.lbl_opacity_val.setFixedWidth(36)
+    self.lbl_opacity_val.setAlignment(
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
+    self.slider_opacity = QSlider(Qt.Orientation.Horizontal)
+    self.slider_opacity.setRange(30, 100)
+    self.slider_opacity.setValue(int(self.opacity_val * 100))
+    self.slider_opacity.valueChanged.connect(self._on_opacity_changed)
+    self.slider_opacity.sliderReleased.connect(self._on_slider_released)
+
+    row_opacity.addWidget(lbl_opacity_title)
+    row_opacity.addWidget(self.slider_opacity)
+    row_opacity.addWidget(self.lbl_opacity_val)
+    sl_layout.addLayout(row_opacity)
+
+    self.card_layout.addWidget(self.slider_panel)
+    self.slider_panel.hide()
+
+    # 6. Hotkey Guidance Footer
     self.lbl_hotkey_hint = QLabel("[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式")
     self.lbl_hotkey_hint.setStyleSheet(f"""
             QLabel {{
@@ -837,8 +945,7 @@ class ArtaleExpOverlay(QWidget):
       self.game_mode_order = dialog.get_full_order()
       self.game_mode_items = dialog.get_ordered_items()
       self._save_config()
-      if self.is_game_mode:
-        self._apply_game_mode()
+      self._apply_game_mode()
 
   def contextMenuEvent(self, event):
     """Right-click menu on the HUD overlay."""
@@ -861,7 +968,7 @@ class ArtaleExpOverlay(QWidget):
                 background-color: rgba(255, 255, 255, 0.12);
             }}
         """)
-    action_settings = menu.addAction("⚙ 遊戲模式顯示設定...")
+    action_settings = menu.addAction("⚙ 指標顯示與排列設定...")
     action_settings.triggered.connect(self._open_game_mode_settings)
     menu.exec(event.globalPos())
 
@@ -875,7 +982,7 @@ class ArtaleExpOverlay(QWidget):
     self.sep_summary.hide()
 
     if self.is_game_mode:
-      self.setFixedWidth(290)
+      self.setFixedWidth(int(290 * self.ui_scale))
       # Hide title text in game mode
       self.lbl_title.hide()
       self.btn_f9.setText("⊟")
@@ -889,7 +996,7 @@ class ArtaleExpOverlay(QWidget):
           self.details_layout.addWidget(widget)
           widget.show()
     else:
-      self.setFixedWidth(340)
+      self.setFixedWidth(int(340 * self.ui_scale))
       # Show title text in full mode
       self.lbl_title.show()
       self.btn_f9.setText("◫")
@@ -898,36 +1005,106 @@ class ArtaleExpOverlay(QWidget):
           "[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
       )
 
-      # Add all widgets in standard full layout hierarchy:
-      # 練功時長 -> 1分鐘經驗 -> 預估10分 -> 累積10分 -> 預估60分 -> 累積60分 -> [sep] -> 累計經驗 -> 當前經驗 -> 升級預估時間 -> EXP 進度條
-      full_order_top = [
-          "練功時長",
-          "1分鐘經驗",
-          "預估10分",
-          "累積10分",
-          "預估60分",
-          "累積60分",
-      ]
-      full_order_bottom = [
-          "累計經驗",
-          "當前經驗",
-          "升級預估時間",
-          "EXP 進度條",
-      ]
-      for key in full_order_top:
-        widget = self.metric_widgets[key]
-        self.details_layout.addWidget(widget)
-        widget.show()
-
-      self.details_layout.addWidget(self.sep_summary)
-      self.sep_summary.show()
-
-      for key in full_order_bottom:
-        widget = self.metric_widgets[key]
-        self.details_layout.addWidget(widget)
-        widget.show()
+      # Full mode also honors user's custom dragged order!
+      for key in self.game_mode_order:
+        if key in self.metric_widgets:
+          widget = self.metric_widgets[key]
+          self.details_layout.addWidget(widget)
+          widget.show()
 
     # Tightly pack and shrink containers to eliminate any blank space or empty slots
+    self.details_container.adjustSize()
+    self.outer_card.adjustSize()
+    self.adjustSize()
+    self.resize(self.width(), self.sizeHint().height())
+    self._save_config()
+
+  def enterEvent(self, event):
+    """Show size & opacity sliders when cursor hovers over the HUD window."""
+    self.slider_panel.show()
+    self.details_container.adjustSize()
+    self.outer_card.adjustSize()
+    self.adjustSize()
+    self.resize(self.width(), self.sizeHint().height())
+    super().enterEvent(event)
+
+  def leaveEvent(self, event):
+    """Hide sliders when cursor leaves the window (unless user is dragging a slider)."""
+    if not (
+        self.slider_scale.isSliderDown() or self.slider_opacity.isSliderDown()
+    ):
+      self.slider_panel.hide()
+      self.details_container.adjustSize()
+      self.outer_card.adjustSize()
+      self.adjustSize()
+      self.resize(self.width(), self.sizeHint().height())
+    super().leaveEvent(event)
+
+  def _on_slider_released(self):
+    self._save_config()
+    if not self.underMouse():
+      self.slider_panel.hide()
+      self.details_container.adjustSize()
+      self.outer_card.adjustSize()
+      self.adjustSize()
+      self.resize(self.width(), self.sizeHint().height())
+
+  def _on_scale_changed(self, val: int):
+    self.ui_scale = val / 100.0
+    self.lbl_scale_val.setText(f"{val}%")
+    self._apply_scaling()
+
+  def _on_opacity_changed(self, val: int):
+    self.opacity_val = val / 100.0
+    self.setWindowOpacity(self.opacity_val)
+    self.lbl_opacity_val.setText(f"{val}%")
+
+  def _apply_scaling(self):
+    base_w = 290 if self.is_game_mode else 340
+    self.setFixedWidth(int(base_w * self.ui_scale))
+
+    # Scale metric rows
+    for row in self.metric_widgets.values():
+      if isinstance(row, MetricRow):
+        row.update_scale(self.ui_scale)
+
+    # Scale title & state badge
+    title_size = max(10, int(14 * self.ui_scale))
+    self.lbl_title.setStyleSheet(f"""
+        QLabel {{
+            color: #e2e8f0;
+            font-size: {title_size}px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            font-family: {FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+
+    badge_size = max(8, int(11 * self.ui_scale))
+    self.lbl_state_badge.setStyleSheet(f"""
+        QLabel {{
+            color: #94a3b8;
+            background-color: rgba(255, 255, 255, 0.08);
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: {badge_size}px;
+            font-weight: 600;
+            font-family: {FONT_FAMILY};
+        }}
+    """)
+
+    # Scale buttons
+    btn_size = max(18, int(24 * self.ui_scale))
+    for btn in [
+        self.btn_f7,
+        self.btn_f8,
+        self.btn_f9,
+        self.btn_settings,
+        self.btn_close,
+    ]:
+      btn.setFixedSize(btn_size, btn_size)
+
     self.details_container.adjustSize()
     self.outer_card.adjustSize()
     self.adjustSize()
@@ -1073,6 +1250,14 @@ class ArtaleExpOverlay(QWidget):
           self.game_mode_items = cfg.get(
               "game_mode_items", list(DEFAULT_GAME_MODE_KEYS)
           )
+          self.ui_scale = cfg.get("ui_scale", 1.0)
+          self.opacity_val = cfg.get("opacity", 0.95)
+          self.setWindowOpacity(self.opacity_val)
+          self.slider_scale.setValue(int(self.ui_scale * 100))
+          self.slider_opacity.setValue(int(self.opacity_val * 100))
+          self.lbl_scale_val.setText(f"{int(self.ui_scale * 100)}%")
+          self.lbl_opacity_val.setText(f"{int(self.opacity_val * 100)}%")
+          self._apply_scaling()
           self._apply_game_mode()
       else:
         self.move(120, 120)
@@ -1089,6 +1274,8 @@ class ArtaleExpOverlay(QWidget):
           "is_game_mode": self.is_game_mode,
           "game_mode_order": self.game_mode_order,
           "game_mode_items": self.game_mode_items,
+          "ui_scale": getattr(self, "ui_scale", 1.0),
+          "opacity": getattr(self, "opacity_val", 0.95),
       }
       with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
