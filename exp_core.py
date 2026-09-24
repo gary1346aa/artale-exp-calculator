@@ -9,6 +9,7 @@ import os
 import sys
 import numpy as np
 import cv2
+import time
 
 class ExpResult(ctypes.Structure):
     _fields_ = [
@@ -88,6 +89,147 @@ def _init_core():
 
 _init_core()
 
+# Default to high-performance C++ engine when available, allowing opt-out via USE_CPP=0
+_USE_CPP_OVERRIDE = os.environ.get("USE_CPP", "1") == "1"
+_use_cpp = _USE_CPP_OVERRIDE and (_core_dll is not None)
+
+_cached_logo_loc = None
+_cached_logo_scale = 1.0
+_tpl_exp = None
+
+def _get_exp_tpl():
+    global _tpl_exp
+    if _tpl_exp is None:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        tpl_path = os.path.join(base_dir, "data", "real_exp_logo.png")
+        _tpl_exp = cv2.imread(tpl_path, cv2.IMREAD_GRAYSCALE)
+    return _tpl_exp
+
+_last_frame_shape = None
+_cached_crop_box = None
+_cached_logo_box = None
+
+def _parse_frame_python(bgr_img) -> ParsedFrame | None:
+    global _cached_logo_loc, _cached_logo_scale, _last_frame_shape, _cached_crop_box, _cached_logo_box
+    import python_exp_engine
+    engine = python_exp_engine.get_engine()
+    tpl = _get_exp_tpl()
+    if tpl is None or bgr_img is None:
+        return None
+
+    t0 = time.perf_counter()
+    h, w = bgr_img.shape[:2]
+    cur_shape = (h, w)
+
+    # Invalidate cache if resolution changed
+    if _last_frame_shape != cur_shape:
+        _last_frame_shape = cur_shape
+        _cached_logo_loc = None
+        _cached_crop_box = None
+        _cached_logo_box = None
+
+    # ULTRA-FAST PATH: If resolution has NOT changed and we have a cached bounding box, REUSE IT DIRECTLY!
+    if _cached_crop_box is not None:
+        cx, cy, cw, ch = _cached_crop_box
+        if cy + ch <= h and cx + cw <= w:
+            crop_bgr = bgr_img[cy:cy + ch, cx:cx + cw]
+            parsed = engine.parse_crop(crop_bgr)
+            if parsed:
+                exp_val, pct_val, raw_str, _crop_dt, _ = parsed
+                dt_ms = (time.perf_counter() - t0) * 1000.0
+                return ParsedFrame(exp_val, pct_val, raw_str, dt_ms, _cached_crop_box, _cached_logo_box)
+            # If parsing failed on cached box (e.g. obscured/moved), clear and re-detect
+            _cached_crop_box = None
+            _cached_logo_box = None
+
+    strip_h = min(h, max(80, int(h * 0.15)))
+    strip_y = max(0, h - strip_h)
+    strip_bgr = bgr_img[strip_y:, :]
+    strip_gray = cv2.cvtColor(strip_bgr, cv2.COLOR_BGR2GRAY)
+
+    found = False
+    best_lx, best_ly = 0, 0
+    best_tw, best_th = 0, 0
+
+    # 1. Fast path: check cached location if available
+    if _cached_logo_loc is not None:
+        clx, cly = _cached_logo_loc
+        s = _cached_logo_scale
+        scaled = cv2.resize(tpl, (0, 0), fx=s, fy=s, interpolation=cv2.INTER_LINEAR)
+        th, tw = scaled.shape
+        win_y1 = max(0, cly - 10)
+        win_y2 = min(strip_h, cly + th + 10)
+        win_x1 = max(0, clx - 10)
+        win_x2 = min(w, clx + tw + 10)
+        if win_y2 > win_y1 + th and win_x2 > win_x1 + tw:
+            res = cv2.matchTemplate(strip_gray[win_y1:win_y2, win_x1:win_x2], scaled, cv2.TM_CCOEFF_NORMED)
+            v = float(np.max(res))
+            if v > 0.65:
+                dy, dx = np.unravel_index(np.argmax(res), res.shape)
+                best_lx = win_x1 + dx
+                best_ly = win_y1 + dy
+                best_tw = tw
+                best_th = th
+                _cached_logo_loc = (best_lx, best_ly)
+                found = True
+
+    # 2. Slow path: multi-scale search guided by window resolution
+    if not found:
+        best_v = -1.0
+        # Expected UI scale follows the smaller window dimension (aspect-ratio aware)
+        s_center = min(w / 3840.0, h / 2160.0)
+        scales = np.linspace(max(0.24, s_center * 0.65), min(1.45, s_center * 1.35), 16)
+        for s in scales:
+            scaled = cv2.resize(tpl, (0, 0), fx=s, fy=s, interpolation=cv2.INTER_LINEAR)
+            th, tw = scaled.shape
+            if th >= strip_h or tw >= w:
+                continue
+            res = cv2.matchTemplate(strip_gray, scaled, cv2.TM_CCOEFF_NORMED)
+            v = float(np.max(res))
+            if v > best_v:
+                best_v = v
+                dy, dx = np.unravel_index(np.argmax(res), res.shape)
+                best_lx = dx
+                best_ly = dy
+                best_tw = tw
+                best_th = th
+                _cached_logo_scale = s
+
+        if best_v > 0.65:
+            _cached_logo_loc = (best_lx, best_ly)
+            found = True
+
+    if not found:
+        return None
+
+    # Text region bounding box
+    crop_x = best_lx + best_tw
+    crop_y = strip_y + best_ly
+    crop_w = int(best_th * 9.5)
+    crop_h = best_th
+
+    # Clamp bounds
+    if crop_x + crop_w > w:
+        crop_w = w - crop_x
+    if crop_y + crop_h > h:
+        crop_h = h - crop_y
+
+    if crop_w <= 10 or crop_h <= 10:
+        return None
+
+    crop_bgr = bgr_img[crop_y:crop_y + crop_h, crop_x:crop_x + crop_w]
+    parsed = engine.parse_crop(crop_bgr)
+    if not parsed:
+        return None
+
+    exp_val, pct_val, raw_str, _crop_dt, _ = parsed
+    dt_ms = (time.perf_counter() - t0) * 1000.0
+    crop_box = (crop_x, crop_y, crop_w, crop_h)
+    logo_box = (best_lx, strip_y + best_ly, best_tw, best_th)
+    _cached_crop_box = crop_box
+    _cached_logo_box = logo_box
+    return ParsedFrame(exp_val, pct_val, raw_str, dt_ms, crop_box, logo_box)
+
 def parse_frame(bgr_img) -> ParsedFrame | None:
     """Parses EXP, percentage, and bounding box from an uncompressed BGR/BGRA numpy image buffer.
 
@@ -117,12 +259,8 @@ def parse_frame(bgr_img) -> ParsedFrame | None:
             return ParsedFrame(res.exp_value, pct_val, raw_str, res.parse_time_ms, crop_box, logo_box)
         return None
 
-    # Fallback to python live_tracker
-    import live_tracker
-    py_res = live_tracker.parse_exp(bgr_img)
-    if py_res:
-        return ParsedFrame(py_res[0], py_res[1], py_res[2], 0.0, (0, 0, 0, 0), (0, 0, 0, 0))
-    return None
+    # Python engine with pristine prototypes
+    return _parse_frame_python(bgr_img)
 
 
 def save_crop_debug(bgr_img, parsed: ParsedFrame, output_dir: str = "debug_crops"):
@@ -141,27 +279,39 @@ def save_crop_debug(bgr_img, parsed: ParsedFrame, output_dir: str = "debug_crops
         crop_img = bgr_img[cy:cy + ch, cx:cx + cw]
         cv2.imwrite(crop_file, crop_img)
 
-    # 2. Save annotated bottom strip with colored bounding boxes
+    # 2. Save raw untouched bottom strip (no drawings)
+    raw_strip_file = os.path.join(output_dir, f"raw_strip_{w}x{h}.png")
+    strip_h = min(h, max(80, int(h * 0.15)))
+    strip_y = max(0, h - strip_h)
+    raw_strip = bgr_img[strip_y:strip_y + strip_h, :].copy()
+    cv2.imwrite(raw_strip_file, raw_strip)
+
+    # 3. Save raw untouched logo crop (no drawings)
+    raw_logo_file = os.path.join(output_dir, f"raw_logo_{w}x{h}.png")
+    if lw > 0 and lh > 0 and ly + lh <= h and lx + lw <= w:
+        cv2.imwrite(raw_logo_file, bgr_img[ly:ly + lh, lx:lx + lw])
+
+    # 4. Save annotated bottom strip with colored bounding boxes
     strip_file = os.path.join(output_dir, f"annotated_strip_{w}x{h}.png")
-    strip_h = max(80, int(h * 0.15))
-    strip_y = h - strip_h
-    annotated = bgr_img[strip_y:, :].copy()
+    annotated = raw_strip.copy()
 
-    # Red box for Logo
+    # Red box for Logo (1px hairline border so details are visible)
     rel_ly = ly - strip_y
-    cv2.rectangle(annotated, (lx, rel_ly), (lx + lw, rel_ly + lh), (0, 0, 255), 2)
-    cv2.putText(annotated, "EXP Logo", (lx, max(12, rel_ly - 4)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+    cv2.rectangle(annotated, (lx, rel_ly), (lx + lw, rel_ly + lh), (0, 0, 255), 1)
+    cv2.putText(annotated, "EXP Logo", (lx, max(10, rel_ly - 3)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
 
-    # Green box for Text Crop
+    # Green box for Text Crop (1px hairline border so details are visible)
     rel_cy = cy - strip_y
-    cv2.rectangle(annotated, (cx, rel_cy), (cx + cw, rel_cy + ch), (0, 255, 0), 2)
-    cv2.putText(annotated, f"Text Box: {parsed.raw_string}", (cx, max(12, rel_cy - 4)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+    cv2.rectangle(annotated, (cx, rel_cy), (cx + cw, rel_cy + ch), (0, 255, 0), 1)
+    cv2.putText(annotated, f"Text: {parsed.raw_string}", (cx, max(10, rel_cy - 3)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 0), 1)
 
     cv2.imwrite(strip_file, annotated)
     print(f"\n[CROP SAVED] Resolution {w}x{h} -> Saved Bounding Box Inspection:")
-    print(f"  - Text Crop:       {crop_file}")
-    print(f"  - Annotated Strip: {strip_file}\n", flush=True)
+    print(f"  - Raw Undrawn Strip: {raw_strip_file}")
+    print(f"  - Raw Logo Crop:     {raw_logo_file}")
+    print(f"  - Text Crop:         {crop_file}")
+    print(f"  - Annotated Strip:   {strip_file}\n", flush=True)
 
     return crop_file, strip_file

@@ -10,7 +10,8 @@ include_directories(
 )
 
 add_library(artale_exp_core SHARED
-    src/artale_exp_core.cpp
+    src/exp_engine.cc
+    src/artale_exp_core.cc
 )
 
 target_compile_definitions(artale_exp_core PRIVATE ARTALE_EXP_EXPORTS)

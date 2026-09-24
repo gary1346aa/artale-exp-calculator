@@ -14,3 +14,5 @@ bin/
 !data/*.png
 hud_config.json
 debug_crops/
+bazel-*
+scratch/

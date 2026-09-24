@@ -1,0 +1,11 @@
+common --incompatible_autoload_externally=+@rules_cc
+build --cxxopt=-std=c++17
+build --cxxopt=-O3
+build --cxxopt=-mavx2
+build --cxxopt=-mfma
+build --cxxopt=-fvectorize
+build --cxxopt=-fslp-vectorize
+build --linkopt=-static
+build --linkopt=-lshlwapi
+build --extra_toolchains=//toolchain:cc_toolchain_windows_llvm
+test --test_output=errors

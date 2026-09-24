@@ -101,9 +101,9 @@ def parse_exp(frame_bgr):
         return None
         
     lx, ly = best_loc
-    # Text line vertical slice (proportional to logo height th)
-    y_start = max(0, ly - int(best_th * 0.35))
-    y_end = min(bottom.shape[0], ly + int(best_th * 1.50))
+    # Text line vertical slice (exact same y1 and y2 as EXP logo)
+    y_start = max(0, ly)
+    y_end = min(bottom.shape[0], ly + best_th)
     # Offset by 0.45*th to cleanly skip the dot of 'EXP.'
     x_start = lx + best_tw + int(best_th * 0.45)
     x_end = min(bottom.shape[1], x_start + int(best_th * 32))
@@ -248,6 +248,12 @@ def main():
         if res_changed:
             print(f"\n[{now_str}] [視窗尺寸變更] 當前解析度: {cur_res[0]}x{cur_res[1]}", flush=True)
             last_res = cur_res
+            try:
+                os.makedirs("debug_crops", exist_ok=True)
+                strip_h = min(cur_res[1], max(80, int(cur_res[1] * 0.15)))
+                cv2.imwrite(f"debug_crops/raw_strip_{cur_res[0]}x{cur_res[1]}.png", bgr[cur_res[1] - strip_h:, :])
+            except Exception:
+                pass
             
         parsed = exp_core.parse_frame(bgr)
         

@@ -1,0 +1,13 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_test(
+    name = "exp_engine_test",
+    srcs = ["exp_engine_test.cc"],
+    deps = [
+        "//src/cpp:artale_exp_core",
+        "//src/cpp:exp_engine",
+        "@googletest//:gtest_main",
+    ],
+)

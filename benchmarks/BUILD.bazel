@@ -1,0 +1,13 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "exp_engine_benchmark",
+    srcs = ["exp_engine_benchmark.cc"],
+    deps = [
+        "//src/cpp:artale_exp_core",
+        "//src/cpp:exp_engine",
+        "@google_benchmark//:benchmark",
+    ],
+)

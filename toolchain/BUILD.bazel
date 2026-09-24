@@ -1,0 +1,65 @@
+load("@rules_cc//cc/private/toolchain:windows_cc_toolchain_config.bzl", "cc_toolchain_config")
+load("@rules_cc//cc/toolchains:cc_toolchain.bzl", "cc_toolchain")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_toolchain_config(
+    name = "llvm_toolchain_config",
+    cpu = "x64_windows",
+    compiler = "mingw-gcc",
+    host_system_name = "local",
+    target_system_name = "local",
+    target_libc = "mingw",
+    abi_version = "local",
+    abi_libc_version = "local",
+    toolchain_identifier = "llvm_mingw_x64",
+    tool_bin_path = "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin",
+    cxx_builtin_include_directories = [
+        "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/",
+    ],
+    tool_paths = {
+        "ar": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/llvm-ar.exe",
+        "cpp": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/clang++.exe",
+        "dwp": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/llvm-dwp.exe",
+        "gcc": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/clang++.exe",
+        "gcov": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/llvm-profdata.exe",
+        "ld": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/clang++.exe",
+        "nm": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/llvm-nm.exe",
+        "objcopy": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/llvm-objcopy.exe",
+        "objdump": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/llvm-objdump.exe",
+        "strip": "C:/Users/gary1/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin/llvm-strip.exe",
+    },
+    all_compile_flags = [],
+    conly_flags = [],
+    cxx_flags = [],
+    link_flags = [],
+)
+
+filegroup(name = "empty")
+
+cc_toolchain(
+    name = "llvm_cc_toolchain",
+    toolchain_identifier = "llvm_mingw_x64",
+    toolchain_config = ":llvm_toolchain_config",
+    all_files = ":empty",
+    compiler_files = ":empty",
+    linker_files = ":empty",
+    ar_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    dwp_files = ":empty",
+)
+
+toolchain(
+    name = "cc_toolchain_windows_llvm",
+    exec_compatible_with = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    toolchain = ":llvm_cc_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)

@@ -1,0 +1,40 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "exp_engine",
+    srcs = ["src/exp_engine.cc"],
+    hdrs = [
+        "src/exp_engine.h",
+        "src/pristine_font_protos.h",
+        "src/real_exp_logo_data.h",
+    ],
+)
+
+cc_library(
+    name = "artale_exp_core",
+    srcs = ["src/artale_exp_core.cc"],
+    hdrs = ["include/artale_exp_core.h"],
+    defines = ["ARTALE_EXP_EXPORTS"],
+    deps = [":exp_engine"],
+)
+
+cc_binary(
+    name = "artale_exp_core_dll",
+    srcs = [
+        "include/artale_exp_core.h",
+        "src/artale_exp_core.cc",
+    ],
+    defines = ["ARTALE_EXP_EXPORTS"],
+    linkshared = True,
+    deps = [":exp_engine"],
+)
+
+genrule(
+    name = "copy_dll",
+    srcs = [":artale_exp_core_dll"],
+    outs = ["artale_exp_core.dll"],
+    cmd_bat = "copy /y $(SRCS) $(OUTS)",
+    cmd = "cp $(SRCS) $(OUTS)",
+)
