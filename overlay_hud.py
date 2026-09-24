@@ -213,6 +213,43 @@ class HotkeyWorker(QThread):
     self.wait(1000)
 
 
+def find_window_by_title_safe(target_title: str) -> Optional[int]:
+  """Safely finds window HWND matching target_title without SendMessage cross-thread deadlocks."""
+  if not target_title or sys.platform != "win32":
+    return None
+  user32 = ctypes.windll.user32
+  # 1. Exact match via FindWindowW (reads kernel desktop window table, no message sent)
+  hwnd = user32.FindWindowW(None, target_title)
+  if hwnd and user32.IsWindow(hwnd) and user32.IsWindowVisible(hwnd):
+    return hwnd
+
+  # 2. Case-insensitive substring match via InternalGetWindowText (non-blocking kernel lookup)
+  curr_pid = os.getpid()
+  found_hwnd = None
+  target_lower = target_title.lower()
+
+  def enum_cb(h, _):
+    nonlocal found_hwnd
+    if not user32.IsWindowVisible(h):
+      return True
+    lp_pid = ctypes.wintypes.DWORD()
+    user32.GetWindowThreadProcessId(h, ctypes.byref(lp_pid))
+    if lp_pid.value == curr_pid:
+      return True  # Never inspect our own application windows
+    buf = ctypes.create_unicode_buffer(512)
+    n = user32.InternalGetWindowText(h, buf, 512)
+    if n > 0 and target_lower in buf.value.lower():
+      found_hwnd = h
+      return False  # Stop enumeration
+    return True
+
+  WNDENUMPROC = ctypes.WINFUNCTYPE(
+      ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM
+  )
+  user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+  return found_hwnd
+
+
 class CaptureWorker(QThread):
   """Background screen capture worker sampling at 1 FPS via Windows Graphics Capture."""
 
@@ -229,14 +266,9 @@ class CaptureWorker(QThread):
     self.sample_interval = 1.0
     self.target_window = target_window
     self.target_hwnd = target_hwnd
+    self.capture_control = None
 
   def run(self):
-    if sys.platform == "win32":
-      user32 = ctypes.windll.user32
-      h_desk = user32.OpenDesktopW("Default", 0, False, 0x01FF)
-      if h_desk:
-        user32.SetThreadDesktop(h_desk)
-
     from windows_capture import Frame, WindowsCapture
 
     last_sample_time = 0.0
@@ -278,38 +310,61 @@ class CaptureWorker(QThread):
     def on_closed():
       pass
 
+    user32 = ctypes.windll.user32 if sys.platform == "win32" else None
+
     while self.running:
-      try:
-        win_desc = (
-            self.target_window
-            if self.target_window
-            else f"HWND {self.target_hwnd}"
-        )
+      win_desc = (
+          self.target_window
+          if self.target_window
+          else f"HWND {self.target_hwnd}"
+      )
+
+      # 1. Resolve target HWND safely without invoking Rust windows_capture enum
+      target_h = self.target_hwnd
+      if not target_h and self.target_window:
+        target_h = find_window_by_title_safe(self.target_window)
+
+      if not target_h or (user32 and not user32.IsWindow(target_h)):
         self.status_changed.emit(f"尋找視窗 [{win_desc}]...", False)
-        if self.target_hwnd:
-          capture = WindowsCapture(
-              cursor_capture=False,
-              draw_border=False,
-              window_hwnd=self.target_hwnd,
-          )
-        else:
-          capture = WindowsCapture(
-              cursor_capture=False,
-              draw_border=False,
-              window_name=self.target_window,
-          )
+        for _ in range(10):
+          if not self.running:
+            break
+          time.sleep(0.1)
+        continue
+
+      # 2. Window verified! Attach directly by HWND without any window scanning
+      self.status_changed.emit(f"連線至視窗 [{win_desc}]...", False)
+      try:
+        capture = WindowsCapture(
+            cursor_capture=False,
+            draw_border=False,
+            window_hwnd=target_h,
+        )
         capture.event(on_frame_arrived)
         capture.event(on_closed)
-        capture.start()
-      except Exception:
-        for _ in range(20):
+        self.capture_control = capture.start_free_threaded()
+        while self.running and not self.capture_control.is_finished():
+          if user32 and not user32.IsWindow(target_h):
+            break
+          time.sleep(0.2)
+
+        if self.capture_control and not self.capture_control.is_finished():
+          self.capture_control.stop()
+      except Exception as e:
+        self.status_changed.emit(f"捕捉異常: {e}", False)
+        for _ in range(10):
           if not self.running:
             break
           time.sleep(0.1)
 
   def stop(self):
     self.running = False
-    self.wait(300)
+    if self.capture_control and not self.capture_control.is_finished():
+      try:
+        self.capture_control.stop()
+      except Exception:
+        pass
+    self.wait(1000)
 
 
 class VideoSimulationWorker(QThread):
@@ -762,21 +817,26 @@ class SmoothButton(QPushButton):
 
 
 def get_visible_windows() -> List[Tuple[int, str]]:
-  """Enumerates visible top-level desktop windows."""
+  """Enumerates visible top-level desktop windows safely without blocking on unresponsive windows."""
   if sys.platform != "win32":
     return []
 
   user32 = ctypes.windll.user32
   results = []
+  curr_pid = os.getpid()
 
   def enum_cb(hwnd, lparam):
     if not user32.IsWindowVisible(hwnd):
       return True
-    length = user32.GetWindowTextLengthW(hwnd)
-    if length == 0:
+    lp_pid = ctypes.wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(lp_pid))
+    if lp_pid.value == curr_pid:
+      return True  # Never inspect our own application windows
+
+    buf = ctypes.create_unicode_buffer(512)
+    n = user32.InternalGetWindowText(hwnd, buf, 512)
+    if n <= 0:
       return True
-    buf = ctypes.create_unicode_buffer(length + 1)
-    user32.GetWindowTextW(hwnd, buf, length + 1)
     title = buf.value.strip()
     if not title:
       return True
