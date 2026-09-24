@@ -435,6 +435,9 @@ class SimpleMetricItem(QWidget):
     self.lbl_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
     self.lbl_value = QLabel("--", self)
     self.lbl_value.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+    self.lbl_value.setAlignment(
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    )
 
     layout.addWidget(self.lbl_label)
     layout.addWidget(self.lbl_value)
@@ -445,6 +448,8 @@ class SimpleMetricItem(QWidget):
     lbl_font_size = max(9, int(12 * scale))
     val_font_size = max(10, int(13 * scale))
     self.layout().setSpacing(max(2, int(4 * scale)))
+    val_min_w = max(40, int(70 * scale))
+    self.lbl_value.setMinimumWidth(val_min_w)
     self.lbl_label.setStyleSheet(f"""
         QLabel {{
             color: {self.label_color};
@@ -1126,12 +1131,14 @@ class ArtaleExpOverlay(QWidget):
     self.simple_widget = QWidget(self.outer_card)
     self.simple_layout = QHBoxLayout(self.simple_widget)
     self.simple_layout.setContentsMargins(0, 0, 0, 0)
-    self.simple_layout.setSpacing(14)
+    self.simple_layout.setSpacing(0)
 
     self.simple_status_dot = QLabel("●", self.simple_widget)
     self.simple_status_dot.setAttribute(
         Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
     )
+    self.simple_status_dot.setFixedSize(12, 12)
+    self.simple_status_dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.simple_status_dot.setStyleSheet(
         "color: #eab308; font-size: 10px; background: transparent;"
     )
@@ -1288,8 +1295,8 @@ class ArtaleExpOverlay(QWidget):
       self.slider_panel.hide()
       self.lbl_hotkey_hint.hide()
 
-      # Set pill card padding
-      pad_h = max(10, int(16 * self.ui_scale))
+      # Set pill card padding: compact padding so the dot and content sit nicely inside the capsule curve
+      pad_h = max(8, int(12 * self.ui_scale))
       pad_v = max(4, int(6 * self.ui_scale))
       self.card_layout.setContentsMargins(pad_h, pad_v, pad_h, pad_v)
       self.card_layout.setSpacing(0)
@@ -1304,14 +1311,36 @@ class ArtaleExpOverlay(QWidget):
         if w:
           w.hide()
 
+      self.simple_layout.setSpacing(0)
+
+      # Status dot with compact, centered sizing
+      dot_s = max(8, int(10 * self.ui_scale))
+      dot_box = max(10, int(12 * self.ui_scale))
+      self.simple_status_dot.setFixedSize(dot_box, dot_box)
+      self.simple_status_dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+      dot_char = "●" if getattr(self, "_is_locked", False) else "○"
+      dot_color = "#4ade80" if getattr(self, "_is_locked", False) else "#eab308"
+      self.simple_status_dot.setText(dot_char)
+      self.simple_status_dot.setStyleSheet(
+          f"color: {dot_color}; font-size: {dot_s}px; background: transparent;"
+      )
       self.simple_layout.addWidget(self.simple_status_dot)
       self.simple_status_dot.show()
 
-      for key in DEFAULT_SIMPLE_MODE_KEYS:
-        if key in self.simple_metric_widgets:
-          w = self.simple_metric_widgets[key]
-          self.simple_layout.addWidget(w)
-          w.show()
+      # Compact spacing between dot and the first metric (dot does not need excessive space)
+      dot_space = max(3, int(6 * self.ui_scale))
+      self.simple_layout.addSpacing(dot_space)
+
+      active_keys = [
+          k for k in DEFAULT_SIMPLE_MODE_KEYS if k in self.simple_metric_widgets
+      ]
+      inter_space = max(8, int(16 * self.ui_scale))
+      for idx, key in enumerate(active_keys):
+        w = self.simple_metric_widgets[key]
+        self.simple_layout.addWidget(w)
+        w.show()
+        if idx < len(active_keys) - 1:
+          self.simple_layout.addSpacing(inter_space)
 
       self.simple_widget.show()
 
@@ -1663,24 +1692,20 @@ class ArtaleExpOverlay(QWidget):
           w.update_scale(s)
     if hasattr(self, "simple_status_dot"):
       dot_s = max(8, int(10 * s))
+      dot_box = max(10, int(12 * s))
+      self.simple_status_dot.setFixedSize(dot_box, dot_box)
       dot_char = "●" if getattr(self, "_is_locked", False) else "○"
       dot_color = "#4ade80" if getattr(self, "_is_locked", False) else "#eab308"
       self.simple_status_dot.setText(dot_char)
       self.simple_status_dot.setStyleSheet(
           f"color: {dot_color}; font-size: {dot_s}px; background: transparent;"
       )
-    if hasattr(self, "simple_layout"):
-      self.simple_layout.setSpacing(max(8, int(14 * s)))
 
-    self.card_layout.activate()
-    self.layout().activate()
     if self.current_mode == "simple":
-      self.setMinimumSize(0, 0)
-      self.setMaximumSize(16777215, 16777215)
-      self.adjustSize()
-      self.setFixedSize(self.sizeHint())
-      self.update()
+      self._apply_game_mode()
     else:
+      self.card_layout.activate()
+      self.layout().activate()
       self.resize(self.width(), self.sizeHint().height())
     self._save_config()
 
@@ -1718,6 +1743,8 @@ class ArtaleExpOverlay(QWidget):
       )
     if hasattr(self, "simple_status_dot"):
       dot_s = max(8, int(10 * self.ui_scale))
+      dot_box = max(10, int(12 * self.ui_scale))
+      self.simple_status_dot.setFixedSize(dot_box, dot_box)
       dot_char = "●" if is_locked else "○"
       dot_color = "#4ade80" if is_locked else "#eab308"
       self.simple_status_dot.setText(dot_char)

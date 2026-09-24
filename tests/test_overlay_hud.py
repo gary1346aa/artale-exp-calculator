@@ -326,7 +326,11 @@ class TestOverlayHud(unittest.TestCase):
     self.assertEqual(self.overlay.simple_metric_widgets["預估10分"].lbl_label.text(), "10分")
     self.assertEqual(self.overlay.simple_metric_widgets["累計經驗"].lbl_label.text(), "累積")
 
-    # 4. Verify Simple Mode numbers simplify to 萬 and 億 with 7-tier EXP color
+    # 4. Verify Simple Mode numbers simplify to 萬 and 億 with 7-tier EXP color and reserved space
+    self.assertGreaterEqual(self.overlay.simple_metric_widgets["預估10分"].lbl_value.minimumWidth(), 70)
+    self.assertGreaterEqual(self.overlay.simple_metric_widgets["累計經驗"].lbl_value.minimumWidth(), 70)
+    self.assertLessEqual(self.overlay.simple_status_dot.width(), 16)
+
     self.overlay.engine.total_gained_exp = 1_234_000
     self.overlay._refresh_ui()
     accum_simple = self.overlay.simple_metric_widgets["累計經驗"]
