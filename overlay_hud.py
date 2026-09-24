@@ -358,7 +358,7 @@ class ArtaleExpOverlay(QWidget):
     self.btn_f8.clicked.connect(self.on_f8)
 
     self.btn_f9 = QPushButton("◫")
-    self.btn_f9.setToolTip("切換遊戲簡約模式 [F9]")
+    self.btn_f9.setToolTip("切換遊戲模式 [F9]")
     self.btn_f9.setFixedSize(24, 24)
     self.btn_f9.setStyleSheet(self._button_style())
     self.btn_f9.clicked.connect(self.on_f9)
@@ -411,39 +411,11 @@ class ArtaleExpOverlay(QWidget):
     self.sep1 = self._create_separator()
     self.card_layout.addWidget(self.sep1)
 
-    # 3. Primary Highlights: Duration, Current EXP, Accumulated EXP, Progress Bar
-    self.row_duration = MetricRow("練功時長", "00:00:00", self)
-    self.row_current = MetricRow("當前經驗", "無資料", self)
-    self.row_accum = MetricRow("累計經驗", "+0", self, is_highlight=True)
-
-    self.card_layout.addWidget(self.row_duration)
-    self.card_layout.addWidget(self.row_current)
-    self.card_layout.addWidget(self.row_accum)
-
-    # EXP Progress Bar
-    self.gauge_bar = QProgressBar(self)
-    self.gauge_bar.setFixedHeight(8)
-    self.gauge_bar.setTextVisible(False)
-    self.gauge_bar.setRange(0, 10000)
-    self.gauge_bar.setValue(0)
-    self.gauge_bar.setStyleSheet("""
-            QProgressBar {
-                background-color: rgba(255, 255, 255, 0.08);
-                border-radius: 4px;
-                border: none;
-            }
-            QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #38bdf8);
-                border-radius: 4px;
-            }
-        """)
-    self.card_layout.addWidget(self.gauge_bar)
-
-    # 4. Game Mode Mini Summary Container (visible only in game mode)
+    # 3. Game Mode Container (visible only in game mode)
     self.game_mode_container = QWidget(self)
     gm_layout = QVBoxLayout(self.game_mode_container)
-    gm_layout.setContentsMargins(0, 4, 0, 0)
-    gm_layout.setSpacing(2)
+    gm_layout.setContentsMargins(0, 4, 0, 4)
+    gm_layout.setSpacing(4)
 
     self.lbl_gm_gained = QLabel("+0")
     self.lbl_gm_gained.setStyleSheet(f"""
@@ -471,33 +443,61 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.addWidget(self.game_mode_container)
     self.game_mode_container.hide()
 
-    # Separator
-    self.sep2 = self._create_separator()
-    self.card_layout.addWidget(self.sep2)
-
-    # 5. Detailed Metrics Body (hidden in game mode)
+    # 4. Detailed Metrics Body (hidden in game mode)
+    # Sequence: 練功時長 -> 1分鐘經驗 -> 預估10分 -> 累積10分 -> 預估60分 -> 累積60分 -> 累計經驗 -> 當前經驗 -> 升級預估時間
     self.details_container = QWidget(self)
     details_layout = QVBoxLayout(self.details_container)
     details_layout.setContentsMargins(0, 0, 0, 0)
     details_layout.setSpacing(3)
 
+    self.row_duration = MetricRow("練功時長", "00:00:00", self)
     self.row_1m = MetricRow("1分鐘經驗", "+0", self)
     self.row_est_10m = MetricRow("預估10分", "+0", self)
     self.row_acc_10m = MetricRow("累積10分", "+0", self)
     self.row_est_60m = MetricRow("預估60分", "+0", self, is_highlight=True)
     self.row_acc_60m = MetricRow("累積60分", "+0", self)
+
+    self.sep_summary = self._create_separator()
+
+    self.row_accum = MetricRow("累計經驗", "+0", self, is_highlight=True)
+    self.row_current = MetricRow("當前經驗", "無資料", self)
     self.row_eta = MetricRow("升級預估時間", "待機中", self, is_highlight=True)
 
+    details_layout.addWidget(self.row_duration)
     details_layout.addWidget(self.row_1m)
     details_layout.addWidget(self.row_est_10m)
     details_layout.addWidget(self.row_acc_10m)
     details_layout.addWidget(self.row_est_60m)
     details_layout.addWidget(self.row_acc_60m)
+    details_layout.addWidget(self.sep_summary)
+    details_layout.addWidget(self.row_accum)
+    details_layout.addWidget(self.row_current)
     details_layout.addWidget(self.row_eta)
     self.card_layout.addWidget(self.details_container)
 
+    # 5. EXP Progress Bar (placed at bottom)
+    self.gauge_bar = QProgressBar(self)
+    self.gauge_bar.setFixedHeight(8)
+    self.gauge_bar.setTextVisible(False)
+    self.gauge_bar.setRange(0, 10000)
+    self.gauge_bar.setValue(0)
+    self.gauge_bar.setStyleSheet("""
+            QProgressBar {
+                background-color: rgba(255, 255, 255, 0.08);
+                border-radius: 4px;
+                border: none;
+                margin-top: 4px;
+                margin-bottom: 2px;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #38bdf8);
+                border-radius: 4px;
+            }
+        """)
+    self.card_layout.addWidget(self.gauge_bar)
+
     # 6. Hotkey Guidance Footer
-    self.lbl_hotkey_hint = QLabel("[F7] 開始/暫停  [F8] 重置  [F9] 遊戲簡約")
+    self.lbl_hotkey_hint = QLabel("[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式")
     self.lbl_hotkey_hint.setStyleSheet(f"""
             QLabel {{
                 color: #64748b;
@@ -598,25 +598,19 @@ class ArtaleExpOverlay(QWidget):
   def _apply_game_mode(self):
     if self.is_game_mode:
       self.setFixedWidth(290)
-      self.row_current.hide()
-      self.row_accum.hide()
-      self.sep2.hide()
       self.details_container.hide()
       self.game_mode_container.show()
       self.btn_f9.setText("⊟")
-      self.btn_f9.setToolTip("切換至完整面板模式 [F9]")
+      self.btn_f9.setToolTip("切換至完整模式 [F9]")
       self.lbl_hotkey_hint.setText("[F7] 暫停  [F8] 重置  [F9] 完整模式")
     else:
       self.setFixedWidth(340)
-      self.row_current.show()
-      self.row_accum.show()
-      self.sep2.show()
       self.details_container.show()
       self.game_mode_container.hide()
       self.btn_f9.setText("◫")
-      self.btn_f9.setToolTip("切換遊戲簡約模式 [F9]")
+      self.btn_f9.setToolTip("切換遊戲模式 [F9]")
       self.lbl_hotkey_hint.setText(
-          "[F7] 開始/暫停  [F8] 重置  [F9] 遊戲簡約"
+          "[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
       )
     self.adjustSize()
     self._save_config()
