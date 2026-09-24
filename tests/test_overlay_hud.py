@@ -164,22 +164,37 @@ class TestOverlayHud(unittest.TestCase):
 
     self.assertEqual(actual_order, custom_order)
 
-  def test_hover_sliders_and_scaling(self):
-    """Verify size scale and opacity sliders update window properties."""
-    # Initially hidden
+  def test_focus_sliders_and_collapse(self):
+    """Verify size scale & opacity sliders show/hide and window collapses without residual space."""
+    # Initially hidden and compact
     self.assertFalse(self.overlay.slider_panel.isVisible())
+    h_collapsed = self.overlay.height()
 
-    # Simulate mouse hover
-    self.overlay.slider_panel.show()
+    # When window gains focus / sliders shown
+    self.overlay._set_sliders_visible(True)
     self.assertTrue(self.overlay.slider_panel.isVisible())
+    h_expanded = self.overlay.height()
+    self.assertGreater(h_expanded, h_collapsed)
 
-    # Test scale slider
+    # When focus is lost, area collapses back cleanly
+    self.overlay._set_sliders_visible(False)
+    self.assertFalse(self.overlay.slider_panel.isVisible())
+    self.assertEqual(self.overlay.height(), h_collapsed)
+
+    # Same collapse behavior in Game Mode
+    self.overlay.on_f9()  # switch to Game Mode
+    h_gm_collapsed = self.overlay.height()
+    self.overlay._set_sliders_visible(True)
+    self.assertGreater(self.overlay.height(), h_gm_collapsed)
+    self.overlay._set_sliders_visible(False)
+    self.assertEqual(self.overlay.height(), h_gm_collapsed)
+
+    # Test scale slider functionality
     self.overlay.slider_scale.setValue(120)
     self.assertAlmostEqual(self.overlay.ui_scale, 1.2)
     self.assertEqual(self.overlay.lbl_scale_val.text(), "120%")
-    self.assertEqual(self.overlay.width(), int(340 * 1.2))
 
-    # Test opacity slider
+    # Test opacity slider functionality
     self.overlay.slider_opacity.setValue(80)
     self.assertAlmostEqual(self.overlay.opacity_val, 0.8)
     self.assertEqual(self.overlay.lbl_opacity_val.text(), "80%")

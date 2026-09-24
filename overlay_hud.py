@@ -14,7 +14,15 @@ import sys
 import time
 from typing import List, Optional
 
-from PyQt6.QtCore import QPoint, QRectF, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QEvent,
+    QPoint,
+    QRectF,
+    Qt,
+    QThread,
+    QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -1030,29 +1038,37 @@ class ArtaleExpOverlay(QWidget):
           widget.show()
 
     # Tightly pack and shrink window height to eliminate any blank space or empty slots
+    self.card_layout.activate()
+    self.layout().activate()
     self.resize(self.width(), self.sizeHint().height())
     self._save_config()
 
-  def enterEvent(self, event):
-    """Show size & opacity sliders when cursor hovers over the HUD window."""
-    self.slider_panel.show()
-    self.resize(self.width(), self.sizeHint().height())
-    super().enterEvent(event)
-
-  def leaveEvent(self, event):
-    """Hide sliders when cursor leaves the window (unless user is dragging a slider)."""
-    if not (
-        self.slider_scale.isSliderDown() or self.slider_opacity.isSliderDown()
-    ):
+  def _set_sliders_visible(self, visible: bool):
+    """Show or collapse sliders panel based on window focus, recalculating layout height."""
+    if self.slider_panel.isVisible() == visible:
+      return
+    if visible:
+      self.slider_panel.show()
+    else:
+      # If user is actively dragging a slider handle, wait until released
+      if self.slider_scale.isSliderDown() or self.slider_opacity.isSliderDown():
+        return
       self.slider_panel.hide()
-      self.resize(self.width(), self.sizeHint().height())
-    super().leaveEvent(event)
+
+    self.card_layout.activate()
+    self.layout().activate()
+    self.resize(self.width(), self.sizeHint().height())
+
+  def changeEvent(self, event):
+    """Show sliders when window gains focus; collapse sliders when focus is lost."""
+    if event.type() == QEvent.Type.ActivationChange:
+      self._set_sliders_visible(self.isActiveWindow())
+    super().changeEvent(event)
 
   def _on_slider_released(self):
     self._save_config()
-    if not self.underMouse():
-      self.slider_panel.hide()
-      self.resize(self.width(), self.sizeHint().height())
+    if not self.isActiveWindow():
+      self._set_sliders_visible(False)
 
   def _on_scale_changed(self, val: int):
     self.ui_scale = val / 100.0
@@ -1253,6 +1269,8 @@ class ArtaleExpOverlay(QWidget):
         }}
     """)
 
+    self.card_layout.activate()
+    self.layout().activate()
     self.resize(self.width(), self.sizeHint().height())
     self._save_config()
 
@@ -1333,6 +1351,9 @@ class ArtaleExpOverlay(QWidget):
 
   # Mouse dragging
   def mousePressEvent(self, event):
+    if not self.isActiveWindow():
+      self.activateWindow()
+    self._set_sliders_visible(True)
     if event.button() == Qt.MouseButton.LeftButton:
       self.drag_position = (
           event.globalPosition().toPoint() - self.frameGeometry().topLeft()
