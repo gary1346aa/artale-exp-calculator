@@ -1012,19 +1012,13 @@ class ArtaleExpOverlay(QWidget):
           self.details_layout.addWidget(widget)
           widget.show()
 
-    # Tightly pack and shrink containers to eliminate any blank space or empty slots
-    self.details_container.adjustSize()
-    self.outer_card.adjustSize()
-    self.adjustSize()
+    # Tightly pack and shrink window height to eliminate any blank space or empty slots
     self.resize(self.width(), self.sizeHint().height())
     self._save_config()
 
   def enterEvent(self, event):
     """Show size & opacity sliders when cursor hovers over the HUD window."""
     self.slider_panel.show()
-    self.details_container.adjustSize()
-    self.outer_card.adjustSize()
-    self.adjustSize()
     self.resize(self.width(), self.sizeHint().height())
     super().enterEvent(event)
 
@@ -1034,9 +1028,6 @@ class ArtaleExpOverlay(QWidget):
         self.slider_scale.isSliderDown() or self.slider_opacity.isSliderDown()
     ):
       self.slider_panel.hide()
-      self.details_container.adjustSize()
-      self.outer_card.adjustSize()
-      self.adjustSize()
       self.resize(self.width(), self.sizeHint().height())
     super().leaveEvent(event)
 
@@ -1044,9 +1035,6 @@ class ArtaleExpOverlay(QWidget):
     self._save_config()
     if not self.underMouse():
       self.slider_panel.hide()
-      self.details_container.adjustSize()
-      self.outer_card.adjustSize()
-      self.adjustSize()
       self.resize(self.width(), self.sizeHint().height())
 
   def _on_scale_changed(self, val: int):
@@ -1105,9 +1093,6 @@ class ArtaleExpOverlay(QWidget):
     ]:
       btn.setFixedSize(btn_size, btn_size)
 
-    self.details_container.adjustSize()
-    self.outer_card.adjustSize()
-    self.adjustSize()
     self.resize(self.width(), self.sizeHint().height())
     self._save_config()
 
