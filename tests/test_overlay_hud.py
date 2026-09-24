@@ -46,6 +46,7 @@ class TestOverlayHud(unittest.TestCase):
 
   def test_game_mode_toggle_and_height_shrinkage(self):
     """Verify switching to game mode hides title and shrinks window height tightly."""
+    self.overlay._set_sliders_visible(False)
     full_height = self.overlay.size().height()
 
     # Toggle to Game Mode
@@ -70,11 +71,21 @@ class TestOverlayHud(unittest.TestCase):
           f"Visibility mismatch for {key} in game mode",
       )
 
-    # Toggle back to Full Mode
+    # Toggle to Simple Mode (2nd F9 press)
     self.overlay.on_f9()
+    self.assertEqual(self.overlay.current_mode, "simple")
+    self.assertTrue(self.overlay.simple_widget.isVisible())
+    self.assertFalse(self.overlay.details_container.isVisible())
+    self.assertFalse(self.overlay.header_widget.isVisible())
+    self.assertTrue(self.overlay.outer_card.is_pill)
+
+    # Toggle back to Full Mode (3rd F9 press)
+    self.overlay.on_f9()
+    self.assertEqual(self.overlay.current_mode, "full")
     self.assertFalse(self.overlay.is_game_mode)
     self.assertTrue(self.overlay.lbl_title.isVisible())
     self.assertEqual(self.overlay.width(), 340)
+    self.overlay._set_sliders_visible(False)
     self.assertEqual(self.overlay.size().height(), full_height)
 
   def test_custom_metric_ordering(self):
@@ -225,7 +236,9 @@ class TestOverlayHud(unittest.TestCase):
       self.assertFalse(self.overlay.slider_panel.isVisible())
 
     # In Full Mode, header and footer are always visible even when unfocused
-    self.overlay.on_f9()  # Switch back to Full Mode
+    self.overlay.on_f9()  # To Simple Mode
+    self.overlay.on_f9()  # To Full Mode
+    self.assertEqual(self.overlay.current_mode, "full")
     self.assertFalse(self.overlay.is_game_mode)
     self.assertTrue(self.overlay.header_widget.isVisible())
     self.assertTrue(self.overlay.lbl_hotkey_hint.isVisible())
@@ -268,6 +281,46 @@ class TestOverlayHud(unittest.TestCase):
     # Check uncolored row_est_60m uses neutral color
     self.assertIsNone(self.overlay.row_est_60m.current_color)
     self.assertIn("#f1f5f9", self.overlay.row_est_60m.lbl_value.styleSheet())
+
+  def test_simple_mode_metrics_and_circulation(self):
+    """Verify Simple Mode pill appearance, 3-mode circulation, and metrics sync."""
+    # 1. Start in Full Mode
+    self.assertEqual(self.overlay.current_mode, "full")
+    self.assertTrue(self.overlay.lbl_title.isVisible())
+    self.assertFalse(self.overlay.simple_widget.isVisible())
+    self.assertFalse(self.overlay.outer_card.is_pill)
+
+    # 2. F9 -> Game Mode
+    self.overlay.on_f9()
+    self.assertEqual(self.overlay.current_mode, "game")
+    self.assertFalse(self.overlay.lbl_title.isVisible())
+    self.assertFalse(self.overlay.simple_widget.isVisible())
+    self.assertFalse(self.overlay.outer_card.is_pill)
+
+    # 3. F9 -> Simple Mode
+    self.overlay.on_f9()
+    self.assertEqual(self.overlay.current_mode, "simple")
+    self.assertTrue(self.overlay.simple_widget.isVisible())
+    self.assertFalse(self.overlay.header_widget.isVisible())
+    self.assertFalse(self.overlay.sub_widget.isVisible())
+    self.assertFalse(self.overlay.details_container.isVisible())
+    self.assertFalse(self.overlay.slider_panel.isVisible())
+    self.assertFalse(self.overlay.lbl_hotkey_hint.isVisible())
+    self.assertTrue(self.overlay.outer_card.is_pill)
+
+    # 4. Verify Simple Mode metrics update on refresh with 7-tier EXP color
+    self.overlay.engine.total_gained_exp = 75_000_000  # Tier 4: #FF80FF
+    self.overlay._refresh_ui()
+    accum_simple = self.overlay.simple_metric_widgets["累計經驗"]
+    self.assertEqual(accum_simple.current_val_color, "#FF80FF")
+    self.assertIn("#FF80FF", accum_simple.lbl_value.styleSheet())
+
+    # 5. F9 -> Circulate back to Full Mode
+    self.overlay.on_f9()
+    self.assertEqual(self.overlay.current_mode, "full")
+    self.assertTrue(self.overlay.lbl_title.isVisible())
+    self.assertFalse(self.overlay.simple_widget.isVisible())
+    self.assertFalse(self.overlay.outer_card.is_pill)
 
 
 if __name__ == "__main__":

@@ -85,6 +85,18 @@ DEFAULT_GAME_MODE_KEYS = [
     "升級預估時間",
 ]
 
+SIMPLE_METRIC_CONFIG = {
+    "練功時長": {"label": "時長", "color": "#94a3b8"},
+    "1分鐘經驗": {"label": "1分", "color": "#38bdf8"},
+    "預估10分": {"label": "預估10分", "color": "#38bdf8"},
+    "累積10分": {"label": "累積10分", "color": "#818cf8"},
+    "預估60分": {"label": "預估60分", "color": "#60a5fa"},
+    "累積60分": {"label": "累積60分", "color": "#818cf8"},
+    "累計經驗": {"label": "累計經驗", "color": "#c084fc"},
+    "當前經驗": {"label": "當前", "color": "#fbbf24"},
+    "升級預估時間": {"label": "升級預估", "color": "#34d399"},
+}
+
 
 def get_accum_exp_color(val: int) -> str:
   """Returns 7-tier hex color for gained accumulated EXP:
@@ -358,18 +370,152 @@ class SmoothCard(QFrame):
   def __init__(self, parent=None):
     super().__init__(parent)
     self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    self.is_pill = False
 
   def paintEvent(self, event):
     painter = QPainter(self)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
     rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
-    bg_color = QColor(17, 22, 34, 245)
+    bg_color = QColor(14, 18, 28, 245)
     border_color = QColor(255, 255, 255, 28)
 
     painter.setBrush(QBrush(bg_color))
     painter.setPen(QPen(border_color, 1.2))
-    painter.drawRoundedRect(rect, 12.0, 12.0)
+    if getattr(self, "is_pill", False):
+      radius = rect.height() / 2.0
+      painter.drawRoundedRect(rect, radius, radius)
+    else:
+      painter.drawRoundedRect(rect, 12.0, 12.0)
+
+
+class SimpleMetricItem(QWidget):
+  """Horizontal label-value pair widget for Simple Mode."""
+
+  def __init__(self, key: str, label_text: str, label_color: str, parent=None):
+    super().__init__(parent)
+    self.key = key
+    self.label_color = label_color
+    self.scale = 1.0
+    self.current_val_color = "#f8fafc"
+
+    self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    layout = QHBoxLayout(self)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(4)
+
+    self.lbl_label = QLabel(label_text, self)
+    self.lbl_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+    self.lbl_value = QLabel("--", self)
+    self.lbl_value.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    layout.addWidget(self.lbl_label)
+    layout.addWidget(self.lbl_value)
+    self.update_scale(1.0)
+
+  def update_scale(self, scale: float = 1.0):
+    self.scale = scale
+    lbl_font_size = max(9, int(12 * scale))
+    val_font_size = max(10, int(13 * scale))
+    self.layout().setSpacing(max(2, int(4 * scale)))
+    self.lbl_label.setStyleSheet(f"""
+        QLabel {{
+            color: {self.label_color};
+            font-size: {lbl_font_size}px;
+            font-weight: 600;
+            font-family: {FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+    self.lbl_value.setStyleSheet(f"""
+        QLabel {{
+            color: {self.current_val_color};
+            font-size: {val_font_size}px;
+            font-weight: 700;
+            font-family: {FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+
+  update_style = update_scale
+
+  def set_value(self, val_str: str, color: Optional[str] = None):
+    self.lbl_value.setText(val_str)
+    if color:
+      self.current_val_color = color
+    else:
+      self.current_val_color = "#f8fafc"
+    val_font_size = max(10, int(13 * self.scale))
+    self.lbl_value.setStyleSheet(f"""
+        QLabel {{
+            color: {self.current_val_color};
+            font-size: {val_font_size}px;
+            font-weight: 700;
+            font-family: {FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+
+
+class SimpleProgressBarItem(QWidget):
+  """Horizontal progress bar item for Simple Mode."""
+
+  def __init__(self, parent=None):
+    super().__init__(parent)
+    self.scale = 1.0
+    self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    layout = QHBoxLayout(self)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(4)
+
+    self.lbl_label = QLabel("進度", self)
+    self.lbl_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    self.bar = QProgressBar(self)
+    self.bar.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+    self.bar.setTextVisible(False)
+    self.bar.setRange(0, 10000)
+    self.bar.setValue(0)
+
+    layout.addWidget(self.lbl_label)
+    layout.addWidget(self.bar)
+    self.update_scale(1.0)
+
+  def update_scale(self, scale: float = 1.0):
+    self.scale = scale
+    lbl_font_size = max(9, int(12 * scale))
+    bar_w = max(30, int(46 * scale))
+    bar_h = max(4, int(6 * scale))
+    radius = max(2, int(3 * scale))
+    self.layout().setSpacing(max(2, int(4 * scale)))
+    self.lbl_label.setStyleSheet(f"""
+        QLabel {{
+            color: #38bdf8;
+            font-size: {lbl_font_size}px;
+            font-weight: 600;
+            font-family: {FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+    self.bar.setFixedSize(bar_w, bar_h)
+    self.bar.setStyleSheet(f"""
+        QProgressBar {{
+            background-color: rgba(255, 255, 255, 0.12);
+            border-radius: {radius}px;
+            border: none;
+        }}
+        QProgressBar::chunk {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #38bdf8);
+            border-radius: {radius}px;
+        }}
+    """)
+
+  update_style = update_scale
+
+  def set_value(self, val_100x: int):
+    self.bar.setValue(min(10000, max(0, val_100x)))
 
 
 class SmoothButton(QPushButton):
@@ -621,12 +767,20 @@ class GameModeSettingsDialog(QDialog):
 
 
 class ArtaleExpOverlay(QWidget):
-  """Main floating HUD overlay widget supporting Normal and Game Mode."""
+  """Main floating HUD overlay widget supporting Full, Game, and Simple Modes."""
+
+  @property
+  def is_game_mode(self) -> bool:
+    return self.current_mode == "game"
+
+  @is_game_mode.setter
+  def is_game_mode(self, val: bool):
+    self.current_mode = "game" if val else "full"
 
   def __init__(self):
     super().__init__()
     self.engine = ExpMetricsEngine()
-    self.is_game_mode = False
+    self.current_mode = "full"  # "full", "game", "simple"
     self.game_mode_order = list(ALL_METRIC_KEYS)
     self.game_mode_items = list(DEFAULT_GAME_MODE_KEYS)
     self.ui_scale = 1.0
@@ -942,6 +1096,32 @@ class ArtaleExpOverlay(QWidget):
         "EXP 進度條": self.gauge_bar,
     }
 
+    # 7. Simple Mode Horizontal Capsule Widget
+    self.simple_widget = QWidget(self.outer_card)
+    self.simple_layout = QHBoxLayout(self.simple_widget)
+    self.simple_layout.setContentsMargins(0, 0, 0, 0)
+    self.simple_layout.setSpacing(14)
+
+    self.simple_status_dot = QLabel("●", self.simple_widget)
+    self.simple_status_dot.setAttribute(
+        Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+    )
+    self.simple_status_dot.setStyleSheet(
+        "color: #eab308; font-size: 10px; background: transparent;"
+    )
+
+    self.simple_metric_widgets = {}
+    for key, cfg in SIMPLE_METRIC_CONFIG.items():
+      self.simple_metric_widgets[key] = SimpleMetricItem(
+          key, cfg["label"], cfg["color"], self.simple_widget
+      )
+    self.simple_metric_widgets["EXP 進度條"] = SimpleProgressBarItem(
+        self.simple_widget
+    )
+
+    self.card_layout.addWidget(self.simple_widget)
+    self.simple_widget.hide()
+
     self._apply_game_mode()
 
   def _create_separator(self) -> QFrame:
@@ -984,8 +1164,18 @@ class ArtaleExpOverlay(QWidget):
     self._refresh_ui()
 
   def on_f9(self):
-    """F9 Hotkey handler: Toggle Game Mode (customizable HUD)."""
-    self.is_game_mode = not self.is_game_mode
+    """F9 Hotkey handler: Circulate between Full -> Game -> Simple modes."""
+    if self.current_mode == "full":
+      self.current_mode = "game"
+    elif self.current_mode == "game":
+      self.current_mode = "simple"
+    else:
+      self.current_mode = "full"
+    self._apply_game_mode()
+
+  def _set_mode(self, mode: str):
+    """Directly switch to specified mode ('full', 'game', 'simple')."""
+    self.current_mode = mode
     self._apply_game_mode()
 
   def _open_game_mode_settings(self):
@@ -998,6 +1188,13 @@ class ArtaleExpOverlay(QWidget):
       self.game_mode_items = dialog.get_ordered_items()
       self._save_config()
       self._apply_game_mode()
+
+  def mouseDoubleClickEvent(self, event):
+    if event.button() == Qt.MouseButton.LeftButton:
+      self.on_f9()
+      event.accept()
+    else:
+      super().mouseDoubleClickEvent(event)
 
   def contextMenuEvent(self, event):
     """Right-click menu on the HUD overlay."""
@@ -1020,60 +1217,150 @@ class ArtaleExpOverlay(QWidget):
                 background-color: rgba(255, 255, 255, 0.12);
             }}
         """)
+    if self.current_mode == "simple":
+      act_mode = menu.addAction("◫ 切換至完整模式 [F9]")
+      act_mode.triggered.connect(self.on_f9)
+      act_game = menu.addAction("⊟ 切換至遊戲模式")
+      act_game.triggered.connect(lambda: self._set_mode("game"))
+    elif self.current_mode == "game":
+      act_mode = menu.addAction("▬ 切換至極簡模式 [F9]")
+      act_mode.triggered.connect(self.on_f9)
+      act_full = menu.addAction("◫ 切換至完整模式")
+      act_full.triggered.connect(lambda: self._set_mode("full"))
+    else:
+      act_mode = menu.addAction("⊟ 切換至遊戲模式 [F9]")
+      act_mode.triggered.connect(self.on_f9)
+      act_simple = menu.addAction("▬ 切換至極簡模式")
+      act_simple.triggered.connect(lambda: self._set_mode("simple"))
+
     action_settings = menu.addAction("⚙ 指標顯示與排列設定...")
     action_settings.triggered.connect(self._open_game_mode_settings)
+
+    menu.addSeparator()
+    action_close = menu.addAction("✕ 關閉程式")
+    action_close.triggered.connect(self.close)
+
     menu.exec(event.globalPos())
 
   def _apply_game_mode(self):
-    """Applies normal full mode or game mode with user-selected metrics and custom ordering."""
-    # First, detach all metric widgets and separators from details_layout
-    for widget in self.metric_widgets.values():
-      self.details_layout.removeWidget(widget)
-      widget.hide()
-    self.details_layout.removeWidget(self.sep_summary)
-    self.sep_summary.hide()
+    """Applies Full, Game, or Simple mode with custom ordering."""
+    h_delta = self.header_widget.sizeHint().height() + self.card_layout.spacing()
+    if self.current_mode != "game" and getattr(self, "_is_shifted_up", False):
+      self.move(self.x(), self.y() + h_delta)
+      self._is_shifted_up = False
 
-    self.card_layout.removeWidget(self.header_widget)
-    self.card_layout.removeWidget(self.sub_widget)
-    self.card_layout.insertWidget(0, self.header_widget)
-    self.card_layout.insertWidget(1, self.sub_widget)
+    if self.current_mode == "simple":
+      self.outer_card.is_pill = True
 
-    if self.is_game_mode:
-      self.setFixedWidth(int(290 * self.ui_scale))
-      # Hide title text in game mode
-      self.lbl_title.hide()
-      self.btn_f9.setText("⊟")
-      self.btn_f9.setToolTip("切換至完整模式 [F9]")
-      self.lbl_hotkey_hint.setText("[F7] 暫停  [F8] 重置  [F9] 完整模式")
+      # Hide all vertical components
+      self.header_widget.hide()
+      self.sub_widget.hide()
+      self.sep1.hide()
+      self.details_container.hide()
+      self.slider_panel.hide()
+      self.lbl_hotkey_hint.hide()
 
-      # Add only the user-selected items in the user's custom dragged order
+      # Set pill card padding
+      pad_h = max(10, int(16 * self.ui_scale))
+      pad_v = max(4, int(6 * self.ui_scale))
+      self.card_layout.setContentsMargins(pad_h, pad_v, pad_h, pad_v)
+      self.card_layout.setSpacing(0)
+
+      # Rebuild simple layout items in the user-selected game_mode_items order
+      while self.simple_layout.count() > 0:
+        item = self.simple_layout.takeAt(0)
+        w = item.widget()
+        if w:
+          w.hide()
+
+      self.simple_layout.addWidget(self.simple_status_dot)
+      self.simple_status_dot.show()
+
       for key in self.game_mode_items:
-        if key in self.metric_widgets:
-          widget = self.metric_widgets[key]
-          self.details_layout.addWidget(widget)
-          widget.show()
+        if key in self.simple_metric_widgets:
+          w = self.simple_metric_widgets[key]
+          self.simple_layout.addWidget(w)
+          w.show()
+
+      self.simple_widget.show()
+
+      # Unlock fixed width and adjust to pill sizeHint
+      self.setMinimumSize(0, 0)
+      self.setMaximumSize(16777215, 16777215)
+      self.card_layout.activate()
+      self.layout().activate()
+      self.adjustSize()
+      self.setFixedSize(self.sizeHint())
+      self.update()
+
     else:
-      self.setFixedWidth(int(340 * self.ui_scale))
-      # Show title text in full mode
-      self.lbl_title.show()
-      self.btn_f9.setText("◫")
-      self.btn_f9.setToolTip("切換遊戲模式 [F9]")
-      self.lbl_hotkey_hint.setText(
-          "[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
-      )
+      self.outer_card.is_pill = False
+      self.simple_widget.hide()
+      self.sub_widget.show()
+      self.sep1.show()
+      self.details_container.show()
 
-      # Full mode also honors user's custom dragged order!
-      for key in self.game_mode_order:
-        if key in self.metric_widgets:
-          widget = self.metric_widgets[key]
-          self.details_layout.addWidget(widget)
-          widget.show()
+      pad_h = max(8, int(14 * self.ui_scale))
+      pad_v = max(6, int(12 * self.ui_scale))
+      self.card_layout.setContentsMargins(pad_h, pad_v, pad_h, pad_v)
+      self.card_layout.setSpacing(max(3, int(6 * self.ui_scale)))
 
-    self._update_focus_visibility()
+      # Re-insert header and sub at standard positions 0 and 1
+      self.card_layout.removeWidget(self.header_widget)
+      self.card_layout.removeWidget(self.sub_widget)
+      self.card_layout.insertWidget(0, self.header_widget)
+      self.card_layout.insertWidget(1, self.sub_widget)
+
+      # Detach details widgets
+      for widget in self.metric_widgets.values():
+        self.details_layout.removeWidget(widget)
+        widget.hide()
+      self.details_layout.removeWidget(self.sep_summary)
+      self.sep_summary.hide()
+
+      if self.current_mode == "game":
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(16777215, 16777215)
+        self.setFixedWidth(int(290 * self.ui_scale))
+        self.lbl_title.hide()
+        self.btn_f9.setText("⊟")
+        self.btn_f9.setToolTip("切換至極簡模式 [F9]")
+        self.lbl_hotkey_hint.setText("[F7] 暫停  [F8] 重置  [F9] 極簡模式")
+
+        for key in self.game_mode_items:
+          if key in self.metric_widgets:
+            widget = self.metric_widgets[key]
+            self.details_layout.addWidget(widget)
+            widget.show()
+      else:
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(16777215, 16777215)
+        self.setFixedWidth(int(340 * self.ui_scale))
+        self.lbl_title.show()
+        self.btn_f9.setText("◫")
+        self.btn_f9.setToolTip("切換遊戲模式 [F9]")
+        self.lbl_hotkey_hint.setText(
+            "[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
+        )
+
+        for key in self.game_mode_order:
+          if key in self.metric_widgets:
+            widget = self.metric_widgets[key]
+            self.details_layout.addWidget(widget)
+            widget.show()
+
+      self._update_focus_visibility()
+
     self._save_config()
 
   def _update_focus_visibility(self):
     """Updates visibility of focus-dependent components (sliders, and in game mode: header & hotkey footer)."""
+    if self.current_mode == "simple":
+      self.slider_panel.hide()
+      self.header_widget.hide()
+      self.lbl_hotkey_hint.hide()
+      return
+
     is_active = self.isActiveWindow()
 
     # 1. Sliders: visible only when window is active (or dragging slider)
@@ -1087,7 +1374,7 @@ class ArtaleExpOverlay(QWidget):
     # are hidden when window loses focus, and shown when window has focus.
     # When expanding/collapsing at top, anchor window position so Auto Start and metrics never jump on screen.
     h_delta = self.header_widget.sizeHint().height() + self.card_layout.spacing()
-    if self.is_game_mode:
+    if self.current_mode == "game":
       if is_active:
         was_hidden = not self.header_widget.isVisible()
         self.header_widget.show()
@@ -1195,18 +1482,22 @@ class ArtaleExpOverlay(QWidget):
 
   def _apply_scaling(self):
     s = self.ui_scale
-    base_w = 290 if self.is_game_mode else 340
-    self.setFixedWidth(int(base_w * s))
-
-    # 1. Outer card padding & spacing
-    self.card_layout.setContentsMargins(
-        max(6, int(14 * s)),
-        max(6, int(12 * s)),
-        max(6, int(14 * s)),
-        max(6, int(12 * s)),
-    )
-    self.card_layout.setSpacing(max(3, int(6 * s)))
-    self.details_layout.setSpacing(max(2, int(3 * s)))
+    if self.current_mode == "simple":
+      pad_h = max(10, int(16 * s))
+      pad_v = max(4, int(6 * s))
+      self.card_layout.setContentsMargins(pad_h, pad_v, pad_h, pad_v)
+      self.card_layout.setSpacing(0)
+    else:
+      base_w = 290 if self.current_mode == "game" else 340
+      self.setFixedWidth(int(base_w * s))
+      self.card_layout.setContentsMargins(
+          max(6, int(14 * s)),
+          max(6, int(12 * s)),
+          max(6, int(14 * s)),
+          max(6, int(12 * s)),
+      )
+      self.card_layout.setSpacing(max(3, int(6 * s)))
+      self.details_layout.setSpacing(max(2, int(3 * s)))
 
     # 2. Metric rows
     for row in self.metric_widgets.values():
@@ -1334,9 +1625,32 @@ class ArtaleExpOverlay(QWidget):
         }}
     """)
 
+    # 9. Simple Mode items & dot
+    if hasattr(self, "simple_metric_widgets"):
+      for w in self.simple_metric_widgets.values():
+        if isinstance(w, (SimpleMetricItem, SimpleProgressBarItem)):
+          w.update_scale(s)
+    if hasattr(self, "simple_status_dot"):
+      dot_s = max(8, int(10 * s))
+      dot_char = "●" if getattr(self, "_is_locked", False) else "○"
+      dot_color = "#4ade80" if getattr(self, "_is_locked", False) else "#eab308"
+      self.simple_status_dot.setText(dot_char)
+      self.simple_status_dot.setStyleSheet(
+          f"color: {dot_color}; font-size: {dot_s}px; background: transparent;"
+      )
+    if hasattr(self, "simple_layout"):
+      self.simple_layout.setSpacing(max(8, int(14 * s)))
+
     self.card_layout.activate()
     self.layout().activate()
-    self.resize(self.width(), self.sizeHint().height())
+    if self.current_mode == "simple":
+      self.setMinimumSize(0, 0)
+      self.setMaximumSize(16777215, 16777215)
+      self.adjustSize()
+      self.setFixedSize(self.sizeHint())
+      self.update()
+    else:
+      self.resize(self.width(), self.sizeHint().height())
     self._save_config()
 
   def keyPressEvent(self, event):
@@ -1371,6 +1685,15 @@ class ArtaleExpOverlay(QWidget):
       self.status_dot.setStyleSheet(
           f"color: #eab308; font-size: {dot_size}px; background: transparent;"
       )
+    if hasattr(self, "simple_status_dot"):
+      dot_s = max(8, int(10 * self.ui_scale))
+      dot_char = "●" if is_locked else "○"
+      dot_color = "#4ade80" if is_locked else "#eab308"
+      self.simple_status_dot.setText(dot_char)
+      self.simple_status_dot.setStyleSheet(
+          f"color: {dot_color}; font-size: {dot_s}px; background: transparent;"
+      )
+      self.simple_status_dot.setToolTip(msg)
 
   def _refresh_ui(self):
     m = self.engine.get_metrics()
@@ -1416,6 +1739,18 @@ class ArtaleExpOverlay(QWidget):
       val_100x = int(m["raw_pct"] * 100)
       self.gauge_bar.setValue(min(10000, max(0, val_100x)))
 
+    # Simple Mode metrics
+    if hasattr(self, "simple_metric_widgets"):
+      for k, w in self.simple_metric_widgets.items():
+        if isinstance(w, SimpleMetricItem):
+          if k == "累計經驗":
+            w.set_value(m.get("累計經驗", "--"), color=accum_color)
+          elif k in m:
+            w.set_value(m[k])
+        elif isinstance(w, SimpleProgressBarItem):
+          if "raw_pct" in m and m["raw_pct"] is not None:
+            w.set_value(int(m["raw_pct"] * 100))
+
   # Mouse dragging
   def mousePressEvent(self, event):
     if not self.isActiveWindow():
@@ -1442,7 +1777,12 @@ class ArtaleExpOverlay(QWidget):
           cfg = json.load(f)
           x, y = cfg.get("x", 120), cfg.get("y", 120)
           self.move(x, y)
-          self.is_game_mode = cfg.get("is_game_mode", False)
+          if "ui_mode" in cfg:
+            self.current_mode = cfg["ui_mode"]
+          elif cfg.get("is_game_mode", False):
+            self.current_mode = "game"
+          else:
+            self.current_mode = "full"
           self.game_mode_order = cfg.get(
               "game_mode_order", list(ALL_METRIC_KEYS)
           )
@@ -1478,6 +1818,7 @@ class ArtaleExpOverlay(QWidget):
       cfg = {
           "x": self.pos().x(),
           "y": pos_y,
+          "ui_mode": self.current_mode,
           "is_game_mode": self.is_game_mode,
           "game_mode_order": self.game_mode_order,
           "game_mode_items": self.game_mode_items,
