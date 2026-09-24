@@ -308,12 +308,35 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.lbl_hotkey_hint.isVisible())
     self.assertTrue(self.overlay.outer_card.is_pill)
 
-    # 4. Verify Simple Mode metrics update on refresh with 7-tier EXP color
-    self.overlay.engine.total_gained_exp = 75_000_000  # Tier 4: #FF80FF
+    # Verify Simple Mode ONLY shows the three requested items (plus status dot)
+    simple_widgets = [
+        self.overlay.simple_layout.itemAt(i).widget()
+        for i in range(self.overlay.simple_layout.count())
+    ]
+    # Filter out None if any
+    simple_widgets = [w for w in simple_widgets if w is not None]
+    self.assertEqual(len(simple_widgets), 4)  # dot + 3 metrics
+    self.assertIs(simple_widgets[0], self.overlay.simple_status_dot)
+    self.assertIs(simple_widgets[1], self.overlay.simple_metric_widgets["練功時長"])
+    self.assertIs(simple_widgets[2], self.overlay.simple_metric_widgets["預估10分"])
+    self.assertIs(simple_widgets[3], self.overlay.simple_metric_widgets["累計經驗"])
+
+    # Verify label texts: 練功時長 -> 時長, 預估10分 -> 10分, 累計經驗 -> 累積
+    self.assertEqual(self.overlay.simple_metric_widgets["練功時長"].lbl_label.text(), "時長")
+    self.assertEqual(self.overlay.simple_metric_widgets["預估10分"].lbl_label.text(), "10分")
+    self.assertEqual(self.overlay.simple_metric_widgets["累計經驗"].lbl_label.text(), "累積")
+
+    # 4. Verify Simple Mode numbers simplify to 萬 and 億 with 7-tier EXP color
+    self.overlay.engine.total_gained_exp = 1_234_000
     self.overlay._refresh_ui()
     accum_simple = self.overlay.simple_metric_widgets["累計經驗"]
-    self.assertEqual(accum_simple.current_val_color, "#FF80FF")
-    self.assertIn("#FF80FF", accum_simple.lbl_value.styleSheet())
+    self.assertEqual(accum_simple.lbl_value.text(), "123.4萬")
+
+    self.overlay.engine.total_gained_exp = 123_456_789  # 1.23億, Tier 7 (#FF66CC)
+    self.overlay._refresh_ui()
+    self.assertEqual(accum_simple.lbl_value.text(), "1.23億")
+    self.assertEqual(accum_simple.current_val_color, "#FF66CC")
+    self.assertIn("#FF66CC", accum_simple.lbl_value.styleSheet())
 
     # 5. F9 -> Circulate back to Full Mode
     self.overlay.on_f9()

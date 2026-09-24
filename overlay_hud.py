@@ -85,17 +85,43 @@ DEFAULT_GAME_MODE_KEYS = [
     "升級預估時間",
 ]
 
+DEFAULT_SIMPLE_MODE_KEYS = [
+    "練功時長",
+    "預估10分",
+    "累計經驗",
+]
+
 SIMPLE_METRIC_CONFIG = {
     "練功時長": {"label": "時長", "color": "#94a3b8"},
+    "預估10分": {"label": "10分", "color": "#38bdf8"},
+    "累計經驗": {"label": "累積", "color": "#c084fc"},
     "1分鐘經驗": {"label": "1分", "color": "#38bdf8"},
-    "預估10分": {"label": "預估10分", "color": "#38bdf8"},
     "累積10分": {"label": "累積10分", "color": "#818cf8"},
     "預估60分": {"label": "預估60分", "color": "#60a5fa"},
     "累積60分": {"label": "累積60分", "color": "#818cf8"},
-    "累計經驗": {"label": "累計經驗", "color": "#c084fc"},
     "當前經驗": {"label": "當前", "color": "#fbbf24"},
     "升級預估時間": {"label": "升級預估", "color": "#34d399"},
 }
+
+
+def format_chinese_exp(val: Optional[int | float]) -> str:
+  """Formats EXP numbers into simplified Chinese units:
+  < 10,000:       e.g. '0', '9,500'
+  10,000 ~ 1億:   e.g. '123.4萬'
+  >= 1億:         e.g. '1.23億'
+  """
+  if val is None:
+    return "--"
+  sign = "-" if val < 0 else ""
+  abs_val = abs(val)
+  if abs_val >= 100_000_000:
+    num = abs_val / 100_000_000.0
+    return f"{sign}{num:.2f}億"
+  elif abs_val >= 10_000:
+    num = abs_val / 10_000.0
+    return f"{sign}{num:.1f}萬"
+  else:
+    return f"{sign}{int(abs_val):,d}"
 
 
 def get_accum_exp_color(val: int) -> str:
@@ -1276,7 +1302,7 @@ class ArtaleExpOverlay(QWidget):
       self.simple_layout.addWidget(self.simple_status_dot)
       self.simple_status_dot.show()
 
-      for key in self.game_mode_items:
+      for key in DEFAULT_SIMPLE_MODE_KEYS:
         if key in self.simple_metric_widgets:
           w = self.simple_metric_widgets[key]
           self.simple_layout.addWidget(w)
@@ -1741,11 +1767,21 @@ class ArtaleExpOverlay(QWidget):
 
     # Simple Mode metrics
     if hasattr(self, "simple_metric_widgets"):
+      if "練功時長" in self.simple_metric_widgets:
+        self.simple_metric_widgets["練功時長"].set_value(m.get("練功時長", "00:00:00"))
+      if "預估10分" in self.simple_metric_widgets:
+        val_10m = m.get("proj_10m_exp", 0)
+        self.simple_metric_widgets["預估10分"].set_value(format_chinese_exp(val_10m))
+      if "累計經驗" in self.simple_metric_widgets:
+        val_accum = m.get("total_gained_exp", 0)
+        self.simple_metric_widgets["累計經驗"].set_value(
+            format_chinese_exp(val_accum), color=accum_color
+        )
       for k, w in self.simple_metric_widgets.items():
+        if k in ("練功時長", "預估10分", "累計經驗"):
+          continue
         if isinstance(w, SimpleMetricItem):
-          if k == "累計經驗":
-            w.set_value(m.get("累計經驗", "--"), color=accum_color)
-          elif k in m:
+          if k in m:
             w.set_value(m[k])
         elif isinstance(w, SimpleProgressBarItem):
           if "raw_pct" in m and m["raw_pct"] is not None:

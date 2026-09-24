@@ -390,4 +390,5 @@ class ExpMetricsEngine:
         "total_gained_exp": self.total_gained_exp,
         "total_gained_pct": self.total_gained_pct,
         "hourly_exp_rate": proj_60m_exp,
+        "proj_10m_exp": proj_10m_exp,
     }
