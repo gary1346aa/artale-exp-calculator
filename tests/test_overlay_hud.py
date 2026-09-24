@@ -189,16 +189,27 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay._set_sliders_visible(False)
     self.assertEqual(self.overlay.height(), h_gm_collapsed)
 
-    # Test scale slider functionality
-    self.overlay.slider_scale.setValue(120)
-    self.assertAlmostEqual(self.overlay.ui_scale, 1.2)
-    self.assertEqual(self.overlay.lbl_scale_val.text(), "120%")
+    # Test scale slider functionality (50% to 200%)
+    self.assertEqual(self.overlay.slider_scale.minimum(), 50)
+    self.assertEqual(self.overlay.slider_scale.maximum(), 200)
+    self.overlay.slider_scale.setValue(50)
+    self.assertAlmostEqual(self.overlay.ui_scale, 0.5)
+    self.assertEqual(self.overlay.lbl_scale_val.text(), "50%")
+    self.overlay.slider_scale.setValue(200)
+    self.assertAlmostEqual(self.overlay.ui_scale, 2.0)
+    self.assertEqual(self.overlay.lbl_scale_val.text(), "200%")
 
-    # Test opacity slider functionality
-    self.overlay.slider_opacity.setValue(80)
+    # Test transparency slider functionality (0% to 80%, reversed to window opacity)
+    self.assertEqual(self.overlay.slider_opacity.minimum(), 0)
+    self.assertEqual(self.overlay.slider_opacity.maximum(), 80)
+    self.overlay.slider_opacity.setValue(20)
     self.assertAlmostEqual(self.overlay.opacity_val, 0.8)
-    self.assertEqual(self.overlay.lbl_opacity_val.text(), "80%")
+    self.assertEqual(self.overlay.lbl_opacity_val.text(), "20%")
     self.assertAlmostEqual(self.overlay.windowOpacity(), 0.8)
+    self.overlay.slider_opacity.setValue(0)
+    self.assertAlmostEqual(self.overlay.opacity_val, 1.0)
+    self.assertEqual(self.overlay.lbl_opacity_val.text(), "0%")
+    self.assertAlmostEqual(self.overlay.windowOpacity(), 1.0)
 
 
 if __name__ == "__main__":

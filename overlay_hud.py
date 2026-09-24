@@ -854,8 +854,8 @@ class ArtaleExpOverlay(QWidget):
         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
     )
     self.slider_scale = QSlider(Qt.Orientation.Horizontal)
-    self.slider_scale.setRange(75, 140)
-    self.slider_scale.setValue(int(self.ui_scale * 100))
+    self.slider_scale.setRange(50, 200)
+    self.slider_scale.setValue(int(round(self.ui_scale * 100)))
     self.slider_scale.valueChanged.connect(self._on_scale_changed)
     self.slider_scale.sliderReleased.connect(self._on_slider_released)
 
@@ -866,15 +866,16 @@ class ArtaleExpOverlay(QWidget):
 
     row_opacity = QHBoxLayout()
     row_opacity.setSpacing(6)
-    lbl_opacity_title = QLabel("不透明")
-    self.lbl_opacity_val = QLabel(f"{int(self.opacity_val * 100)}%")
+    lbl_opacity_title = QLabel("透明")
+    transparency_pct = int(round((1.0 - self.opacity_val) * 100))
+    self.lbl_opacity_val = QLabel(f"{transparency_pct}%")
     self.lbl_opacity_val.setFixedWidth(36)
     self.lbl_opacity_val.setAlignment(
         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
     )
     self.slider_opacity = QSlider(Qt.Orientation.Horizontal)
-    self.slider_opacity.setRange(30, 100)
-    self.slider_opacity.setValue(int(self.opacity_val * 100))
+    self.slider_opacity.setRange(0, 80)
+    self.slider_opacity.setValue(transparency_pct)
     self.slider_opacity.valueChanged.connect(self._on_opacity_changed)
     self.slider_opacity.sliderReleased.connect(self._on_slider_released)
 
@@ -1075,7 +1076,9 @@ class ArtaleExpOverlay(QWidget):
     self._apply_scaling()
 
   def _on_opacity_changed(self, val: int):
-    self.opacity_val = val / 100.0
+    # val is transparency percentage (0% to 80%)
+    # Reversed to window opacity (1.0 down to 0.20)
+    self.opacity_val = max(0.1, (100 - val) / 100.0)
     self.setWindowOpacity(self.opacity_val)
     self.lbl_opacity_val.setText(f"{val}%")
 
@@ -1387,10 +1390,11 @@ class ArtaleExpOverlay(QWidget):
           self.ui_scale = cfg.get("ui_scale", 1.0)
           self.opacity_val = cfg.get("opacity", 0.95)
           self.setWindowOpacity(self.opacity_val)
-          self.slider_scale.setValue(int(self.ui_scale * 100))
-          self.slider_opacity.setValue(int(self.opacity_val * 100))
-          self.lbl_scale_val.setText(f"{int(self.ui_scale * 100)}%")
-          self.lbl_opacity_val.setText(f"{int(self.opacity_val * 100)}%")
+          self.slider_scale.setValue(int(round(self.ui_scale * 100)))
+          transparency_pct = int(round((1.0 - self.opacity_val) * 100))
+          self.slider_opacity.setValue(transparency_pct)
+          self.lbl_scale_val.setText(f"{int(round(self.ui_scale * 100))}%")
+          self.lbl_opacity_val.setText(f"{transparency_pct}%")
           self._apply_scaling()
           self._apply_game_mode()
       else:
