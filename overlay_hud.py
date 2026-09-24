@@ -411,11 +411,13 @@ class ArtaleExpOverlay(QWidget):
     self.sep1 = self._create_separator()
     self.card_layout.addWidget(self.sep1)
 
-    # 3. Primary Highlights: Duration, Accumulated EXP, Progress Bar
+    # 3. Primary Highlights: Duration, Current EXP, Accumulated EXP, Progress Bar
     self.row_duration = MetricRow("練功時長", "00:00:00", self)
+    self.row_current = MetricRow("當前經驗", "無資料", self)
     self.row_accum = MetricRow("累計經驗", "+0", self, is_highlight=True)
 
     self.card_layout.addWidget(self.row_duration)
+    self.card_layout.addWidget(self.row_current)
     self.card_layout.addWidget(self.row_accum)
 
     # EXP Progress Bar
@@ -596,6 +598,7 @@ class ArtaleExpOverlay(QWidget):
   def _apply_game_mode(self):
     if self.is_game_mode:
       self.setFixedWidth(290)
+      self.row_current.hide()
       self.row_accum.hide()
       self.sep2.hide()
       self.details_container.hide()
@@ -605,6 +608,7 @@ class ArtaleExpOverlay(QWidget):
       self.lbl_hotkey_hint.setText("[F7] 暫停  [F8] 重置  [F9] 完整模式")
     else:
       self.setFixedWidth(340)
+      self.row_current.show()
       self.row_accum.show()
       self.sep2.show()
       self.details_container.show()
@@ -727,6 +731,7 @@ class ArtaleExpOverlay(QWidget):
 
     # Values in detailed mode
     self.row_duration.set_value(m["練功時長"])
+    self.row_current.set_value(m["當前經驗"])
     self.row_accum.set_value(m["累計經驗"])
     self.row_1m.set_value(m["1分鐘經驗"])
     self.row_est_10m.set_value(m["預估10分"])
