@@ -750,7 +750,8 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.addWidget(self.header_widget)
 
     # 2. Sub-header Bar: Status indicator dot + Status text on left, Auto-Start Toggle on right
-    sub_layout = QHBoxLayout()
+    self.sub_widget = QWidget(self.outer_card)
+    sub_layout = QHBoxLayout(self.sub_widget)
     sub_layout.setContentsMargins(0, 0, 0, 2)
     sub_layout.setSpacing(6)
 
@@ -782,7 +783,7 @@ class ArtaleExpOverlay(QWidget):
     sub_layout.addWidget(self.lbl_status)
     sub_layout.addStretch()
     sub_layout.addWidget(self.btn_auto_start)
-    self.card_layout.addLayout(sub_layout)
+    self.card_layout.addWidget(self.sub_widget)
 
     # Separator
     self.sep1 = self._create_separator()
@@ -1032,8 +1033,16 @@ class ArtaleExpOverlay(QWidget):
     self.details_layout.removeWidget(self.sep_summary)
     self.sep_summary.hide()
 
+    self.card_layout.removeWidget(self.header_widget)
+    self.card_layout.removeWidget(self.sub_widget)
+
     if self.is_game_mode:
       self.setFixedWidth(int(290 * self.ui_scale))
+      # In Game Mode: sub_widget stays permanently at top (index 0) so auto-start
+      # never shifts vertically when header_widget appears/disappears below it.
+      self.card_layout.insertWidget(0, self.sub_widget)
+      self.card_layout.insertWidget(1, self.header_widget)
+
       # Hide title text in game mode
       self.lbl_title.hide()
       self.btn_f9.setText("⊟")
@@ -1048,6 +1057,10 @@ class ArtaleExpOverlay(QWidget):
           widget.show()
     else:
       self.setFixedWidth(int(340 * self.ui_scale))
+      # In Full Mode: header_widget is standard title bar at index 0, sub_widget at index 1
+      self.card_layout.insertWidget(0, self.header_widget)
+      self.card_layout.insertWidget(1, self.sub_widget)
+
       # Show title text in full mode
       self.lbl_title.show()
       self.btn_f9.setText("◫")
@@ -1108,7 +1121,7 @@ class ArtaleExpOverlay(QWidget):
   def changeEvent(self, event):
     """Show/hide controls and sliders when window gains or loses focus."""
     if event.type() == QEvent.Type.ActivationChange:
-      self._update_focus_visibility()
+      QTimer.singleShot(0, self._update_focus_visibility)
     super().changeEvent(event)
 
   def _on_slider_released(self):
