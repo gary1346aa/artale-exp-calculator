@@ -231,10 +231,12 @@ class MetricRow(QFrame):
   ):
     super().__init__(parent)
     self.is_highlight = is_highlight
+    self.scale = 1.0
+    self.current_color = None
     self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-    layout = QHBoxLayout(self)
-    layout.setContentsMargins(6, 3, 6, 3)
-    layout.setSpacing(10)
+    self.layout = QHBoxLayout(self)
+    self.layout.setContentsMargins(6, 3, 6, 3)
+    self.layout.setSpacing(10)
 
     self.lbl_title = QLabel(title)
     self.lbl_title.setStyleSheet(f"""
@@ -262,15 +264,26 @@ class MetricRow(QFrame):
         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
     )
 
-    layout.addWidget(self.lbl_title)
-    layout.addStretch()
-    layout.addWidget(self.lbl_value)
+    self.layout.addWidget(self.lbl_title)
+    self.layout.addStretch()
+    self.layout.addWidget(self.lbl_value)
 
   def update_scale(self, scale: float):
+    self.scale = scale
     title_size = max(9, int(13 * scale))
     val_size = max(11, int((16 if self.is_highlight else 15) * scale))
-    val_color = "#4ade80" if self.is_highlight else "#f1f5f9"
+    val_color = (
+        self.current_color
+        if self.current_color
+        else ("#4ade80" if self.is_highlight else "#f1f5f9")
+    )
     font_weight = "700" if self.is_highlight else "600"
+    self.layout.setContentsMargins(
+        max(3, int(6 * scale)),
+        max(2, int(3 * scale)),
+        max(3, int(6 * scale)),
+        max(2, int(3 * scale)),
+    )
     self.lbl_title.setStyleSheet(f"""
             QLabel {{
                 color: #94a3b8;
@@ -290,13 +303,17 @@ class MetricRow(QFrame):
 
   def set_value(self, val_str: str, color: Optional[str] = None):
     self.lbl_value.setText(val_str)
-    if color:
-      font_size = "16px" if self.is_highlight else "15px"
+    if color != self.current_color:
+      self.current_color = color
+      val_size = max(11, int((16 if self.is_highlight else 15) * self.scale))
       font_weight = "700" if self.is_highlight else "600"
+      fg_color = (
+          color if color else ("#4ade80" if self.is_highlight else "#f1f5f9")
+      )
       self.lbl_value.setStyleSheet(f"""
                 QLabel {{
-                    color: {color};
-                    font-size: {font_size};
+                    color: {fg_color};
+                    font-size: {val_size}px;
                     font-weight: {font_weight};
                     font-family: {FONT_FAMILY};
                 }}
@@ -1047,17 +1064,93 @@ class ArtaleExpOverlay(QWidget):
     self.setWindowOpacity(self.opacity_val)
     self.lbl_opacity_val.setText(f"{val}%")
 
-  def _apply_scaling(self):
-    base_w = 290 if self.is_game_mode else 340
-    self.setFixedWidth(int(base_w * self.ui_scale))
+  def _update_state_badge_style(self):
+    s = self.ui_scale
+    badge_size = max(8, int(11 * s))
+    pad_v = max(1, int(2 * s))
+    pad_h = max(4, int(7 * s))
 
-    # Scale metric rows
+    if self.engine.is_running:
+      self.lbl_state_badge.setText("計時中")
+      self.lbl_state_badge.setStyleSheet(f"""
+          QLabel {{
+              color: #34d399;
+              background-color: rgba(16, 185, 129, 0.18);
+              border: 1px solid rgba(52, 211, 153, 0.3);
+              padding: {pad_v}px {pad_h}px;
+              border-radius: 4px;
+              font-size: {badge_size}px;
+              font-weight: 700;
+              font-family: {FONT_FAMILY};
+          }}
+      """)
+    elif self.engine.is_paused:
+      self.lbl_state_badge.setText("已暫停")
+      self.lbl_state_badge.setStyleSheet(f"""
+          QLabel {{
+              color: #fbbf24;
+              background-color: rgba(245, 158, 11, 0.18);
+              border: 1px solid rgba(251, 191, 36, 0.3);
+              padding: {pad_v}px {pad_h}px;
+              border-radius: 4px;
+              font-size: {badge_size}px;
+              font-weight: 700;
+              font-family: {FONT_FAMILY};
+          }}
+      """)
+    else:
+      self.lbl_state_badge.setText("待機中")
+      self.lbl_state_badge.setStyleSheet(f"""
+          QLabel {{
+              color: #94a3b8;
+              background-color: rgba(255, 255, 255, 0.08);
+              padding: {pad_v}px {pad_h}px;
+              border-radius: 4px;
+              font-size: {badge_size}px;
+              font-weight: 600;
+              font-family: {FONT_FAMILY};
+          }}
+      """)
+
+  def _apply_scaling(self):
+    s = self.ui_scale
+    base_w = 290 if self.is_game_mode else 340
+    self.setFixedWidth(int(base_w * s))
+
+    # 1. Outer card padding & spacing
+    self.card_layout.setContentsMargins(
+        max(6, int(14 * s)),
+        max(6, int(12 * s)),
+        max(6, int(14 * s)),
+        max(6, int(12 * s)),
+    )
+    self.card_layout.setSpacing(max(3, int(6 * s)))
+    self.details_layout.setSpacing(max(2, int(3 * s)))
+
+    # 2. Metric rows
     for row in self.metric_widgets.values():
       if isinstance(row, MetricRow):
-        row.update_scale(self.ui_scale)
+        row.update_scale(s)
 
-    # Scale title & state badge
-    title_size = max(10, int(14 * self.ui_scale))
+    # 3. EXP Progress Bar height & style
+    bar_h = max(6, int(8 * s))
+    self.gauge_bar.setFixedHeight(bar_h)
+    self.gauge_bar.setStyleSheet(f"""
+        QProgressBar {{
+            background-color: rgba(255, 255, 255, 0.08);
+            border-radius: {max(2, int(4 * s))}px;
+            border: none;
+            margin-top: {max(1, int(3 * s))}px;
+            margin-bottom: {max(1, int(3 * s))}px;
+        }}
+        QProgressBar::chunk {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #38bdf8);
+            border-radius: {max(2, int(4 * s))}px;
+        }}
+    """)
+
+    # 4. Title & State badge
+    title_size = max(10, int(14 * s))
     self.lbl_title.setStyleSheet(f"""
         QLabel {{
             color: #e2e8f0;
@@ -1068,22 +1161,13 @@ class ArtaleExpOverlay(QWidget):
             background: transparent;
         }}
     """)
+    self._update_state_badge_style()
 
-    badge_size = max(8, int(11 * self.ui_scale))
-    self.lbl_state_badge.setStyleSheet(f"""
-        QLabel {{
-            color: #94a3b8;
-            background-color: rgba(255, 255, 255, 0.08);
-            padding: 2px 7px;
-            border-radius: 4px;
-            font-size: {badge_size}px;
-            font-weight: 600;
-            font-family: {FONT_FAMILY};
-        }}
-    """)
-
-    # Scale buttons
-    btn_size = max(18, int(24 * self.ui_scale))
+    # 5. Header control buttons
+    btn_size = max(18, int(24 * s))
+    btn_font_size = max(9, int(12 * s))
+    btn_font = QFont(self.btn_f7.font())
+    btn_font.setPixelSize(btn_font_size)
     for btn in [
         self.btn_f7,
         self.btn_f8,
@@ -1092,6 +1176,82 @@ class ArtaleExpOverlay(QWidget):
         self.btn_close,
     ]:
       btn.setFixedSize(btn_size, btn_size)
+      btn.setFont(btn_font)
+
+    # 6. Sub-header (status_dot, lbl_status, btn_auto_start)
+    dot_size = max(10, int(13 * s))
+    self.status_dot.setStyleSheet(
+        f"color: {'#4ade80' if getattr(self, '_is_locked', False) else '#eab308'};"
+        f" font-size: {dot_size}px; background: transparent;"
+    )
+
+    status_size = max(9, int(11 * s))
+    self.lbl_status.setStyleSheet(f"""
+        QLabel {{
+            color: #64748b;
+            font-size: {status_size}px;
+            font-family: {FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+
+    auto_start_h = max(20, int(24 * s))
+    auto_start_font_size = max(9, int(11 * s))
+    self.btn_auto_start.setFixedHeight(auto_start_h)
+    auto_font = QFont(self.btn_auto_start.font())
+    auto_font.setPixelSize(auto_start_font_size)
+    self.btn_auto_start.setFont(auto_font)
+
+    # 7. Hotkey guidance footer
+    hint_size = max(9, int(11 * s))
+    self.lbl_hotkey_hint.setStyleSheet(f"""
+        QLabel {{
+            color: #64748b;
+            font-size: {hint_size}px;
+            font-family: {FONT_FAMILY};
+            padding-top: {max(2, int(4 * s))}px;
+            background: transparent;
+        }}
+    """)
+
+    # 8. Sliders panel labels & handles
+    slider_lbl_size = max(9, int(11 * s))
+    val_w = max(28, int(36 * s))
+    self.lbl_scale_val.setFixedWidth(val_w)
+    self.lbl_opacity_val.setFixedWidth(val_w)
+    self.slider_panel.setStyleSheet(f"""
+        QFrame {{
+            background: transparent;
+            border: none;
+            padding-top: 2px;
+        }}
+        QLabel {{
+            color: #94a3b8;
+            font-size: {slider_lbl_size}px;
+            font-family: {FONT_FAMILY};
+        }}
+        QSlider::groove:horizontal {{
+            height: {max(3, int(4 * s))}px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+        }}
+        QSlider::sub-page:horizontal {{
+            background: #10b981;
+            border-radius: 2px;
+        }}
+        QSlider::handle:horizontal {{
+            background: #34d399;
+            border: 1px solid #ffffff;
+            width: {max(10, int(12 * s))}px;
+            height: {max(10, int(12 * s))}px;
+            margin-top: -{max(3, int(4 * s))}px;
+            margin-bottom: -{max(3, int(4 * s))}px;
+            border-radius: {max(5, int(6 * s))}px;
+        }}
+        QSlider::handle:horizontal:hover {{
+            background: #6ee7b7;
+        }}
+    """)
 
     self.resize(self.width(), self.sizeHint().height())
     self._save_config()
@@ -1115,13 +1275,19 @@ class ArtaleExpOverlay(QWidget):
     self._refresh_ui()
 
   def _on_status_changed(self, msg: str, is_locked: bool):
+    self._is_locked = is_locked
     self.lbl_status.setText(msg)
+    dot_size = max(10, int(13 * self.ui_scale))
     if is_locked:
       self.status_dot.setText("●")
-      self.status_dot.setStyleSheet("color: #4ade80; font-size: 13px; background: transparent;")
+      self.status_dot.setStyleSheet(
+          f"color: #4ade80; font-size: {dot_size}px; background: transparent;"
+      )
     else:
       self.status_dot.setText("○")
-      self.status_dot.setStyleSheet("color: #eab308; font-size: 13px; background: transparent;")
+      self.status_dot.setStyleSheet(
+          f"color: #eab308; font-size: {dot_size}px; background: transparent;"
+      )
 
   def _refresh_ui(self):
     m = self.engine.get_metrics()
@@ -1129,21 +1295,9 @@ class ArtaleExpOverlay(QWidget):
     # Update auto-start button appearance with engine state
     self._update_auto_start_button_style(self.engine.auto_start_enabled)
 
-    # State Badge & F7 button text
+    # State Badge (scaled) & F7 button text
+    self._update_state_badge_style()
     if self.engine.is_running:
-      self.lbl_state_badge.setText("計時中")
-      self.lbl_state_badge.setStyleSheet(f"""
-                QLabel {{
-                    color: #34d399;
-                    background-color: rgba(16, 185, 129, 0.18);
-                    border: 1px solid rgba(52, 211, 153, 0.3);
-                    padding: 2px 7px;
-                    border-radius: 4px;
-                    font-size: 11px;
-                    font-weight: 700;
-                    font-family: {FONT_FAMILY};
-                }}
-            """)
       self.btn_f7.setText("⏸")
       self.btn_f7.set_custom_style(
           bg=QColor(239, 68, 68, 38),
@@ -1151,19 +1305,6 @@ class ArtaleExpOverlay(QWidget):
           text_color=QColor("#f87171"),
       )
     elif self.engine.is_paused:
-      self.lbl_state_badge.setText("已暫停")
-      self.lbl_state_badge.setStyleSheet(f"""
-                QLabel {{
-                    color: #fbbf24;
-                    background-color: rgba(245, 158, 11, 0.18);
-                    border: 1px solid rgba(251, 191, 36, 0.3);
-                    padding: 2px 7px;
-                    border-radius: 4px;
-                    font-size: 11px;
-                    font-weight: 700;
-                    font-family: {FONT_FAMILY};
-                }}
-            """)
       self.btn_f7.setText("▶")
       self.btn_f7.set_custom_style(
           bg=QColor(16, 185, 129, 38),
@@ -1171,18 +1312,6 @@ class ArtaleExpOverlay(QWidget):
           text_color=QColor("#34d399"),
       )
     else:
-      self.lbl_state_badge.setText("待機中")
-      self.lbl_state_badge.setStyleSheet(f"""
-                QLabel {{
-                    color: #94a3b8;
-                    background-color: rgba(255, 255, 255, 0.08);
-                    padding: 2px 7px;
-                    border-radius: 4px;
-                    font-size: 11px;
-                    font-weight: 600;
-                    font-family: {FONT_FAMILY};
-                }}
-            """)
       self.btn_f7.setText("▶")
       self.btn_f7.set_custom_style(None, None, None)
 
