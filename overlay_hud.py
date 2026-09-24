@@ -1138,12 +1138,14 @@ class ArtaleExpOverlay(QWidget):
 
     self.simple_metric_widgets = {}
     for key, cfg in SIMPLE_METRIC_CONFIG.items():
-      self.simple_metric_widgets[key] = SimpleMetricItem(
+      w = SimpleMetricItem(
           key, cfg["label"], cfg["color"], self.simple_widget
       )
-    self.simple_metric_widgets["EXP 進度條"] = SimpleProgressBarItem(
-        self.simple_widget
-    )
+      w.hide()
+      self.simple_metric_widgets[key] = w
+    prog_w = SimpleProgressBarItem(self.simple_widget)
+    prog_w.hide()
+    self.simple_metric_widgets["EXP 進度條"] = prog_w
 
     self.card_layout.addWidget(self.simple_widget)
     self.simple_widget.hide()
@@ -1292,7 +1294,10 @@ class ArtaleExpOverlay(QWidget):
       self.card_layout.setContentsMargins(pad_h, pad_v, pad_h, pad_v)
       self.card_layout.setSpacing(0)
 
-      # Rebuild simple layout items in the user-selected game_mode_items order
+      # Hide all simple metric widgets first to avoid unmanaged widgets lingering at (0, 0)
+      for w in self.simple_metric_widgets.values():
+        w.hide()
+
       while self.simple_layout.count() > 0:
         item = self.simple_layout.takeAt(0)
         w = item.widget()
