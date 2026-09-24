@@ -1035,14 +1035,11 @@ class ArtaleExpOverlay(QWidget):
 
     self.card_layout.removeWidget(self.header_widget)
     self.card_layout.removeWidget(self.sub_widget)
+    self.card_layout.insertWidget(0, self.header_widget)
+    self.card_layout.insertWidget(1, self.sub_widget)
 
     if self.is_game_mode:
       self.setFixedWidth(int(290 * self.ui_scale))
-      # In Game Mode: sub_widget stays permanently at top (index 0) so auto-start
-      # never shifts vertically when header_widget appears/disappears below it.
-      self.card_layout.insertWidget(0, self.sub_widget)
-      self.card_layout.insertWidget(1, self.header_widget)
-
       # Hide title text in game mode
       self.lbl_title.hide()
       self.btn_f9.setText("⊟")
@@ -1057,10 +1054,6 @@ class ArtaleExpOverlay(QWidget):
           widget.show()
     else:
       self.setFixedWidth(int(340 * self.ui_scale))
-      # In Full Mode: header_widget is standard title bar at index 0, sub_widget at index 1
-      self.card_layout.insertWidget(0, self.header_widget)
-      self.card_layout.insertWidget(1, self.sub_widget)
-
       # Show title text in full mode
       self.lbl_title.show()
       self.btn_f9.setText("◫")
@@ -1092,15 +1085,27 @@ class ArtaleExpOverlay(QWidget):
 
     # 2. In Game Mode: Header bar (badge + buttons) and Footer hotkey hint
     # are hidden when window loses focus, and shown when window has focus.
-    # In Full Mode: Header and Footer are always visible.
+    # When expanding/collapsing at top, anchor window position so Auto Start and metrics never jump on screen.
+    h_delta = self.header_widget.sizeHint().height() + self.card_layout.spacing()
     if self.is_game_mode:
       if is_active:
+        was_hidden = not self.header_widget.isVisible()
         self.header_widget.show()
         self.lbl_hotkey_hint.show()
+        if was_hidden and not getattr(self, "_is_shifted_up", False):
+          self.move(self.x(), self.y() - h_delta)
+          self._is_shifted_up = True
       else:
+        was_visible = self.header_widget.isVisible()
         self.header_widget.hide()
         self.lbl_hotkey_hint.hide()
+        if was_visible and getattr(self, "_is_shifted_up", False):
+          self.move(self.x(), self.y() + h_delta)
+          self._is_shifted_up = False
     else:
+      if getattr(self, "_is_shifted_up", False):
+        self.move(self.x(), self.y() + h_delta)
+        self._is_shifted_up = False
       self.header_widget.show()
       self.lbl_hotkey_hint.show()
 
@@ -1466,9 +1471,13 @@ class ArtaleExpOverlay(QWidget):
 
   def _save_config(self):
     try:
+      pos_y = self.pos().y()
+      if getattr(self, "_is_shifted_up", False):
+        h_delta = self.header_widget.sizeHint().height() + self.card_layout.spacing()
+        pos_y += h_delta
       cfg = {
           "x": self.pos().x(),
-          "y": self.pos().y(),
+          "y": pos_y,
           "is_game_mode": self.is_game_mode,
           "game_mode_order": self.game_mode_order,
           "game_mode_items": self.game_mode_items,
