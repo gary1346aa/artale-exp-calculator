@@ -12,7 +12,7 @@ import json
 import os
 import sys
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from PyQt6.QtCore import (
     QEvent,
@@ -37,9 +37,11 @@ from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
     QDialog,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMenu,
@@ -217,10 +219,16 @@ class CaptureWorker(QThread):
   frame_parsed = pyqtSignal(int, float, float)
   status_changed = pyqtSignal(str, bool)
 
-  def __init__(self):
+  def __init__(
+      self,
+      target_window: str = "MapleStory Worlds-Artale",
+      target_hwnd: Optional[int] = None,
+  ):
     super().__init__()
     self.running = True
     self.sample_interval = 1.0
+    self.target_window = target_window
+    self.target_hwnd = target_hwnd
 
   def run(self):
     if sys.platform == "win32":
@@ -272,12 +280,24 @@ class CaptureWorker(QThread):
 
     while self.running:
       try:
-        self.status_changed.emit("尋找 Artale 遊戲視窗...", False)
-        capture = WindowsCapture(
-            cursor_capture=False,
-            draw_border=False,
-            window_name="MapleStory Worlds-Artale",
+        win_desc = (
+            self.target_window
+            if self.target_window
+            else f"HWND {self.target_hwnd}"
         )
+        self.status_changed.emit(f"尋找視窗 [{win_desc}]...", False)
+        if self.target_hwnd:
+          capture = WindowsCapture(
+              cursor_capture=False,
+              draw_border=False,
+              window_hwnd=self.target_hwnd,
+          )
+        else:
+          capture = WindowsCapture(
+              cursor_capture=False,
+              draw_border=False,
+              window_name=self.target_window,
+          )
         capture.event(on_frame_arrived)
         capture.event(on_closed)
         capture.start()
@@ -287,6 +307,130 @@ class CaptureWorker(QThread):
   def stop(self):
     self.running = False
     self.wait(1000)
+
+
+class VideoSimulationWorker(QThread):
+  """Background video playback worker simulating live game capture from a recorded video."""
+
+  frame_parsed = pyqtSignal(int, float, float)
+  status_changed = pyqtSignal(str, bool)
+
+  def __init__(
+      self,
+      video_path: str,
+      playback_speed: float = 1.0,
+      loop: bool = True,
+      continuous_exp: bool = True,
+  ):
+    super().__init__()
+    self.video_path = video_path
+    self.playback_speed = max(0.1, playback_speed)
+    self.loop = loop
+    self.continuous_exp = continuous_exp
+    self.running = True
+    self.is_paused = False
+
+  def run(self):
+    import cv2
+
+    cap = cv2.VideoCapture(self.video_path)
+    if not cap.isOpened():
+      self.status_changed.emit(
+          f"無法開啟影片: {os.path.basename(self.video_path)}", False
+      )
+      return
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0 or fps != fps:
+      fps = 30.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    video_name = os.path.basename(self.video_path)
+    self.status_changed.emit(f"模擬影片中: {video_name}", True)
+
+    frame_step = max(1, int(round(fps)))
+    current_frame_idx = 0
+    exp_offset = 0
+    first_exp_in_loop = None
+    last_exp_in_loop = None
+
+    while self.running:
+      if self.is_paused:
+        time.sleep(0.1)
+        continue
+
+      cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame_idx)
+      ret, frame = cap.read()
+      if not ret:
+        if self.loop and total_frames > 0:
+          current_frame_idx = 0
+          if (
+              self.continuous_exp
+              and first_exp_in_loop is not None
+              and last_exp_in_loop is not None
+          ):
+            loop_gain = max(0, last_exp_in_loop - first_exp_in_loop)
+            exp_offset += loop_gain
+          first_exp_in_loop = None
+          last_exp_in_loop = None
+          continue
+        else:
+          self.status_changed.emit(f"影片結束: {video_name}", False)
+          break
+
+      try:
+        parsed = exp_core.parse_frame(frame)
+        if parsed:
+          exp_val, pct, raw_str, dt_ms = parsed[:4]
+          if first_exp_in_loop is None:
+            first_exp_in_loop = exp_val
+          last_exp_in_loop = exp_val
+
+          simulated_exp = exp_val + exp_offset
+          self.frame_parsed.emit(
+              simulated_exp, pct if pct is not None else -1.0, dt_ms
+          )
+          self.status_changed.emit(f"模擬影片中: {video_name}", True)
+        else:
+          self.status_changed.emit(f"搜尋經驗條中 ({video_name})...", False)
+      except Exception as e:
+        self.status_changed.emit(f"解析異常: {e}", False)
+
+      current_frame_idx += frame_step
+      if current_frame_idx >= total_frames:
+        if self.loop:
+          current_frame_idx = 0
+          if (
+              self.continuous_exp
+              and first_exp_in_loop is not None
+              and last_exp_in_loop is not None
+          ):
+            loop_gain = max(0, last_exp_in_loop - first_exp_in_loop)
+            exp_offset += loop_gain
+          first_exp_in_loop = None
+          last_exp_in_loop = None
+        else:
+          break
+
+      sleep_time = max(0.01, 1.0 / self.playback_speed)
+      chunk = 0.05
+      elapsed = 0.0
+      while elapsed < sleep_time and self.running:
+        to_sleep = min(chunk, sleep_time - elapsed)
+        time.sleep(to_sleep)
+        elapsed += to_sleep
+
+    cap.release()
+
+  def stop(self):
+    self.running = False
+    self.wait(1000)
+
+  def toggle_pause(self) -> bool:
+    self.is_paused = not self.is_paused
+    return self.is_paused
+
+  def set_playback_speed(self, speed: float):
+    self.playback_speed = max(0.1, speed)
 
 
 class MetricRow(QFrame):
@@ -614,6 +758,229 @@ class SmoothButton(QPushButton):
     painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
 
+def get_visible_windows() -> List[Tuple[int, str]]:
+  """Enumerates visible top-level desktop windows."""
+  if sys.platform != "win32":
+    return []
+
+  user32 = ctypes.windll.user32
+  h_desk = user32.OpenDesktopW("Default", 0, False, 0x01FF)
+  if h_desk:
+    user32.SetThreadDesktop(h_desk)
+
+  results = []
+
+  def enum_cb(hwnd, lparam):
+    if not user32.IsWindowVisible(hwnd):
+      return True
+    length = user32.GetWindowTextLengthW(hwnd)
+    if length == 0:
+      return True
+    buf = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(hwnd, buf, length + 1)
+    title = buf.value.strip()
+    if not title:
+      return True
+    is_cloaked = ctypes.c_int(0)
+    try:
+      ctypes.windll.dwmapi.DwmGetWindowAttribute(
+          hwnd, 14, ctypes.byref(is_cloaked), ctypes.sizeof(is_cloaked)
+      )
+      if is_cloaked.value:
+        return True
+    except Exception:
+      pass
+    if title in [
+        "Program Manager",
+        "NVIDIA GeForce Overlay",
+        "Windows Input Experience",
+    ]:
+      return True
+    results.append((hwnd, title))
+    return True
+
+  WNDENUMPROC = ctypes.WINFUNCTYPE(
+      ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM
+  )
+  user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+  return results
+
+
+class SelectWindowDialog(QDialog):
+  """Dialog allowing user to choose any open window for live capture."""
+
+  def __init__(
+      self,
+      current_window: str = "MapleStory Worlds-Artale",
+      current_hwnd: Optional[int] = None,
+      parent=None,
+  ):
+    super().__init__(parent)
+    self.setWindowTitle("選擇擷取視窗")
+    self.setModal(True)
+    self.setMinimumSize(420, 360)
+    self.selected_title = current_window
+    self.selected_hwnd = current_hwnd
+
+    self.setStyleSheet(f"""
+        QDialog {{
+            background-color: #0e121c;
+            color: #f1f5f9;
+            font-family: {FONT_FAMILY};
+        }}
+        QLabel {{
+            color: #94a3b8;
+            font-size: 12px;
+            font-family: {FONT_FAMILY};
+        }}
+        QLineEdit {{
+            background-color: rgba(255, 255, 255, 0.08);
+            color: #f1f5f9;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-family: {FONT_FAMILY};
+        }}
+        QLineEdit:focus {{
+            border-color: #38bdf8;
+        }}
+        QListWidget {{
+            background-color: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            color: #e2e8f0;
+            padding: 4px;
+            font-size: 12px;
+            font-family: {FONT_FAMILY};
+        }}
+        QListWidget::item {{
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin: 1px 0px;
+        }}
+        QListWidget::item:selected {{
+            background-color: rgba(56, 189, 248, 0.25);
+            color: #ffffff;
+            font-weight: 600;
+        }}
+        QPushButton {{
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-family: {FONT_FAMILY};
+        }}
+        QPushButton:hover {{
+            background-color: rgba(255, 255, 255, 0.18);
+        }}
+    """)
+
+    layout = QVBoxLayout(self)
+    layout.setContentsMargins(18, 16, 18, 16)
+    layout.setSpacing(10)
+
+    lbl_title = QLabel("選擇擷取視窗 (Select Window)")
+    lbl_title.setStyleSheet("color: #f1f5f9; font-weight: 700; font-size: 14px;")
+    layout.addWidget(lbl_title)
+
+    lbl_hint = QLabel("請選擇欲即時追蹤經驗值的視窗（支援 Artale 遊戲、影片播放器等）：")
+    lbl_hint.setWordWrap(True)
+    layout.addWidget(lbl_hint)
+
+    self.txt_filter = QLineEdit(self)
+    self.txt_filter.setPlaceholderText("🔍 搜尋視窗名稱...")
+    self.txt_filter.textChanged.connect(self._filter_list)
+    layout.addWidget(self.txt_filter)
+
+    self.list_widget = QListWidget(self)
+    self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+    self.list_widget.itemDoubleClicked.connect(self._on_confirm)
+    layout.addWidget(self.list_widget)
+
+    self._populate_windows()
+
+    btn_bar = QHBoxLayout()
+    btn_bar.setSpacing(8)
+
+    btn_refresh = QPushButton("↺ 重新整理", self)
+    btn_refresh.setToolTip("重新整理目前開啟的所有視窗")
+    btn_refresh.clicked.connect(self._populate_windows)
+
+    btn_default = QPushButton("預設遊戲視窗", self)
+    btn_default.setToolTip("重置為預設的 'MapleStory Worlds-Artale'")
+    btn_default.clicked.connect(self._select_default)
+
+    btn_cancel = QPushButton("取消", self)
+    btn_cancel.clicked.connect(self.reject)
+
+    btn_save = QPushButton("確認選取", self)
+    btn_save.setStyleSheet(
+        "background-color: #10b981; color: #ffffff; font-weight: bold; border: 1px solid #059669;"
+    )
+    btn_save.clicked.connect(self._on_confirm)
+
+    btn_bar.addWidget(btn_refresh)
+    btn_bar.addWidget(btn_default)
+    btn_bar.addStretch()
+    btn_bar.addWidget(btn_cancel)
+    btn_bar.addWidget(btn_save)
+    layout.addLayout(btn_bar)
+
+  def _populate_windows(self):
+    self.list_widget.clear()
+
+    # 1. Default Artale item
+    def_item = QListWidgetItem("MapleStory Worlds-Artale (預設遊戲視窗)", self.list_widget)
+    def_item.setData(Qt.ItemDataRole.UserRole, ("MapleStory Worlds-Artale", None))
+
+    # 2. Enumerate visible windows
+    open_wins = get_visible_windows()
+    for hwnd, title in open_wins:
+      if "ARTALE EXP" in title or "Artale EXP Calculator" in title:
+        continue
+      if title == "MapleStory Worlds-Artale":
+        continue
+      it = QListWidgetItem(f"{title} (HWND: {hwnd})", self.list_widget)
+      it.setData(Qt.ItemDataRole.UserRole, (title, hwnd))
+
+    # Re-select matching
+    found = False
+    for i in range(self.list_widget.count()):
+      it = self.list_widget.item(i)
+      t, h = it.data(Qt.ItemDataRole.UserRole)
+      if (self.selected_hwnd and h == self.selected_hwnd) or (t == self.selected_title):
+        self.list_widget.setCurrentItem(it)
+        found = True
+        break
+    if not found and self.list_widget.count() > 0:
+      self.list_widget.setCurrentRow(0)
+
+  def _filter_list(self, query: str):
+    query = query.strip().lower()
+    for i in range(self.list_widget.count()):
+      it = self.list_widget.item(i)
+      it.setHidden(query not in it.text().lower())
+
+  def _select_default(self):
+    if self.list_widget.count() > 0:
+      self.list_widget.setCurrentRow(0)
+    self._on_confirm()
+
+  def _on_confirm(self):
+    cur = self.list_widget.currentItem()
+    if cur:
+      t, h = cur.data(Qt.ItemDataRole.UserRole)
+      self.selected_title = t
+      self.selected_hwnd = h
+    self.accept()
+
+  def get_selected(self) -> Tuple[str, Optional[int]]:
+    return self.selected_title, self.selected_hwnd
+
+
 class GameModeSettingsDialog(QDialog):
   """Dialog allowing the user to select and drag-reorder metrics for Game Mode."""
 
@@ -817,6 +1184,12 @@ class ArtaleExpOverlay(QWidget):
     self.ui_scale = 1.0
     self.opacity_val = 0.95
     self.drag_position = QPoint()
+    self.target_window_name: str = "MapleStory Worlds-Artale"
+    self.target_hwnd: Optional[int] = None
+    self.video_worker: Optional[VideoSimulationWorker] = None
+    self.is_simulating: bool = False
+    self.sim_speed: float = 1.0
+    self.sim_video_path: Optional[str] = None
 
     self._init_window_flags()
     self._init_ui()
@@ -835,7 +1208,7 @@ class ArtaleExpOverlay(QWidget):
     self.hotkey_worker.start()
 
     # Capture worker
-    self.capture_worker = CaptureWorker()
+    self.capture_worker = CaptureWorker(self.target_window_name, self.target_hwnd)
     self.capture_worker.frame_parsed.connect(self._on_exp_sample)
     self.capture_worker.status_changed.connect(self._on_status_changed)
     self.capture_worker.start()
@@ -1272,10 +1645,142 @@ class ArtaleExpOverlay(QWidget):
     action_settings.triggered.connect(self._open_game_mode_settings)
 
     menu.addSeparator()
+
+    win_label = (
+        self.target_window_name
+        if len(self.target_window_name) <= 20
+        else self.target_window_name[:18] + "..."
+    )
+    act_select_win = menu.addAction(f"🎯 選擇擷取視窗... ({win_label})")
+    act_select_win.triggered.connect(self._open_select_window_dialog)
+
+    if self.is_simulating:
+      is_paused = self.video_worker.is_paused if self.video_worker else False
+      pause_text = "▶ 繼續影片模擬" if is_paused else "⏸ 暫停影片模擬"
+      act_sim_pause = menu.addAction(pause_text)
+      act_sim_pause.triggered.connect(self.toggle_simulation_pause)
+
+      speed_menu = menu.addMenu(f"⚡ 模擬速度 ({self.sim_speed:g}x)")
+      for sp in [1.0, 2.0, 5.0, 10.0]:
+        label = f"{sp:g}x (正常速度)" if sp == 1.0 else f"{sp:g}x"
+        act_sp = speed_menu.addAction(label)
+        act_sp.setCheckable(True)
+        act_sp.setChecked(abs(self.sim_speed - sp) < 0.01)
+        act_sp.triggered.connect(
+            lambda checked, s=sp: self.set_simulation_speed(s)
+        )
+
+      act_stop_sim = menu.addAction("⏹ 停止影片模擬 (切回視窗擷取)")
+      act_stop_sim.triggered.connect(self.stop_video_simulation)
+
+      act_load_other = menu.addAction("📁 載入其他模擬影片...")
+      act_load_other.triggered.connect(self._open_video_file_dialog)
+    else:
+      act_load_sim = menu.addAction("📁 載入模擬影片 (Simulate from Video)...")
+      act_load_sim.triggered.connect(self._open_video_file_dialog)
+
+    menu.addSeparator()
     action_close = menu.addAction("✕ 關閉程式")
     action_close.triggered.connect(self.close)
 
     menu.exec(event.globalPos())
+
+  def set_target_window(self, title: str, hwnd: Optional[int] = None):
+    """Switches the capture target window."""
+    if self.is_simulating:
+      self.stop_video_simulation()
+    self.target_window_name = title
+    self.target_hwnd = hwnd
+    if hasattr(self, "capture_worker") and self.capture_worker.isRunning():
+      self.capture_worker.stop()
+    self.capture_worker = CaptureWorker(self.target_window_name, self.target_hwnd)
+    self.capture_worker.frame_parsed.connect(self._on_exp_sample)
+    self.capture_worker.status_changed.connect(self._on_status_changed)
+    self.capture_worker.start()
+    self._save_config()
+
+  def _open_select_window_dialog(self):
+    """Opens dialog to choose any open window for live capture."""
+    dlg = SelectWindowDialog(self.target_window_name, self.target_hwnd, self)
+    if dlg.exec() == QDialog.DialogCode.Accepted:
+      title, hwnd = dlg.get_selected()
+      self.set_target_window(title, hwnd)
+
+  def start_video_simulation(self, video_path: str, speed: float = 1.0) -> bool:
+    """Switches capture mode from live window to video simulation."""
+    if not os.path.isfile(video_path):
+      return False
+    if hasattr(self, "capture_worker") and self.capture_worker.isRunning():
+      self.capture_worker.stop()
+    if self.video_worker and self.video_worker.isRunning():
+      self.video_worker.stop()
+
+    self.is_simulating = True
+    self.sim_speed = max(0.1, speed)
+    self.sim_video_path = video_path
+
+    self.video_worker = VideoSimulationWorker(
+        video_path,
+        playback_speed=self.sim_speed,
+        loop=True,
+        continuous_exp=True,
+    )
+    self.video_worker.frame_parsed.connect(self._on_exp_sample)
+    self.video_worker.status_changed.connect(self._on_status_changed)
+    self.video_worker.start()
+    self._save_config()
+    return True
+
+  def stop_video_simulation(self):
+    """Stops video simulation and returns to live window capture."""
+    if self.video_worker and self.video_worker.isRunning():
+      self.video_worker.stop()
+    self.video_worker = None
+    self.is_simulating = False
+    self.sim_video_path = None
+
+    if hasattr(self, "capture_worker") and not self.capture_worker.isRunning():
+      self.capture_worker = CaptureWorker(
+          self.target_window_name, self.target_hwnd
+      )
+      self.capture_worker.frame_parsed.connect(self._on_exp_sample)
+      self.capture_worker.status_changed.connect(self._on_status_changed)
+      self.capture_worker.start()
+    self._save_config()
+
+  def toggle_simulation_pause(self) -> bool:
+    if self.video_worker and self.video_worker.isRunning():
+      return self.video_worker.toggle_pause()
+    return False
+
+  def set_simulation_speed(self, speed: float):
+    self.sim_speed = max(0.1, speed)
+    if self.video_worker and self.video_worker.isRunning():
+      self.video_worker.set_playback_speed(self.sim_speed)
+
+  def _open_video_file_dialog(self):
+    """Opens file picker to load a simulation video."""
+    initial_dir = ""
+    if self.sim_video_path and os.path.exists(
+        os.path.dirname(self.sim_video_path)
+    ):
+      initial_dir = os.path.dirname(self.sim_video_path)
+    else:
+      videos_dir = os.path.expanduser(r"~\Videos")
+      discord_clips = os.path.join(videos_dir, "Discord Clips")
+      if os.path.isdir(discord_clips):
+        initial_dir = discord_clips
+      elif os.path.isdir(videos_dir):
+        initial_dir = videos_dir
+
+    file_path, _ = QFileDialog.getOpenFileName(
+        self,
+        "選擇 MapleStory / Artale 遊戲錄影影片",
+        initial_dir,
+        "影片檔案 (*.mp4 *.mkv *.avi *.mov);;所有檔案 (*.*)",
+    )
+    if file_path:
+      self.start_video_simulation(file_path, self.sim_speed)
 
   def _apply_game_mode(self):
     """Applies Full, Game, or Simple mode with custom ordering."""
@@ -1862,6 +2367,12 @@ class ArtaleExpOverlay(QWidget):
           )
           self.ui_scale = cfg.get("ui_scale", 1.0)
           self.opacity_val = cfg.get("opacity", 0.95)
+          self.target_window_name = cfg.get(
+              "target_window_name", "MapleStory Worlds-Artale"
+          )
+          self.target_hwnd = cfg.get("target_hwnd", None)
+          self.sim_video_path = cfg.get("sim_video_path", None)
+          self.sim_speed = cfg.get("sim_speed", 1.0)
           self.setWindowOpacity(self.opacity_val)
           self.slider_scale.setValue(int(round(self.ui_scale * 100)))
           transparency_pct = int(round((1.0 - self.opacity_val) * 100))
@@ -1892,6 +2403,12 @@ class ArtaleExpOverlay(QWidget):
           "game_mode_items": self.game_mode_items,
           "ui_scale": getattr(self, "ui_scale", 1.0),
           "opacity": getattr(self, "opacity_val", 0.95),
+          "target_window_name": getattr(
+              self, "target_window_name", "MapleStory Worlds-Artale"
+          ),
+          "target_hwnd": getattr(self, "target_hwnd", None),
+          "sim_video_path": getattr(self, "sim_video_path", None),
+          "sim_speed": getattr(self, "sim_speed", 1.0),
       }
       with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
@@ -1904,10 +2421,20 @@ class ArtaleExpOverlay(QWidget):
       self.hotkey_worker.stop()
     if hasattr(self, "capture_worker") and self.capture_worker.isRunning():
       self.capture_worker.stop()
+    if (
+        hasattr(self, "video_worker")
+        and self.video_worker
+        and self.video_worker.isRunning()
+    ):
+      self.video_worker.stop()
     event.accept()
 
 
-def main():
+def main(
+    video_path: Optional[str] = None,
+    speed: float = 1.0,
+    window_name: Optional[str] = None,
+):
   try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
   except Exception:
@@ -1931,6 +2458,15 @@ def main():
   app.setFont(font)
 
   overlay = ArtaleExpOverlay()
+  if window_name:
+    overlay.set_target_window(window_name)
+
+  if video_path:
+    if video_path == "prompt":
+      QTimer.singleShot(100, overlay._open_video_file_dialog)
+    else:
+      overlay.start_video_simulation(video_path, speed=speed)
+
   overlay.show()
   sys.exit(app.exec())
 

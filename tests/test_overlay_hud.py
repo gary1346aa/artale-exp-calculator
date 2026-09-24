@@ -13,6 +13,8 @@ from overlay_hud import (
     DEFAULT_GAME_MODE_KEYS,
     ArtaleExpOverlay,
     GameModeSettingsDialog,
+    SelectWindowDialog,
+    VideoSimulationWorker,
     get_accum_exp_color,
 )
 
@@ -348,6 +350,52 @@ class TestOverlayHud(unittest.TestCase):
     self.assertTrue(self.overlay.lbl_title.isVisible())
     self.assertFalse(self.overlay.simple_widget.isVisible())
     self.assertFalse(self.overlay.outer_card.is_pill)
+
+  def test_select_window_dialog_and_targeting(self):
+    """Verify SelectWindowDialog and window targeting behavior."""
+    dlg = SelectWindowDialog("MapleStory Worlds-Artale", None)
+    title, hwnd = dlg.get_selected()
+    self.assertEqual(title, "MapleStory Worlds-Artale")
+    self.assertIsNone(hwnd)
+
+    # Test filtering
+    dlg._filter_list("artale")
+    self.assertFalse(dlg.list_widget.item(0).isHidden())
+
+    # Test setting target window on overlay
+    self.overlay.set_target_window("VLC media player")
+    self.assertEqual(self.overlay.target_window_name, "VLC media player")
+    self.assertEqual(self.overlay.capture_worker.target_window, "VLC media player")
+
+  def test_video_simulation_lifecycle(self):
+    """Verify video simulation worker startup, speed changes, and shutdown."""
+    # Invalid file returns False
+    self.assertFalse(self.overlay.start_video_simulation("non_existent_file.mp4"))
+
+    # Test with sample video if present
+    sample_clip = r"C:\Users\gary1\Videos\Discord Clips\MapleStory_Worlds_0d11c233-b226-4d1d-952b-0c741acf61c2.mp4"
+    if os.path.isfile(sample_clip):
+      ok = self.overlay.start_video_simulation(sample_clip, speed=2.0)
+      self.assertTrue(ok)
+      self.assertTrue(self.overlay.is_simulating)
+      self.assertIsNotNone(self.overlay.video_worker)
+      self.assertEqual(self.overlay.sim_speed, 2.0)
+
+      # Test pause toggle
+      is_paused = self.overlay.toggle_simulation_pause()
+      self.assertTrue(is_paused)
+      is_paused = self.overlay.toggle_simulation_pause()
+      self.assertFalse(is_paused)
+
+      # Test speed change
+      self.overlay.set_simulation_speed(5.0)
+      self.assertEqual(self.overlay.sim_speed, 5.0)
+      self.assertEqual(self.overlay.video_worker.playback_speed, 5.0)
+
+      # Stop simulation
+      self.overlay.stop_video_simulation()
+      self.assertFalse(self.overlay.is_simulating)
+      self.assertIsNone(self.overlay.video_worker)
 
 
 if __name__ == "__main__":
