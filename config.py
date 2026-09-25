@@ -5,7 +5,7 @@ Complies with the Google Python Style Guide.
 
 import os
 import sys
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Developer mode flag: active if ARTALE_DEV=1 or --dev is passed in sys.argv.
 IS_DEV: bool = os.environ.get("ARTALE_DEV", "0") == "1" or "--dev" in sys.argv
@@ -126,5 +126,27 @@ def get_rate_color(val: Optional[Union[int, float]]) -> str:
 
 # Backward compatibility alias
 get_accum_exp_color = get_rate_color
+
+
+def get_status_indicator_dot(
+    is_locked: bool, state: Any
+) -> Tuple[str, str, str]:
+  """Computes (char, color, tooltip) for the status indicator dot.
+
+  States:
+    1. Yellow hollow ('○', #eab308): exp number not captured correctly (window minimized or not found).
+    2. Green hollow ('○', #4ade80): not measuring (reset or just launched), window & exp captured correctly.
+    3. Green solid ('●', #4ade80): measuring.
+    4. Yellow solid ('●', #eab308): pause.
+  """
+  state_val = state.value if hasattr(state, "value") else str(state)
+  if not is_locked:
+    return "○", "#eab308", "未鎖定經驗條 (視窗最小化或尚未找到遊戲視窗)"
+  if state_val == "RUNNING":
+    return "●", "#4ade80", "測量中 (視窗與經驗值正常擷取)"
+  elif state_val == "PAUSED":
+    return "●", "#eab308", "測量暫停中"
+  else:  # IDLE
+    return "○", "#4ade80", "已鎖定視窗與經驗值 (尚未開始測量)"
 
 

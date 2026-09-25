@@ -13,6 +13,7 @@ from config import (
     SIMPLE_METRIC_CONFIG,
     format_chinese_exp,
     get_accum_exp_color,
+    get_status_indicator_dot,
 )
 from core.capture import CaptureWorker, find_window_by_title_safe
 from core.metrics import ExpMetricsEngine, MeasurementState
@@ -38,6 +39,7 @@ __all__ = [
     "SIMPLE_METRIC_CONFIG",
     "format_chinese_exp",
     "get_accum_exp_color",
+    "get_status_indicator_dot",
     "CaptureWorker",
     "find_window_by_title_safe",
     "ExpMetricsEngine",

@@ -12,8 +12,9 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 
 class HotkeyWorker(QThread):
-  """Global Windows hotkey listener for F7 (Start/Pause), F8 (Reset), F9 (Game Mode)."""
+  """Global Windows hotkey listener for F6 (Auto Start), F7 (Start/Pause), F8 (Reset), F9 (Game Mode)."""
 
+  f6_pressed = pyqtSignal()
   f7_pressed = pyqtSignal()
   f8_pressed = pyqtSignal()
   f9_pressed = pyqtSignal()
@@ -33,14 +34,17 @@ class HotkeyWorker(QThread):
     self.tid = kernel32.GetCurrentThreadId()
 
     mod_norepeat = 0x4000
+    vk_f6 = 0x75
     vk_f7 = 0x76
     vk_f8 = 0x77
     vk_f9 = 0x78
 
+    hotkey_id_f6 = 1006
     hotkey_id_f7 = 1007
     hotkey_id_f8 = 1008
     hotkey_id_f9 = 1009
 
+    user32.RegisterHotKey(0, hotkey_id_f6, mod_norepeat, vk_f6)
     user32.RegisterHotKey(0, hotkey_id_f7, mod_norepeat, vk_f7)
     user32.RegisterHotKey(0, hotkey_id_f8, mod_norepeat, vk_f8)
     user32.RegisterHotKey(0, hotkey_id_f9, mod_norepeat, vk_f9)
@@ -50,7 +54,9 @@ class HotkeyWorker(QThread):
       if user32.PeekMessageW(ctypes.byref(msg), 0, 0, 0, 1):  # PM_REMOVE
         if msg.message == 0x0312:  # WM_HOTKEY
           hk_id = msg.wParam
-          if hk_id == hotkey_id_f7:
+          if hk_id == hotkey_id_f6:
+            self.f6_pressed.emit()
+          elif hk_id == hotkey_id_f7:
             self.f7_pressed.emit()
           elif hk_id == hotkey_id_f8:
             self.f8_pressed.emit()
@@ -63,6 +69,7 @@ class HotkeyWorker(QThread):
       else:
         time.sleep(0.02)
 
+    user32.UnregisterHotKey(0, hotkey_id_f6)
     user32.UnregisterHotKey(0, hotkey_id_f7)
     user32.UnregisterHotKey(0, hotkey_id_f8)
     user32.UnregisterHotKey(0, hotkey_id_f9)

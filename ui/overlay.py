@@ -54,6 +54,7 @@ from config import (
     SIMPLE_METRIC_CONFIG,
     format_chinese_exp,
     get_accum_exp_color,
+    get_status_indicator_dot,
 )
 from core.capture import CaptureWorker, find_window_by_title_safe
 from core.metrics import ExpMetricsEngine, MeasurementState
@@ -97,6 +98,7 @@ class ArtaleExpOverlay(QWidget):
     self.is_simulating: bool = False
     self.sim_speed: float = 1.0
     self.sim_video_path: Optional[str] = None
+    self._is_locked: bool = False
 
     self._init_window_flags()
     self._init_ui()
@@ -121,8 +123,9 @@ class ArtaleExpOverlay(QWidget):
     self.ui_timer.timeout.connect(self._refresh_ui)
     self.ui_timer.start(1000)
 
-    # Global hotkey listener (F7, F8, F9)
+    # Global hotkey listener (F6, F7, F8, F9)
     self.hotkey_worker = HotkeyWorker()
+    self.hotkey_worker.f6_pressed.connect(self.on_f6)
     self.hotkey_worker.f7_pressed.connect(self.on_f7)
     self.hotkey_worker.f8_pressed.connect(self.on_f8)
     self.hotkey_worker.f9_pressed.connect(self.on_f9)
@@ -252,7 +255,7 @@ class ArtaleExpOverlay(QWidget):
 
     self.btn_auto_start = SmoothButton("⚡ 自動開始 [OFF]", self)
     self.btn_auto_start.setToolTip(
-        "自動開始：開啟時，偵測到經驗值增加即自動開始計時 (F7暫停或F8重置時自動關閉一次)"
+        "自動開始 [F6]：開啟時，偵測到經驗值增加即自動開始計時 (F7暫停或F8重置時自動關閉一次)"
     )
     self.btn_auto_start.setFixedHeight(24)
     self._update_auto_start_button_style(False)
@@ -394,7 +397,9 @@ class ArtaleExpOverlay(QWidget):
     self.slider_panel.hide()
 
     # 6. Hotkey Guidance Footer
-    self.lbl_hotkey_hint = QLabel("[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式")
+    self.lbl_hotkey_hint = QLabel(
+        "[F6] 自動開始  [F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
+    )
     self.lbl_hotkey_hint.setStyleSheet(f"""
             QLabel {{
                 color: #64748b;
@@ -481,6 +486,10 @@ class ArtaleExpOverlay(QWidget):
     enabled = self.engine.toggle_auto_start()
     self._update_auto_start_button_style(enabled)
     self._refresh_ui()
+
+  def on_f6(self):
+    """F6 Hotkey handler: Toggle auto start."""
+    self._toggle_auto_start()
 
   def on_f7(self):
     """F7 Hotkey handler: Start / Stop (pause) toggle."""
@@ -802,16 +811,7 @@ class ArtaleExpOverlay(QWidget):
       self.simple_layout.setSpacing(0)
 
       # Status dot with compact, centered sizing
-      dot_s = max(8, int(10 * self.ui_scale))
-      dot_box = max(10, int(12 * self.ui_scale))
-      self.simple_status_dot.setFixedSize(dot_box, dot_box)
-      self.simple_status_dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-      dot_char = "●" if getattr(self, "_is_locked", False) else "○"
-      dot_color = "#4ade80" if getattr(self, "_is_locked", False) else "#eab308"
-      self.simple_status_dot.setText(dot_char)
-      self.simple_status_dot.setStyleSheet(
-          f"color: {dot_color}; font-size: {dot_s}px; background: transparent;"
-      )
+      self._update_status_indicator()
       self.simple_layout.addWidget(self.simple_status_dot)
       self.simple_status_dot.show()
 
@@ -873,7 +873,9 @@ class ArtaleExpOverlay(QWidget):
         self.lbl_title.hide()
         self.btn_f9.setText("⊟")
         self.btn_f9.setToolTip("切換至極簡模式 [F9]")
-        self.lbl_hotkey_hint.setText("[F7] 暫停  [F8] 重置  [F9] 極簡模式")
+        self.lbl_hotkey_hint.setText(
+            "[F6] 自動開始  [F7] 暫停  [F8] 重置  [F9] 極簡模式"
+        )
 
         for key in self.game_mode_items:
           if key in self.metric_widgets:
@@ -888,7 +890,7 @@ class ArtaleExpOverlay(QWidget):
         self.btn_f9.setText("◫")
         self.btn_f9.setToolTip("切換遊戲模式 [F9]")
         self.lbl_hotkey_hint.setText(
-            "[F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
+            "[F6] 自動開始  [F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
         )
 
         for key in self.game_mode_order:
@@ -1135,11 +1137,7 @@ class ArtaleExpOverlay(QWidget):
       btn.setFont(btn_font)
 
     # 6. Sub-header (status_dot, lbl_status, btn_auto_start)
-    dot_size = max(10, int(13 * s))
-    self.status_dot.setStyleSheet(
-        f"color: {'#4ade80' if getattr(self, '_is_locked', False) else '#eab308'};"
-        f" font-size: {dot_size}px; background: transparent;"
-    )
+    self._update_status_indicator()
 
     status_size = max(9, int(11 * s))
     self.lbl_status.setStyleSheet(f"""
@@ -1215,15 +1213,7 @@ class ArtaleExpOverlay(QWidget):
         if isinstance(w, (SimpleMetricItem, SimpleProgressBarItem)):
           w.update_scale(s)
     if hasattr(self, "simple_status_dot"):
-      dot_s = max(8, int(10 * s))
-      dot_box = max(10, int(12 * s))
-      self.simple_status_dot.setFixedSize(dot_box, dot_box)
-      dot_char = "●" if getattr(self, "_is_locked", False) else "○"
-      dot_color = "#4ade80" if getattr(self, "_is_locked", False) else "#eab308"
-      self.simple_status_dot.setText(dot_char)
-      self.simple_status_dot.setStyleSheet(
-          f"color: {dot_color}; font-size: {dot_s}px; background: transparent;"
-      )
+      self._update_status_indicator()
 
     if self.current_mode == "simple":
       self._apply_game_mode()
@@ -1234,7 +1224,10 @@ class ArtaleExpOverlay(QWidget):
     self._save_config()
 
   def keyPressEvent(self, event):
-    if event.key() == Qt.Key.Key_F7:
+    if event.key() == Qt.Key.Key_F6:
+      self.on_f6()
+      event.accept()
+    elif event.key() == Qt.Key.Key_F7:
       self.on_f7()
       event.accept()
     elif event.key() == Qt.Key.Key_F8:
@@ -1251,34 +1244,48 @@ class ArtaleExpOverlay(QWidget):
     self.engine.add_sample(exp_val, pct_val)
     self._refresh_ui()
 
-  def _on_status_changed(self, msg: str, is_locked: bool):
-    self._is_locked = is_locked
-    self.lbl_status.setText(msg)
+  def _update_status_indicator(self):
+    """Updates status indicator dots according to capture lock & measurement state.
+
+    States:
+      1. Green solid ('●', #4ade80): measuring.
+      2. Yellow solid ('●', #eab308): pause.
+      3. Green hollow ('○', #4ade80): not measuring (reset or just launched), window & exp captured.
+      4. Yellow hollow ('○', #eab308): exp number not captured correctly (window minimized or not found).
+    """
+    char, color, tooltip = get_status_indicator_dot(
+        self._is_locked, self.engine.state
+    )
+
     dot_size = max(10, int(13 * self.ui_scale))
-    if is_locked:
-      self.status_dot.setText("●")
-      self.status_dot.setStyleSheet(
-          f"color: #4ade80; font-size: {dot_size}px; background: transparent;"
-      )
-    else:
-      self.status_dot.setText("○")
-      self.status_dot.setStyleSheet(
-          f"color: #eab308; font-size: {dot_size}px; background: transparent;"
-      )
+    self.status_dot.setText(char)
+    self.status_dot.setStyleSheet(
+        f"color: {color}; font-size: {dot_size}px; background: transparent;"
+    )
+    self.status_dot.setToolTip(tooltip)
+
     if hasattr(self, "simple_status_dot"):
       dot_s = max(8, int(10 * self.ui_scale))
       dot_box = max(10, int(12 * self.ui_scale))
       self.simple_status_dot.setFixedSize(dot_box, dot_box)
-      dot_char = "●" if is_locked else "○"
-      dot_color = "#4ade80" if is_locked else "#eab308"
-      self.simple_status_dot.setText(dot_char)
+      self.simple_status_dot.setText(char)
       self.simple_status_dot.setStyleSheet(
-          f"color: {dot_color}; font-size: {dot_s}px; background: transparent;"
+          f"color: {color}; font-size: {dot_s}px; background: transparent;"
       )
-      self.simple_status_dot.setToolTip(msg)
+      status_text = self.lbl_status.text() if hasattr(self, "lbl_status") else ""
+      tip = f"{tooltip} ({status_text})" if status_text else tooltip
+      self.simple_status_dot.setToolTip(tip)
+
+  def _on_status_changed(self, msg: str, is_locked: bool):
+    self._is_locked = is_locked
+    self.lbl_status.setText(msg)
+    self._update_status_indicator()
 
   def _refresh_ui(self):
     m = self.engine.get_metrics()
+
+    # Update status indicator dot (measuring, paused, locked-idle, unlocked)
+    self._update_status_indicator()
 
     # Update auto-start button appearance with engine state
     self._update_auto_start_button_style(self.engine.auto_start_enabled)
