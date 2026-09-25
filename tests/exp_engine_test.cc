@@ -44,8 +44,7 @@ TEST(ExpEngineTest, ResizeGrayPreservesUniformValues) {
   std::vector<uint8_t> src(kSrcW * kSrcH, 128);
   std::vector<uint8_t> dst(kDstW * kDstH, 0);
 
-  ExpEngine::ResizeGray(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW,
-                        kDstH, kDstW);
+  ExpEngine::ResizeGray(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW, kDstH, kDstW);
 
   for (size_t i = 0; i < dst.size(); ++i) {
     EXPECT_EQ(dst[i], 128);
@@ -63,8 +62,7 @@ TEST(ExpEngineTest, ResizeGrayBilinearInterpolation) {
   std::vector<uint8_t> src = {0, 100, 0, 100};
   std::vector<uint8_t> dst(kDstW * kDstH, 0);
 
-  ExpEngine::ResizeGray(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW,
-                        kDstH, kDstW);
+  ExpEngine::ResizeGray(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW, kDstH, kDstW);
 
   // Center column should be roughly 50
   EXPECT_NEAR(dst[1], 50, 2);
@@ -72,9 +70,8 @@ TEST(ExpEngineTest, ResizeGrayBilinearInterpolation) {
   EXPECT_NEAR(dst[7], 50, 2);
 }
 
-void ResizeGrayScalarReference(const uint8_t* src, int src_w, int src_h,
-                               int src_stride, uint8_t* dst, int dst_w,
-                               int dst_h, int dst_stride) {
+void ResizeGrayScalarReference(const uint8_t* src, int src_w, int src_h, int src_stride,
+                               uint8_t* dst, int dst_w, int dst_h, int dst_stride) {
   constexpr int kShift = 11;
   constexpr int kScale = 1 << kShift;
 
@@ -98,10 +95,8 @@ void ResizeGrayScalarReference(const uint8_t* src, int src_w, int src_h,
     xofs[dx * 2 + 1] = std::min(sx + 1, src_w - 1);
     float c0 = 1.0f - fx;
     float c1 = fx;
-    ialpha[dx * 2 + 0] =
-        static_cast<int16_t>(TestCvRound(c0 * kScale));
-    ialpha[dx * 2 + 1] =
-        static_cast<int16_t>(TestCvRound(c1 * kScale));
+    ialpha[dx * 2 + 0] = static_cast<int16_t>(TestCvRound(c0 * kScale));
+    ialpha[dx * 2 + 1] = static_cast<int16_t>(TestCvRound(c1 * kScale));
   }
 
   std::vector<int> yofs(dst_h);
@@ -123,10 +118,8 @@ void ResizeGrayScalarReference(const uint8_t* src, int src_w, int src_h,
     yofs[dy] = sy;
     float c0 = 1.0f - fy;
     float c1 = fy;
-    ibeta[dy * 2 + 0] =
-        static_cast<int16_t>(TestCvRound(c0 * kScale));
-    ibeta[dy * 2 + 1] =
-        static_cast<int16_t>(TestCvRound(c1 * kScale));
+    ibeta[dy * 2 + 0] = static_cast<int16_t>(TestCvRound(c0 * kScale));
+    ibeta[dy * 2 + 1] = static_cast<int16_t>(TestCvRound(c1 * kScale));
   }
 
   for (int dy = 0; dy < dst_h; ++dy) {
@@ -145,13 +138,10 @@ void ResizeGrayScalarReference(const uint8_t* src, int src_w, int src_h,
       int32_t a0 = ialpha[dx * 2 + 0];
       int32_t a1 = ialpha[dx * 2 + 1];
 
-      int32_t s0 = static_cast<int32_t>(row0[sx0]) * a0 +
-                   static_cast<int32_t>(row0[sx1]) * a1;
-      int32_t s1 = static_cast<int32_t>(row1[sx0]) * a0 +
-                   static_cast<int32_t>(row1[sx1]) * a1;
+      int32_t s0 = static_cast<int32_t>(row0[sx0]) * a0 + static_cast<int32_t>(row0[sx1]) * a1;
+      int32_t s1 = static_cast<int32_t>(row1[sx0]) * a0 + static_cast<int32_t>(row1[sx1]) * a1;
 
-      int32_t val =
-          (((b0 * (s0 >> 4)) >> 16) + ((b1 * (s1 >> 4)) >> 16) + 2) >> 2;
+      int32_t val = (((b0 * (s0 >> 4)) >> 16) + ((b1 * (s1 >> 4)) >> 16) + 2) >> 2;
       dst_row[dx] = static_cast<uint8_t>(std::max(0, std::min(255, val)));
     }
   }
@@ -175,15 +165,13 @@ TEST(ExpEngineTest, SimdResizeMatchesScalarExactAcrossArbitrarySizes) {
     std::vector<uint8_t> dst_simd(sc.dw * sc.dh, 0);
     std::vector<uint8_t> dst_scalar(sc.dw * sc.dh, 0);
 
-    ExpEngine::ResizeGray(src.data(), sc.sw, sc.sh, sc.sw, dst_simd.data(),
-                          sc.dw, sc.dh, sc.dw);
-    ResizeGrayScalarReference(src.data(), sc.sw, sc.sh, sc.sw,
-                              dst_scalar.data(), sc.dw, sc.dh, sc.dw);
+    ExpEngine::ResizeGray(src.data(), sc.sw, sc.sh, sc.sw, dst_simd.data(), sc.dw, sc.dh, sc.dw);
+    ResizeGrayScalarReference(src.data(), sc.sw, sc.sh, sc.sw, dst_scalar.data(), sc.dw, sc.dh,
+                              sc.dw);
 
     for (int i = 0; i < sc.dw * sc.dh; ++i) {
-      ASSERT_EQ(dst_simd[i], dst_scalar[i])
-          << "Mismatch at index " << i << " in size " << sc.sw << "x" << sc.sh
-          << " -> " << sc.dw << "x" << sc.dh;
+      ASSERT_EQ(dst_simd[i], dst_scalar[i]) << "Mismatch at index " << i << " in size " << sc.sw
+                                            << "x" << sc.sh << " -> " << sc.dw << "x" << sc.dh;
     }
   }
 }
@@ -201,7 +189,8 @@ TEST(ExpEngineTest, MatchTemplateNccFindsExactMatch) {
   pt.zero_mean_fmap.resize(tw * th);
 
   double sum = 0.0;
-  for (int i = 0; i < tw * th; ++i) sum += proto_8.float_map[i];
+  for (int i = 0; i < tw * th; ++i)
+    sum += proto_8.float_map[i];
   float mean = static_cast<float>(sum / (tw * th));
   double sum_sq = 0.0;
   for (int i = 0; i < tw * th; ++i) {
@@ -220,8 +209,7 @@ TEST(ExpEngineTest, MatchTemplateNccFindsExactMatch) {
   // Embed prototype scaled by 255.0f into image at (kTargetX, kTargetY)
   for (int y = 0; y < th; ++y) {
     for (int x = 0; x < tw; ++x) {
-      image[(kTargetY + y) * kImgW + (kTargetX + x)] =
-          proto_8.float_map[y * tw + x] * 255.0f;
+      image[(kTargetY + y) * kImgW + (kTargetX + x)] = proto_8.float_map[y * tw + x] * 255.0f;
     }
   }
 
@@ -229,8 +217,7 @@ TEST(ExpEngineTest, MatchTemplateNccFindsExactMatch) {
   const int out_h = kImgH - th + 1;
   std::vector<float> resp(out_w * out_h, 0.0f);
 
-  ExpEngine::MatchTemplateNcc(image.data(), kImgW, kImgH, kImgW, pt,
-                              resp.data());
+  ExpEngine::MatchTemplateNcc(image.data(), kImgW, kImgH, kImgW, pt, resp.data());
 
   float best_score = -1.0f;
   int best_x = -1;
@@ -312,8 +299,8 @@ TEST(ExpEngineTest, ExtractGraySubRectExactConversion) {
   };
   std::vector<uint8_t> out_gray(kWidth * kHeight, 0);
 
-  Test_ExtractGraySubRect(bgr.data(), kWidth, kHeight, kWidth * 3, 3, 0, 0,
-                          kWidth, kHeight, out_gray.data());
+  Test_ExtractGraySubRect(bgr.data(), kWidth, kHeight, kWidth * 3, 3, 0, 0, kWidth, kHeight,
+                          out_gray.data());
 
   EXPECT_EQ(out_gray[0], 29);
   EXPECT_EQ(out_gray[1], 150);

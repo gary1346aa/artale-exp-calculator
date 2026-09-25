@@ -65,8 +65,8 @@ def main() -> None:
     config.IS_DEV = True
 
   if args.cli:
-    import live_tracker
-    live_tracker.main()
+    from dev.cli_tracker import run_cli_tracker
+    run_cli_tracker(window_name=args.window or config.DEFAULT_TARGET_WINDOW)
   else:
     from ui.overlay import main as run_overlay
     run_overlay(

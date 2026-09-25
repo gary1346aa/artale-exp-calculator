@@ -78,21 +78,18 @@ class PythonHarness {
     }
     if (!h_mod) return;
 
-    auto py_init = reinterpret_cast<Py_Initialize_t>(
-        GetProcAddress(h_mod, "Py_Initialize"));
-    auto py_run = reinterpret_cast<PyRun_SimpleString_t>(
-        GetProcAddress(h_mod, "PyRun_SimpleString"));
-    auto py_add_mod = reinterpret_cast<PyImport_AddModule_t>(
-        GetProcAddress(h_mod, "PyImport_AddModule"));
-    auto py_getattr = reinterpret_cast<PyObject_GetAttrString_t>(
-        GetProcAddress(h_mod, "PyObject_GetAttrString"));
-    py_call_no_args_ = reinterpret_cast<PyObject_CallNoArgs_t>(
-        GetProcAddress(h_mod, "PyObject_CallNoArgs"));
-    py_decref_ =
-        reinterpret_cast<Py_DecRef_t>(GetProcAddress(h_mod, "Py_DecRef"));
+    auto py_init = reinterpret_cast<Py_Initialize_t>(GetProcAddress(h_mod, "Py_Initialize"));
+    auto py_run =
+        reinterpret_cast<PyRun_SimpleString_t>(GetProcAddress(h_mod, "PyRun_SimpleString"));
+    auto py_add_mod =
+        reinterpret_cast<PyImport_AddModule_t>(GetProcAddress(h_mod, "PyImport_AddModule"));
+    auto py_getattr =
+        reinterpret_cast<PyObject_GetAttrString_t>(GetProcAddress(h_mod, "PyObject_GetAttrString"));
+    py_call_no_args_ =
+        reinterpret_cast<PyObject_CallNoArgs_t>(GetProcAddress(h_mod, "PyObject_CallNoArgs"));
+    py_decref_ = reinterpret_cast<Py_DecRef_t>(GetProcAddress(h_mod, "Py_DecRef"));
 
-    if (!py_init || !py_run || !py_add_mod || !py_getattr ||
-        !py_call_no_args_ || !py_decref_) {
+    if (!py_init || !py_run || !py_add_mod || !py_getattr || !py_call_no_args_ || !py_decref_) {
       return;
     }
 
@@ -179,8 +176,7 @@ std::vector<uint8_t> CreateSampleExpStrip(int width, int height) {
     for (int y = 0; y < found->height; ++y) {
       for (int x = 0; x < found->width; ++x) {
         float val = found->float_map[y * found->width + x];
-        strip[(char_y + y) * width + (cur_x + x)] =
-            static_cast<uint8_t>(std::round(val * 255.0f));
+        strip[(char_y + y) * width + (cur_x + x)] = static_cast<uint8_t>(std::round(val * 255.0f));
       }
     }
     cur_x += (ch == '.') ? 6 : (found->width + 2);
@@ -200,8 +196,7 @@ static void BM_BilinearResize_Cpp(benchmark::State& state) {
   std::vector<uint8_t> dst(kDstW * kDstH, 0);
 
   for (auto _ : state) {
-    ExpEngine::ResizeGray(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW,
-                          kDstH, kDstW);
+    ExpEngine::ResizeGray(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW, kDstH, kDstW);
     benchmark::DoNotOptimize(dst.data());
   }
 }
@@ -231,7 +226,8 @@ static void BM_MatchTemplateNcc_Cpp(benchmark::State& state) {
   pt.zero_mean_fmap.resize(pt.width * pt.height);
 
   double sum = 0.0;
-  for (int i = 0; i < pt.width * pt.height; ++i) sum += proto_8.float_map[i];
+  for (int i = 0; i < pt.width * pt.height; ++i)
+    sum += proto_8.float_map[i];
   float mean = static_cast<float>(sum / (pt.width * pt.height));
   double sum_sq = 0.0;
   for (int i = 0; i < pt.width * pt.height; ++i) {
@@ -249,8 +245,7 @@ static void BM_MatchTemplateNcc_Cpp(benchmark::State& state) {
   std::vector<float> resp(out_w * out_h, 0.0f);
 
   for (auto _ : state) {
-    ExpEngine::MatchTemplateNcc(image.data(), kImgW, kImgH, kImgW, pt,
-                                resp.data());
+    ExpEngine::MatchTemplateNcc(image.data(), kImgW, kImgH, kImgW, pt, resp.data());
     benchmark::DoNotOptimize(resp.data());
   }
 }
@@ -279,8 +274,7 @@ static void BM_SteadyStateParseCrop_Cpp(benchmark::State& state) {
   CropParseResult result;
 
   for (auto _ : state) {
-    bool ok =
-        engine.ParseCrop(strip.data(), kStripW, kStripH, kStripW, &result);
+    bool ok = engine.ParseCrop(strip.data(), kStripW, kStripH, kStripW, &result);
     benchmark::DoNotOptimize(ok);
     benchmark::DoNotOptimize(result);
   }

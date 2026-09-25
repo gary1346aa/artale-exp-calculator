@@ -52,30 +52,25 @@ typedef struct {
  * @return 0 on success (with out_result->success indicating match status),
  * non-zero on invalid arguments.
  */
-ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width,
-                                  int height, int stride, int bytes_per_px,
-                                  ExpResult* out_result);
+ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width, int height, int stride,
+                                  int bytes_per_px, ExpResult* out_result);
 
 /**
  * Diagnostic & Unit-testing APIs to verify individual engine components
  * against reference Python/OpenCV implementations.
  */
-ARTALE_API void Test_ExtractGraySubRect(const uint8_t* bgr_data, int width,
-                                        int height, int stride,
-                                        int bytes_per_px, int rx, int ry,
-                                        int rw, int rh, uint8_t* out_gray);
+ARTALE_API void Test_ExtractGraySubRect(const uint8_t* bgr_data, int width, int height, int stride,
+                                        int bytes_per_px, int rx, int ry, int rw, int rh,
+                                        uint8_t* out_gray);
 
-ARTALE_API void Test_ResizeGray(const uint8_t* src, int src_w, int src_h,
-                                int src_stride, uint8_t* dst, int dst_w,
-                                int dst_h, int dst_stride);
+ARTALE_API void Test_ResizeGray(const uint8_t* src, int src_w, int src_h, int src_stride,
+                                uint8_t* dst, int dst_w, int dst_h, int dst_stride);
 
-ARTALE_API void Test_ResizeGrayScalar(const uint8_t* src, int src_w, int src_h,
-                                      int src_stride, uint8_t* dst, int dst_w,
-                                      int dst_h, int dst_stride);
+ARTALE_API void Test_ResizeGrayScalar(const uint8_t* src, int src_w, int src_h, int src_stride,
+                                      uint8_t* dst, int dst_w, int dst_h, int dst_stride);
 
-ARTALE_API int Test_MatchTemplateNcc(const float* image, int img_w, int img_h,
-                                     int img_stride, char ch,
-                                     float* out_response);
+ARTALE_API int Test_MatchTemplateNcc(const float* image, int img_w, int img_h, int img_stride,
+                                     char ch, float* out_response);
 
 #ifdef __cplusplus
 }

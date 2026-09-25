@@ -14,8 +14,7 @@
 #include <utility>
 #include <vector>
 
-#if defined(__SSE2__) || defined(_M_X64) || defined(__x86_64__) || \
-    defined(__AVX2__)
+#if defined(__SSE2__) || defined(_M_X64) || defined(__x86_64__) || defined(__AVX2__)
 #include <immintrin.h>
 #elif defined(__ARM_NEON) || defined(__aarch64__)
 #include <arm_neon.h>
@@ -57,7 +56,9 @@ struct DpNode {
 
 }  // namespace
 
-ExpEngine::ExpEngine() { InitializeTemplates(); }
+ExpEngine::ExpEngine() {
+  InitializeTemplates();
+}
 
 void ExpEngine::InitializeTemplates() {
   prepared_templates_.clear();
@@ -97,9 +98,8 @@ void ExpEngine::InitializeTemplates() {
 // 2. Uses Banker's rounding (round-half-to-even) via CvRound/_mm_cvtss_si32.
 // 3. Vectorized with AVX2 dual-pipeline 16-pixel unrolling, using direct 16-bit
 //    word loads to eliminate serial VPINSRB dependency chains.
-void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h,
-                           int src_stride, uint8_t* dst, int dst_w, int dst_h,
-                           int dst_stride) {
+void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h, int src_stride, uint8_t* dst,
+                           int dst_w, int dst_h, int dst_stride) {
   if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return;
 
   constexpr int kShift = 11;
@@ -186,42 +186,35 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h,
         w1_1[k] = *reinterpret_cast<const uint16_t*>(row1 + pxofs1[k * 2]);
       }
 
-      __m256i r0_0 = _mm256_cvtepu8_epi16(
-          _mm_load_si128(reinterpret_cast<const __m128i*>(w0_0)));
-      __m256i r1_0 = _mm256_cvtepu8_epi16(
-          _mm_load_si128(reinterpret_cast<const __m128i*>(w1_0)));
-      __m256i r0_1 = _mm256_cvtepu8_epi16(
-          _mm_load_si128(reinterpret_cast<const __m128i*>(w0_1)));
-      __m256i r1_1 = _mm256_cvtepu8_epi16(
-          _mm_load_si128(reinterpret_cast<const __m128i*>(w1_1)));
+      __m256i r0_0 = _mm256_cvtepu8_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(w0_0)));
+      __m256i r1_0 = _mm256_cvtepu8_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(w1_0)));
+      __m256i r0_1 = _mm256_cvtepu8_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(w0_1)));
+      __m256i r1_1 = _mm256_cvtepu8_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(w1_1)));
 
-      __m256i alpha0 = _mm256_loadu_si256(
-          reinterpret_cast<const __m256i*>(ialpha.data() + dx * 2));
-      __m256i alpha1 = _mm256_loadu_si256(
-          reinterpret_cast<const __m256i*>(ialpha.data() + (dx + 8) * 2));
+      __m256i alpha0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ialpha.data() + dx * 2));
+      __m256i alpha1 =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ialpha.data() + (dx + 8) * 2));
 
       __m256i s0_0 = _mm256_srai_epi32(_mm256_madd_epi16(r0_0, alpha0), 4);
       __m256i s1_0 = _mm256_srai_epi32(_mm256_madd_epi16(r1_0, alpha0), 4);
       __m256i s0_1 = _mm256_srai_epi32(_mm256_madd_epi16(r0_1, alpha1), 4);
       __m256i s1_1 = _mm256_srai_epi32(_mm256_madd_epi16(r1_1, alpha1), 4);
 
-      __m128i s0_16_0 = _mm_packs_epi32(_mm256_castsi256_si128(s0_0),
-                                        _mm256_extracti128_si256(s0_0, 1));
-      __m128i s1_16_0 = _mm_packs_epi32(_mm256_castsi256_si128(s1_0),
-                                        _mm256_extracti128_si256(s1_0, 1));
-      __m128i s0_16_1 = _mm_packs_epi32(_mm256_castsi256_si128(s0_1),
-                                        _mm256_extracti128_si256(s0_1, 1));
-      __m128i s1_16_1 = _mm_packs_epi32(_mm256_castsi256_si128(s1_1),
-                                        _mm256_extracti128_si256(s1_1, 1));
+      __m128i s0_16_0 =
+          _mm_packs_epi32(_mm256_castsi256_si128(s0_0), _mm256_extracti128_si256(s0_0, 1));
+      __m128i s1_16_0 =
+          _mm_packs_epi32(_mm256_castsi256_si128(s1_0), _mm256_extracti128_si256(s1_0, 1));
+      __m128i s0_16_1 =
+          _mm_packs_epi32(_mm256_castsi256_si128(s0_1), _mm256_extracti128_si256(s0_1, 1));
+      __m128i s1_16_1 =
+          _mm_packs_epi32(_mm256_castsi256_si128(s1_1), _mm256_extracti128_si256(s1_1, 1));
 
       __m128i sum0 = _mm_srai_epi16(
-          _mm_add_epi16(_mm_add_epi16(_mm_mulhi_epi16(s0_16_0, vb0),
-                                      _mm_mulhi_epi16(s1_16_0, vb1)),
+          _mm_add_epi16(_mm_add_epi16(_mm_mulhi_epi16(s0_16_0, vb0), _mm_mulhi_epi16(s1_16_0, vb1)),
                         v2),
           2);
       __m128i sum1 = _mm_srai_epi16(
-          _mm_add_epi16(_mm_add_epi16(_mm_mulhi_epi16(s0_16_1, vb0),
-                                      _mm_mulhi_epi16(s1_16_1, vb1)),
+          _mm_add_epi16(_mm_add_epi16(_mm_mulhi_epi16(s0_16_1, vb0), _mm_mulhi_epi16(s1_16_1, vb1)),
                         v2),
           2);
 
@@ -238,25 +231,19 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h,
         w1[k] = *reinterpret_cast<const uint16_t*>(row1 + pxofs[k * 2]);
       }
 
-      __m256i r0 = _mm256_cvtepu8_epi16(
-          _mm_load_si128(reinterpret_cast<const __m128i*>(w0)));
-      __m256i r1 = _mm256_cvtepu8_epi16(
-          _mm_load_si128(reinterpret_cast<const __m128i*>(w1)));
+      __m256i r0 = _mm256_cvtepu8_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(w0)));
+      __m256i r1 = _mm256_cvtepu8_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(w1)));
 
-      __m256i alpha = _mm256_loadu_si256(
-          reinterpret_cast<const __m256i*>(ialpha.data() + dx * 2));
+      __m256i alpha = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ialpha.data() + dx * 2));
 
       __m256i s0 = _mm256_srai_epi32(_mm256_madd_epi16(r0, alpha), 4);
       __m256i s1 = _mm256_srai_epi32(_mm256_madd_epi16(r1, alpha), 4);
 
-      __m128i s0_16 = _mm_packs_epi32(_mm256_castsi256_si128(s0),
-                                      _mm256_extracti128_si256(s0, 1));
-      __m128i s1_16 = _mm_packs_epi32(_mm256_castsi256_si128(s1),
-                                      _mm256_extracti128_si256(s1, 1));
+      __m128i s0_16 = _mm_packs_epi32(_mm256_castsi256_si128(s0), _mm256_extracti128_si256(s0, 1));
+      __m128i s1_16 = _mm_packs_epi32(_mm256_castsi256_si128(s1), _mm256_extracti128_si256(s1, 1));
 
       __m128i sum = _mm_srai_epi16(
-          _mm_add_epi16(_mm_add_epi16(_mm_mulhi_epi16(s0_16, vb0),
-                                      _mm_mulhi_epi16(s1_16, vb1)),
+          _mm_add_epi16(_mm_add_epi16(_mm_mulhi_epi16(s0_16, vb0), _mm_mulhi_epi16(s1_16, vb1)),
                         v2),
           2);
 
@@ -297,19 +284,23 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h,
       int16x8_t a0_lo = vld1q_s16(ialpha.data() + dx * 2);
       int16x8_t a0_hi = vld1q_s16(ialpha.data() + dx * 2 + 8);
 
-      int32x4_t s0_0_lo = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r0_0_lo), vget_low_s16(a0_lo)),
-          vmull_s16(vget_high_s16(r0_0_lo), vget_high_s16(a0_lo))), 4);
-      int32x4_t s0_0_hi = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r0_0_hi), vget_low_s16(a0_hi)),
-          vmull_s16(vget_high_s16(r0_0_hi), vget_high_s16(a0_hi))), 4);
+      int32x4_t s0_0_lo =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r0_0_lo), vget_low_s16(a0_lo)),
+                                 vmull_s16(vget_high_s16(r0_0_lo), vget_high_s16(a0_lo))),
+                      4);
+      int32x4_t s0_0_hi =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r0_0_hi), vget_low_s16(a0_hi)),
+                                 vmull_s16(vget_high_s16(r0_0_hi), vget_high_s16(a0_hi))),
+                      4);
 
-      int32x4_t s1_0_lo = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r1_0_lo), vget_low_s16(a0_lo)),
-          vmull_s16(vget_high_s16(r1_0_lo), vget_high_s16(a0_lo))), 4);
-      int32x4_t s1_0_hi = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r1_0_hi), vget_low_s16(a0_hi)),
-          vmull_s16(vget_high_s16(r1_0_hi), vget_high_s16(a0_hi))), 4);
+      int32x4_t s1_0_lo =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r1_0_lo), vget_low_s16(a0_lo)),
+                                 vmull_s16(vget_high_s16(r1_0_lo), vget_high_s16(a0_lo))),
+                      4);
+      int32x4_t s1_0_hi =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r1_0_hi), vget_low_s16(a0_hi)),
+                                 vmull_s16(vget_high_s16(r1_0_hi), vget_high_s16(a0_hi))),
+                      4);
 
       int16x8_t s0_0_16 = vcombine_s16(vqmovn_s32(s0_0_lo), vqmovn_s32(s0_0_hi));
       int16x8_t s1_0_16 = vcombine_s16(vqmovn_s32(s1_0_lo), vqmovn_s32(s1_0_hi));
@@ -335,19 +326,23 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h,
       int16x8_t a1_lo = vld1q_s16(ialpha.data() + (dx + 8) * 2);
       int16x8_t a1_hi = vld1q_s16(ialpha.data() + (dx + 8) * 2 + 8);
 
-      int32x4_t s0_1_lo = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r0_1_lo), vget_low_s16(a1_lo)),
-          vmull_s16(vget_high_s16(r0_1_lo), vget_high_s16(a1_lo))), 4);
-      int32x4_t s0_1_hi = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r0_1_hi), vget_low_s16(a1_hi)),
-          vmull_s16(vget_high_s16(r0_1_hi), vget_high_s16(a1_hi))), 4);
+      int32x4_t s0_1_lo =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r0_1_lo), vget_low_s16(a1_lo)),
+                                 vmull_s16(vget_high_s16(r0_1_lo), vget_high_s16(a1_lo))),
+                      4);
+      int32x4_t s0_1_hi =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r0_1_hi), vget_low_s16(a1_hi)),
+                                 vmull_s16(vget_high_s16(r0_1_hi), vget_high_s16(a1_hi))),
+                      4);
 
-      int32x4_t s1_1_lo = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r1_1_lo), vget_low_s16(a1_lo)),
-          vmull_s16(vget_high_s16(r1_1_lo), vget_high_s16(a1_lo))), 4);
-      int32x4_t s1_1_hi = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_high_s16(r1_1_hi), vget_high_s16(a1_hi)),
-          vmull_s16(vget_high_s16(r1_1_hi), vget_high_s16(a1_hi))), 4);
+      int32x4_t s1_1_lo =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r1_1_lo), vget_low_s16(a1_lo)),
+                                 vmull_s16(vget_high_s16(r1_1_lo), vget_high_s16(a1_lo))),
+                      4);
+      int32x4_t s1_1_hi =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_high_s16(r1_1_hi), vget_high_s16(a1_hi)),
+                                 vmull_s16(vget_high_s16(r1_1_hi), vget_high_s16(a1_hi))),
+                      4);
 
       int16x8_t s0_1_16 = vcombine_s16(vqmovn_s32(s0_1_lo), vqmovn_s32(s0_1_hi));
       int16x8_t s1_1_16 = vcombine_s16(vqmovn_s32(s1_1_lo), vqmovn_s32(s1_1_hi));
@@ -385,19 +380,23 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h,
       int16x8_t alpha_lo = vld1q_s16(ialpha.data() + dx * 2);
       int16x8_t alpha_hi = vld1q_s16(ialpha.data() + dx * 2 + 8);
 
-      int32x4_t s0_lo = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r0_lo), vget_low_s16(alpha_lo)),
-          vmull_s16(vget_high_s16(r0_lo), vget_high_s16(alpha_lo))), 4);
-      int32x4_t s0_hi = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r0_hi), vget_low_s16(alpha_hi)),
-          vmull_s16(vget_high_s16(r0_hi), vget_high_s16(alpha_hi))), 4);
+      int32x4_t s0_lo =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r0_lo), vget_low_s16(alpha_lo)),
+                                 vmull_s16(vget_high_s16(r0_lo), vget_high_s16(alpha_lo))),
+                      4);
+      int32x4_t s0_hi =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r0_hi), vget_low_s16(alpha_hi)),
+                                 vmull_s16(vget_high_s16(r0_hi), vget_high_s16(alpha_hi))),
+                      4);
 
-      int32x4_t s1_lo = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_low_s16(r1_lo), vget_low_s16(alpha_lo)),
-          vmull_s16(vget_high_s16(r1_lo), vget_high_s16(alpha_lo))), 4);
-      int32x4_t s1_hi = vshrq_n_s32(vpaddq_s32(
-          vmull_s16(vget_high_s16(r1_hi), vget_high_s16(alpha_hi)),
-          vmull_s16(vget_high_s16(r1_hi), vget_high_s16(alpha_hi))), 4);
+      int32x4_t s1_lo =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r1_lo), vget_low_s16(alpha_lo)),
+                                 vmull_s16(vget_high_s16(r1_lo), vget_high_s16(alpha_lo))),
+                      4);
+      int32x4_t s1_hi =
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_high_s16(r1_hi), vget_high_s16(alpha_hi)),
+                                 vmull_s16(vget_high_s16(r1_hi), vget_high_s16(alpha_hi))),
+                      4);
 
       int16x8_t s0_16 = vcombine_s16(vqmovn_s32(s0_lo), vqmovn_s32(s0_hi));
       int16x8_t s1_16 = vcombine_s16(vqmovn_s32(s1_lo), vqmovn_s32(s1_hi));
@@ -421,21 +420,17 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h,
       int32_t a0 = ialpha[dx * 2 + 0];
       int32_t a1 = ialpha[dx * 2 + 1];
 
-      int32_t s0 = static_cast<int32_t>(row0[sx0]) * a0 +
-                   static_cast<int32_t>(row0[sx1]) * a1;
-      int32_t s1 = static_cast<int32_t>(row1[sx0]) * a0 +
-                   static_cast<int32_t>(row1[sx1]) * a1;
+      int32_t s0 = static_cast<int32_t>(row0[sx0]) * a0 + static_cast<int32_t>(row0[sx1]) * a1;
+      int32_t s1 = static_cast<int32_t>(row1[sx0]) * a0 + static_cast<int32_t>(row1[sx1]) * a1;
 
-      int32_t val =
-          (((b0 * (s0 >> 4)) >> 16) + ((b1 * (s1 >> 4)) >> 16) + 2) >> 2;
+      int32_t val = (((b0 * (s0 >> 4)) >> 16) + ((b1 * (s1 >> 4)) >> 16) + 2) >> 2;
       dst_row[dx] = static_cast<uint8_t>(std::max(0, std::min(255, val)));
     }
   }
 }
 
-void ExpEngine::ResizeGrayScalar(const uint8_t* src, int src_w, int src_h,
-                                 int src_stride, uint8_t* dst, int dst_w,
-                                 int dst_h, int dst_stride) {
+void ExpEngine::ResizeGrayScalar(const uint8_t* src, int src_w, int src_h, int src_stride,
+                                 uint8_t* dst, int dst_w, int dst_h, int dst_stride) {
   if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return;
 
   constexpr int kShift = 11;
@@ -504,21 +499,17 @@ void ExpEngine::ResizeGrayScalar(const uint8_t* src, int src_w, int src_h,
       int32_t a0 = ialpha[dx * 2 + 0];
       int32_t a1 = ialpha[dx * 2 + 1];
 
-      int32_t s0 = static_cast<int32_t>(row0[sx0]) * a0 +
-                   static_cast<int32_t>(row0[sx1]) * a1;
-      int32_t s1 = static_cast<int32_t>(row1[sx0]) * a0 +
-                   static_cast<int32_t>(row1[sx1]) * a1;
+      int32_t s0 = static_cast<int32_t>(row0[sx0]) * a0 + static_cast<int32_t>(row0[sx1]) * a1;
+      int32_t s1 = static_cast<int32_t>(row1[sx0]) * a0 + static_cast<int32_t>(row1[sx1]) * a1;
 
-      int32_t val =
-          (((b0 * (s0 >> 4)) >> 16) + ((b1 * (s1 >> 4)) >> 16) + 2) >> 2;
+      int32_t val = (((b0 * (s0 >> 4)) >> 16) + ((b1 * (s1 >> 4)) >> 16) + 2) >> 2;
       dst_row[dx] = static_cast<uint8_t>(std::max(0, std::min(255, val)));
     }
   }
 }
 
-void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
-                                 int img_stride, const PreparedTemplate& tpl,
-                                 float* out_response) {
+void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int img_stride,
+                                 const PreparedTemplate& tpl, float* out_response) {
   const int tw = tpl.width;
   const int th = tpl.height;
   const int out_w = img_w - tw + 1;
@@ -647,12 +638,10 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
 
         __m256d cs2_lo = _mm256_loadu_pd(col_sum2 + c);
         __m256d cs2_hi = _mm256_loadu_pd(col_sum2 + c + 4);
-        cs2_lo = _mm256_add_pd(
-            cs2_lo,
-            _mm256_fmsub_pd(add_lo, add_lo, _mm256_mul_pd(sub_lo, sub_lo)));
-        cs2_hi = _mm256_add_pd(
-            cs2_hi,
-            _mm256_fmsub_pd(add_hi, add_hi, _mm256_mul_pd(sub_hi, sub_hi)));
+        cs2_lo =
+            _mm256_add_pd(cs2_lo, _mm256_fmsub_pd(add_lo, add_lo, _mm256_mul_pd(sub_lo, sub_lo)));
+        cs2_hi =
+            _mm256_add_pd(cs2_hi, _mm256_fmsub_pd(add_hi, add_hi, _mm256_mul_pd(sub_hi, sub_hi)));
         _mm256_storeu_pd(col_sum2 + c, cs2_lo);
         _mm256_storeu_pd(col_sum2 + c + 4, cs2_hi);
       }
@@ -703,10 +692,9 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
     const __m256d veps = _mm256_set1_pd(1e-5);
 
     for (; nx + 3 < out_w; nx += 4) {
-      __m256d s_i = _mm256_sub_pd(_mm256_loadu_pd(pref_i + nx + tw),
-                                  _mm256_loadu_pd(pref_i + nx));
-      __m256d s_i2 = _mm256_sub_pd(_mm256_loadu_pd(pref_i2 + nx + tw),
-                                   _mm256_loadu_pd(pref_i2 + nx));
+      __m256d s_i = _mm256_sub_pd(_mm256_loadu_pd(pref_i + nx + tw), _mm256_loadu_pd(pref_i + nx));
+      __m256d s_i2 =
+          _mm256_sub_pd(_mm256_loadu_pd(pref_i2 + nx + tw), _mm256_loadu_pd(pref_i2 + nx));
       __m256d var_i = _mm256_fnmadd_pd(_mm256_mul_pd(s_i, s_i), vinv_pix, s_i2);
 
       __m256d mask = _mm256_cmp_pd(var_i, veps, _CMP_GT_OQ);
@@ -729,7 +717,8 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
       float64x2_t s_i_lo = vsubq_f64(vld1q_f64(pref_i + nx + tw), vld1q_f64(pref_i + nx));
       float64x2_t s_i_hi = vsubq_f64(vld1q_f64(pref_i + nx + tw + 2), vld1q_f64(pref_i + nx + 2));
       float64x2_t s_i2_lo = vsubq_f64(vld1q_f64(pref_i2 + nx + tw), vld1q_f64(pref_i2 + nx));
-      float64x2_t s_i2_hi = vsubq_f64(vld1q_f64(pref_i2 + nx + tw + 2), vld1q_f64(pref_i2 + nx + 2));
+      float64x2_t s_i2_hi =
+          vsubq_f64(vld1q_f64(pref_i2 + nx + tw + 2), vld1q_f64(pref_i2 + nx + 2));
 
       float64x2_t var_lo = vfmsq_f64(s_i2_lo, vmulq_f64(s_i_lo, s_i_lo), vinv_pix);
       float64x2_t var_hi = vfmsq_f64(s_i2_hi, vmulq_f64(s_i_hi, s_i_hi), vinv_pix);
@@ -826,14 +815,10 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
       __m256 inv2 = _mm256_loadu_ps(inv_norm + x + 16);
       __m256 inv3 = _mm256_loadu_ps(inv_norm + x + 24);
 
-      __m256 ncc0 =
-          _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc0, inv0), vmin), vmax);
-      __m256 ncc1 =
-          _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc1, inv1), vmin), vmax);
-      __m256 ncc2 =
-          _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc2, inv2), vmin), vmax);
-      __m256 ncc3 =
-          _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc3, inv3), vmin), vmax);
+      __m256 ncc0 = _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc0, inv0), vmin), vmax);
+      __m256 ncc1 = _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc1, inv1), vmin), vmax);
+      __m256 ncc2 = _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc2, inv2), vmin), vmax);
+      __m256 ncc3 = _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc3, inv3), vmin), vmax);
 
       _mm256_storeu_ps(resp_row + x, ncc0);
       _mm256_storeu_ps(resp_row + x + 8, ncc1);
@@ -879,10 +864,8 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
 
       __m256 inv0 = _mm256_loadu_ps(inv_norm + x);
       __m256 inv1 = _mm256_loadu_ps(inv_norm + x + 8);
-      __m256 ncc0 =
-          _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc0, inv0), vmin), vmax);
-      __m256 ncc1 =
-          _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc1, inv1), vmin), vmax);
+      __m256 ncc0 = _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc0, inv0), vmin), vmax);
+      __m256 ncc1 = _mm256_min_ps(_mm256_max_ps(_mm256_mul_ps(acc1, inv1), vmin), vmax);
 
       _mm256_storeu_ps(resp_row + x, ncc0);
       _mm256_storeu_ps(resp_row + x + 8, ncc1);
@@ -1085,10 +1068,9 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
   }
 }
 
-bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height,
-                          int stride, CropParseResult* out_result) const {
-  if (gray_crop == nullptr || width < 20 || height < 8 ||
-      out_result == nullptr) {
+bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int stride,
+                          CropParseResult* out_result) const {
+  if (gray_crop == nullptr || width < 20 || height < 8 || out_result == nullptr) {
     return false;
   }
 
@@ -1113,15 +1095,13 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height,
   std::vector<float> resp_8;
 
   for (int s_idx = 0; s_idx < kNumScales; ++s_idx) {
-    float cs = s_min +
-               (s_max - s_min) * (static_cast<float>(s_idx) / (kNumScales - 1));
+    float cs = s_min + (s_max - s_min) * (static_cast<float>(s_idx) / (kNumScales - 1));
     int wn = static_cast<int>(std::round(width * cs));
     int hn = static_cast<int>(std::round(height * cs));
     if (hn < 25 || wn < 30) continue;
 
     work_gray_buf.resize(wn * hn);
-    ResizeGray(gray_crop, width, height, stride, work_gray_buf.data(), wn, hn,
-               wn);
+    ResizeGray(gray_crop, width, height, stride, work_gray_buf.data(), wn, hn, wn);
 
     work_float_buf.resize(wn * hn);
     for (int i = 0; i < wn * hn; ++i) {
@@ -1132,8 +1112,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height,
     int out_bh = hn - tpl_bracket.height + 1;
     if (out_bw <= 0 || out_bh <= 0) continue;
     resp_bracket.resize(out_bw * out_bh);
-    MatchTemplateNcc(work_float_buf.data(), wn, hn, wn, tpl_bracket,
-                     resp_bracket.data());
+    MatchTemplateNcc(work_float_buf.data(), wn, hn, wn, tpl_bracket, resp_bracket.data());
 
     int out_8w = wn - tpl_8.width + 1;
     int out_8h = hn - tpl_8.height + 1;
@@ -1174,8 +1153,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height,
   int win_w = static_cast<int>(std::round(width * best_cs));
   int win_h = static_cast<int>(std::round(height * best_cs));
   work_gray_buf.resize(win_w * win_h);
-  ResizeGray(gray_crop, width, height, stride, work_gray_buf.data(), win_w,
-             win_h, win_w);
+  ResizeGray(gray_crop, width, height, stride, work_gray_buf.data(), win_w, win_h, win_w);
 
   // Extract canonical 25px strip
   if (best_by + kCanonicalStripHeight > win_h) {
@@ -1202,8 +1180,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height,
 
     if (t.height == kCanonicalStripHeight) {
       std::vector<float> r(resp_w);
-      MatchTemplateNcc(strip_float.data(), win_w, kCanonicalStripHeight, win_w,
-                       t, r.data());
+      MatchTemplateNcc(strip_float.data(), win_w, kCanonicalStripHeight, win_w, t, r.data());
       responses[ch] = std::move(r);
     } else {
       // Vertical jitter of +/-1px to maximize alignment across scales
@@ -1232,9 +1209,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height,
   // 3: completed string
   constexpr int kNumStates = 4;
   std::vector<DpNode> dp((win_w + 1) * kNumStates);
-  auto get_dp = [&](int x, int st) -> DpNode& {
-    return dp[x * kNumStates + st];
-  };
+  auto get_dp = [&](int x, int st) -> DpNode& { return dp[x * kNumStates + st]; };
 
   get_dp(0, 0).score = 0.0f;
 
@@ -1257,10 +1232,12 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height,
       // Allowed transitions based on grammar
       std::vector<std::pair<char, int>> allowed;
       if (st == 0) {
-        for (char d = '0'; d <= '9'; ++d) allowed.emplace_back(d, 0);
+        for (char d = '0'; d <= '9'; ++d)
+          allowed.emplace_back(d, 0);
         allowed.emplace_back('[', 1);
       } else if (st == 1) {
-        for (char d = '0'; d <= '9'; ++d) allowed.emplace_back(d, 1);
+        for (char d = '0'; d <= '9'; ++d)
+          allowed.emplace_back(d, 1);
         allowed.emplace_back('.', 1);
         allowed.emplace_back('%', 2);
       } else if (st == 2) {
@@ -1281,12 +1258,8 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height,
         if (resp_it == responses.end()) continue;
         const auto& resp_vec = resp_it->second;
 
-        float min_ncc = (ch == '1' || ch == ']') ? kMinNccNarrowOrBracket
-                                                 : kMinNccDigitOrDot;
-        int min_adv =
-            (ch == '.')
-                ? 4
-                : ((ch == '[' || ch == ']') ? 6 : std::max(t.width, 11));
+        float min_ncc = (ch == '1' || ch == ']') ? kMinNccNarrowOrBracket : kMinNccDigitOrDot;
+        int min_adv = (ch == '.') ? 4 : ((ch == '[' || ch == ']') ? 6 : std::max(t.width, 11));
 
         if (x + t.width <= win_w && x < static_cast<int>(resp_vec.size())) {
           float ncc = resp_vec[x];
@@ -1387,8 +1360,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height,
   }
 
   auto t_end = std::chrono::steady_clock::now();
-  float dt_ms =
-      std::chrono::duration<float, std::milli>(t_end - t_start).count();
+  float dt_ms = std::chrono::duration<float, std::milli>(t_end - t_start).count();
 
   out_result->success = true;
   out_result->exp_value = exp_val;

@@ -96,7 +96,18 @@ _use_cpp: bool = False
 def _init_core() -> None:
   """Locates and loads the compiled native C++ SIMD dynamic library."""
   global _core_dll, _use_cpp
-  candidates = [
+  meipass = getattr(sys, "_MEIPASS", None)
+  candidates = []
+  if meipass:
+    candidates.extend([
+        os.path.join(meipass, "artale_exp_core.dll"),
+        os.path.join(meipass, "libartale_exp_core.dylib"),
+        os.path.join(meipass, "libartale_exp_core.so"),
+    ])
+  candidates.extend([
+      os.path.join(config.BASE_DIR, "bazel-bin", "src", "cpp", "libartale_exp_core_dll.so"),
+      os.path.join(config.BASE_DIR, "bazel-bin", "src", "cpp", "artale_exp_core.dll"),
+      os.path.join(config.BASE_DIR, "bazel-bin", "src", "cpp", "libartale_exp_core.dylib"),
       os.path.join(config.BASE_DIR, "artale_exp_core.dll"),
       os.path.join(config.BASE_DIR, "build", "artale_exp_core.dll"),
       os.path.join(config.BASE_DIR, "libartale_exp_core.dylib"),
@@ -106,7 +117,7 @@ def _init_core() -> None:
       os.path.join(config.BASE_DIR, "artale_exp_core.so"),
       os.path.join(config.BASE_DIR, "libartale_exp_core.so"),
       os.path.join(config.BASE_DIR, "build", "libartale_exp_core.so"),
-  ]
+  ])
   for p in candidates:
     if os.path.exists(p):
       try:
@@ -162,11 +173,11 @@ def _parse_frame_python(bgr_img: np.ndarray) -> Optional[ParsedFrame]:
   global _cached_logo_loc, _cached_logo_scale, _last_frame_shape, _cached_crop_box, _cached_logo_box
   try:
     import cv2
-    import python_exp_engine
+    from core import python_engine
   except ImportError:
     return None
 
-  engine = python_exp_engine.get_engine()
+  engine = python_engine.get_engine()
   tpl = _get_exp_tpl()
   if tpl is None or bgr_img is None:
     return None

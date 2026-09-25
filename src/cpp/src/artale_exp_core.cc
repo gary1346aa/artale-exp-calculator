@@ -58,9 +58,8 @@ EngineState& GetEngineState() {
 }
 
 // Converts a BGR/BGRA frame into an 8-bit grayscale sub-rectangle.
-void ExtractGraySubRect(const uint8_t* bgr_data, int width, int height,
-                        int stride, int bytes_per_px, int rx, int ry, int rw,
-                        int rh, uint8_t* out_gray) {
+void ExtractGraySubRect(const uint8_t* bgr_data, int width, int height, int stride,
+                        int bytes_per_px, int rx, int ry, int rw, int rh, uint8_t* out_gray) {
   for (int y = 0; y < rh; ++y) {
     int src_y = ry + y;
     if (src_y < 0 || src_y >= height) continue;
@@ -129,25 +128,23 @@ void ExtractGraySubRect(const uint8_t* bgr_data, int width, int height,
       uint32_t b = px[0];
       uint32_t g = px[1];
       uint32_t r = px[2];
-      dst_row[x] =
-          static_cast<uint8_t>((b * 3735 + g * 19235 + r * 9798 + 16384) >> 15);
+      dst_row[x] = static_cast<uint8_t>((b * 3735 + g * 19235 + r * 9798 + 16384) >> 15);
     }
   }
 }
 
 // Locates the EXP logo in the bottom strip of the frame using multi-scale
 // template matching.
-bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride,
-                   int bytes_per_px, BoundingBox* out_logo_box) {
-  int strip_h =
-      std::min(height, std::max(80, static_cast<int>(height * 0.15f)));
+bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride, int bytes_per_px,
+                   BoundingBox* out_logo_box) {
+  int strip_h = std::min(height, std::max(80, static_cast<int>(height * 0.15f)));
   int strip_y = std::max(0, height - strip_h);
   int strip_w = width;
   if (strip_w < 50 || strip_h < 20) return false;
 
   std::vector<uint8_t> strip_gray(strip_w * strip_h);
-  ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px, 0, strip_y,
-                     strip_w, strip_h, strip_gray.data());
+  ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px, 0, strip_y, strip_w, strip_h,
+                     strip_gray.data());
 
   std::vector<float> strip_float(strip_w * strip_h);
   for (size_t i = 0; i < strip_gray.size(); ++i) {
@@ -155,8 +152,7 @@ bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride,
   }
 
   // Calculate resolution-guided center scale
-  float s_center =
-      std::min(width / kRefDisplayWidth, height / kRefDisplayHeight);
+  float s_center = std::min(width / kRefDisplayWidth, height / kRefDisplayHeight);
   float s_min = std::max(kMinLogoScale, s_center * 0.65f);
   float s_max = std::min(kMaxLogoScale, s_center * 1.35f);
 
@@ -170,15 +166,14 @@ bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride,
   std::vector<float> resp_buf;
 
   for (int s_idx = 0; s_idx < kNumLogoScales; ++s_idx) {
-    float cs = s_min + (s_max - s_min) *
-                           (static_cast<float>(s_idx) / (kNumLogoScales - 1));
+    float cs = s_min + (s_max - s_min) * (static_cast<float>(s_idx) / (kNumLogoScales - 1));
     int tw = static_cast<int>(std::round(kExpLogoWidth * cs));
     int th = static_cast<int>(std::round(kExpLogoHeight * cs));
     if (tw <= 4 || th <= 4 || th >= strip_h || tw >= strip_w) continue;
 
     tpl_resized_u8.resize(tw * th);
-    ExpEngine::ResizeGray(kExpLogoGrayData, kExpLogoWidth, kExpLogoHeight,
-                          kExpLogoWidth, tpl_resized_u8.data(), tw, th, tw);
+    ExpEngine::ResizeGray(kExpLogoGrayData, kExpLogoWidth, kExpLogoHeight, kExpLogoWidth,
+                          tpl_resized_u8.data(), tw, th, tw);
 
     PreparedTemplate pt;
     pt.character = 'L';
@@ -187,7 +182,8 @@ bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride,
     pt.zero_mean_fmap.resize(tw * th);
 
     double sum = 0.0;
-    for (int j = 0; j < tw * th; ++j) sum += tpl_resized_u8[j];
+    for (int j = 0; j < tw * th; ++j)
+      sum += tpl_resized_u8[j];
     float mean = static_cast<float>(sum / (tw * th));
 
     double sum_sq = 0.0;
@@ -203,8 +199,7 @@ bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride,
     if (out_w <= 0 || out_h <= 0) continue;
     resp_buf.resize(out_w * out_h);
 
-    ExpEngine::MatchTemplateNcc(strip_float.data(), strip_w, strip_h, strip_w,
-                                pt, resp_buf.data());
+    ExpEngine::MatchTemplateNcc(strip_float.data(), strip_w, strip_h, strip_w, pt, resp_buf.data());
 
     for (int y = 0; y < out_h; ++y) {
       for (int x = 0; x < out_w; ++x) {
@@ -237,11 +232,9 @@ bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride,
 
 extern "C" {
 
-ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width,
-                                  int height, int stride, int bytes_per_px,
-                                  ExpResult* out_result) {
-  if (bgr_data == nullptr || width <= 0 || height <= 0 || stride <= 0 ||
-      out_result == nullptr) {
+ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width, int height, int stride,
+                                  int bytes_per_px, ExpResult* out_result) {
+  if (bgr_data == nullptr || width <= 0 || height <= 0 || stride <= 0 || out_result == nullptr) {
     return -1;
   }
 
@@ -255,15 +248,12 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width,
   // If the input buffer is already a tight crop (height <= 60), parse directly
   if (height <= 60) {
     std::vector<uint8_t> crop_gray(width * height);
-    artale::exp::ExtractGraySubRect(bgr_data, width, height, stride,
-                                    bytes_per_px, 0, 0, width, height,
-                                    crop_gray.data());
+    artale::exp::ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px, 0, 0, width,
+                                    height, crop_gray.data());
     artale::exp::CropParseResult crop_res;
-    if (state.engine.ParseCrop(crop_gray.data(), width, height, width,
-                               &crop_res)) {
+    if (state.engine.ParseCrop(crop_gray.data(), width, height, width, &crop_res)) {
       auto t_end = std::chrono::steady_clock::now();
-      float dt_ms =
-          std::chrono::duration<float, std::milli>(t_end - t_start).count();
+      float dt_ms = std::chrono::duration<float, std::milli>(t_end - t_start).count();
 
       out_result->success = 1;
       out_result->exp_value = crop_res.exp_value;
@@ -298,15 +288,12 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width,
 
     if (text_box.y + text_box.h <= height && text_box.x + text_box.w <= width) {
       std::vector<uint8_t> crop_gray(text_box.w * text_box.h);
-      artale::exp::ExtractGraySubRect(bgr_data, width, height, stride,
-                                      bytes_per_px, text_box.x, text_box.y,
-                                      text_box.w, text_box.h, crop_gray.data());
+      artale::exp::ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px, text_box.x,
+                                      text_box.y, text_box.w, text_box.h, crop_gray.data());
 
-      if (state.engine.ParseCrop(crop_gray.data(), text_box.w, text_box.h,
-                                 text_box.w, &crop_res)) {
+      if (state.engine.ParseCrop(crop_gray.data(), text_box.w, text_box.h, text_box.w, &crop_res)) {
         auto t_end = std::chrono::steady_clock::now();
-        float dt_ms =
-            std::chrono::duration<float, std::milli>(t_end - t_start).count();
+        float dt_ms = std::chrono::duration<float, std::milli>(t_end - t_start).count();
 
         out_result->success = 1;
         out_result->exp_value = crop_res.exp_value;
@@ -328,8 +315,7 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width,
   }
 
   // 2. Cold path: locate logo across ROI
-  if (!artale::exp::LocateExpLogo(bgr_data, width, height, stride, bytes_per_px,
-                                  &logo_box)) {
+  if (!artale::exp::LocateExpLogo(bgr_data, width, height, stride, bytes_per_px, &logo_box)) {
     state.has_cached_crop = false;
     return 0;
   }
@@ -353,19 +339,16 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width,
   }
 
   std::vector<uint8_t> crop_gray(text_box.w * text_box.h);
-  artale::exp::ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px,
-                                  text_box.x, text_box.y, text_box.w,
-                                  text_box.h, crop_gray.data());
+  artale::exp::ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px, text_box.x,
+                                  text_box.y, text_box.w, text_box.h, crop_gray.data());
 
-  if (state.engine.ParseCrop(crop_gray.data(), text_box.w, text_box.h,
-                             text_box.w, &crop_res)) {
+  if (state.engine.ParseCrop(crop_gray.data(), text_box.w, text_box.h, text_box.w, &crop_res)) {
     state.has_cached_crop = true;
     state.cached_crop_box = text_box;
     state.cached_logo_box = logo_box;
 
     auto t_end = std::chrono::steady_clock::now();
-    float dt_ms =
-        std::chrono::duration<float, std::milli>(t_end - t_start).count();
+    float dt_ms = std::chrono::duration<float, std::milli>(t_end - t_start).count();
 
     out_result->success = 1;
     out_result->exp_value = crop_res.exp_value;
@@ -388,34 +371,31 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width,
   return 0;
 }
 
-void Test_ExtractGraySubRect(const uint8_t* bgr_data, int width, int height,
-                             int stride, int bytes_per_px, int rx, int ry,
-                             int rw, int rh, uint8_t* out_gray) {
-  artale::exp::ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px,
-                                  rx, ry, rw, rh, out_gray);
+void Test_ExtractGraySubRect(const uint8_t* bgr_data, int width, int height, int stride,
+                             int bytes_per_px, int rx, int ry, int rw, int rh, uint8_t* out_gray) {
+  artale::exp::ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px, rx, ry, rw, rh,
+                                  out_gray);
 }
 
-void Test_ResizeGray(const uint8_t* src, int src_w, int src_h, int src_stride,
-                     uint8_t* dst, int dst_w, int dst_h, int dst_stride) {
-  artale::exp::ExpEngine::ResizeGray(src, src_w, src_h, src_stride, dst, dst_w,
-                                     dst_h, dst_stride);
+void Test_ResizeGray(const uint8_t* src, int src_w, int src_h, int src_stride, uint8_t* dst,
+                     int dst_w, int dst_h, int dst_stride) {
+  artale::exp::ExpEngine::ResizeGray(src, src_w, src_h, src_stride, dst, dst_w, dst_h, dst_stride);
 }
 
-void Test_ResizeGrayScalar(const uint8_t* src, int src_w, int src_h,
-                           int src_stride, uint8_t* dst, int dst_w, int dst_h,
-                           int dst_stride) {
-  artale::exp::ExpEngine::ResizeGrayScalar(src, src_w, src_h, src_stride, dst,
-                                           dst_w, dst_h, dst_stride);
+void Test_ResizeGrayScalar(const uint8_t* src, int src_w, int src_h, int src_stride, uint8_t* dst,
+                           int dst_w, int dst_h, int dst_stride) {
+  artale::exp::ExpEngine::ResizeGrayScalar(src, src_w, src_h, src_stride, dst, dst_w, dst_h,
+                                           dst_stride);
 }
 
-int Test_MatchTemplateNcc(const float* image, int img_w, int img_h,
-                          int img_stride, char ch, float* out_response) {
+int Test_MatchTemplateNcc(const float* image, int img_w, int img_h, int img_stride, char ch,
+                          float* out_response) {
   static const artale::exp::ExpEngine engine;
   const auto& templates = engine.templates();
   auto it = templates.find(ch);
   if (it == templates.end()) return -1;
-  artale::exp::ExpEngine::MatchTemplateNcc(image, img_w, img_h, img_stride,
-                                           it->second, out_response);
+  artale::exp::ExpEngine::MatchTemplateNcc(image, img_w, img_h, img_stride, it->second,
+                                           out_response);
   return 0;
 }
 

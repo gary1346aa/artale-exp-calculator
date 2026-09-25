@@ -9,7 +9,7 @@ import unittest
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import python_exp_engine
+from core import python_engine
 
 
 class PythonExpEngineTest(unittest.TestCase):
@@ -17,7 +17,7 @@ class PythonExpEngineTest(unittest.TestCase):
 
   def setUp(self) -> None:
     super().setUp()
-    self.engine = python_exp_engine.get_engine()
+    self.engine = python_engine.get_engine()
 
   def test_templates_loaded(self) -> None:
     """Verifies that all 15 pristine character prototypes are loaded."""

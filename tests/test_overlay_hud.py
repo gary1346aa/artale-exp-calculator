@@ -8,17 +8,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt6.QtWidgets import QApplication
 
-from overlay_hud import (
+from config import (
     ALL_METRIC_KEYS,
     DEFAULT_GAME_MODE_KEYS,
-    ArtaleExpOverlay,
-    GameModeSettingsDialog,
-    MeasurementState,
-    SelectWindowDialog,
-    VideoSimulationWorker,
     get_accum_exp_color,
     get_status_indicator_dot,
 )
+from core.metrics import MeasurementState
+from dev.video_simulation import VideoSimulationWorker
+from dev.window_picker import SelectWindowDialog
+from ui.dialogs import GameModeSettingsDialog
+from ui.overlay import ArtaleExpOverlay
 
 # Shared QApplication for testing
 app = QApplication.instance()

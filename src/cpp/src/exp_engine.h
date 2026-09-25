@@ -60,21 +60,18 @@ class ExpEngine {
 
   // Bilinear interpolation for grayscale image matching OpenCV's
   // cv2.INTER_LINEAR.
-  static void ResizeGray(const uint8_t* src, int src_w, int src_h,
-                         int src_stride, uint8_t* dst, int dst_w, int dst_h,
-                         int dst_stride);
+  static void ResizeGray(const uint8_t* src, int src_w, int src_h, int src_stride, uint8_t* dst,
+                         int dst_w, int dst_h, int dst_stride);
 
   // Pure scalar reference implementation of bilinear interpolation for
   // bit-exact verification.
-  static void ResizeGrayScalar(const uint8_t* src, int src_w, int src_h,
-                               int src_stride, uint8_t* dst, int dst_w,
-                               int dst_h, int dst_stride);
+  static void ResizeGrayScalar(const uint8_t* src, int src_w, int src_h, int src_stride,
+                               uint8_t* dst, int dst_w, int dst_h, int dst_stride);
 
   // Computes sliding-window normalized cross correlation (TM_CCOEFF_NORMED)
   // for a 2D float patch against a prepared zero-mean template.
-  static void MatchTemplateNcc(const float* image, int img_w, int img_h,
-                               int img_stride, const PreparedTemplate& tpl,
-                               float* out_response);
+  static void MatchTemplateNcc(const float* image, int img_w, int img_h, int img_stride,
+                               const PreparedTemplate& tpl, float* out_response);
 
   const std::unordered_map<char, PreparedTemplate>& templates() const {
     return prepared_templates_;

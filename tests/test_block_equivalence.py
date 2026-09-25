@@ -18,7 +18,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import python_exp_engine
+from core import python_engine
 from scripts.run_equivalence_suite import CppExpResult, load_cpp_library
 
 
@@ -29,7 +29,7 @@ class BlockEquivalenceTest(unittest.TestCase):
   def setUpClass(cls) -> None:
     cls.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cls.cpp_lib = load_cpp_library(cls.base_dir)
-    cls.py_engine = python_exp_engine.get_engine()
+    cls.py_engine = python_engine.get_engine()
 
     # Configure ctypes argtypes for diagnostic functions
     cls.cpp_lib.Test_ExtractGraySubRect.argtypes = [

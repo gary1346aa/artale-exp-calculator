@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import cv2
 import numpy as np
-import python_exp_engine
+from core import python_engine
 
 
 class CppExpResult(ctypes.Structure):
@@ -72,7 +72,7 @@ def load_cpp_library(base_dir: str) -> ctypes.CDLL:
 def main() -> None:
   base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
   cpp_lib = load_cpp_library(base_dir)
-  py_engine = python_exp_engine.get_engine()
+  py_engine = python_engine.get_engine()
 
   crops_dir = os.path.join(base_dir, 'debug_crops')
   crop_files = sorted(glob.glob(os.path.join(crops_dir, 'crop_*.png')))

@@ -13,12 +13,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import cv2
 import numpy as np
-import python_exp_engine
+from core import python_engine
 
 
 def create_sample_exp_strip(width: int = 350, height: int = 38) -> np.ndarray:
   """Creates a sample 3-channel strip containing '772097[0.32%]'."""
-  engine = python_exp_engine.get_engine()
+  engine = python_engine.get_engine()
   strip = np.zeros((height, width, 3), dtype=np.uint8)
   text = '772097[0.32%]'
   cur_x = 20
@@ -62,7 +62,7 @@ def benchmark_match_template_ncc(iterations: int = 2000) -> float:
   Returns:
     Mean latency per operation in nanoseconds.
   """
-  engine = python_exp_engine.get_engine()
+  engine = python_engine.get_engine()
   image = np.full((25, 230), 50.0, dtype=np.float32)
   t8 = engine.templates['8']['fmap']
 
@@ -83,7 +83,7 @@ def benchmark_steady_state_crop(iterations: int = 50) -> float:
   Returns:
     Mean latency per operation in nanoseconds.
   """
-  engine = python_exp_engine.get_engine()
+  engine = python_engine.get_engine()
   strip = create_sample_exp_strip()
 
   # Warmup

@@ -15,7 +15,7 @@ import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from metrics_engine import ExpMetricsEngine, MeasurementState
+from core.metrics import ExpMetricsEngine, MeasurementState
 
 
 class TestExpMetricsEngine(unittest.TestCase):
