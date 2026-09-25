@@ -6,8 +6,16 @@ Complies with the Google Python Style Guide.
 import math
 from typing import Optional, Union
 
-from PyQt6.QtCore import QPointF, QRectF, QTimer, Qt
-from PyQt6.QtGui import QBrush, QColor, QCursor, QPainter, QPen
+from PyQt6.QtCore import QPointF, QRectF, QSize, QTimer, Qt
+from PyQt6.QtGui import (
+    QBrush,
+    QColor,
+    QCursor,
+    QFont,
+    QPainter,
+    QPainterPath,
+    QPen,
+)
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -381,17 +389,170 @@ class SimpleProgressBarItem(QWidget):
     self.bar.setValue(min(10000, max(0, val_100x)))
 
 
-class SmoothButton(QPushButton):
-  """QPushButton with vector-smoothed anti-aliased background and hover states."""
+def draw_vector_icon(
+    painter: QPainter,
+    icon_name: str,
+    cx: float,
+    cy: float,
+    color: QColor,
+    size: float = 12.0,
+) -> None:
+  """Draws a unified geometric vector symbol with consistent line weight and optical centering."""
+  pen_w = max(1.4, size * 0.14)
+  pen = QPen(
+      color,
+      pen_w,
+      Qt.PenStyle.SolidLine,
+      Qt.PenCapStyle.RoundCap,
+      Qt.PenJoinStyle.RoundJoin,
+  )
 
-  def __init__(self, text: str = "", parent=None, is_close: bool = False):
+  if icon_name == "play":
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QBrush(color))
+    s = size * 0.44
+    # Optical centering shift +0.8px to the right
+    poly = [
+        QPointF(cx - s * 0.8 + 0.8, cy - s),
+        QPointF(cx + s * 1.1 + 0.8, cy),
+        QPointF(cx - s * 0.8 + 0.8, cy + s),
+    ]
+    painter.drawPolygon(poly)
+
+  elif icon_name == "pause":
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QBrush(color))
+    bar_w = max(2.2, size * 0.24)
+    bar_h = size * 0.85
+    gap = max(2.4, size * 0.28)
+    r = bar_w / 2.0
+    painter.drawRoundedRect(
+        QRectF(cx - gap / 2.0 - bar_w, cy - bar_h / 2.0, bar_w, bar_h), r, r
+    )
+    painter.drawRoundedRect(
+        QRectF(cx + gap / 2.0, cy - bar_h / 2.0, bar_w, bar_h), r, r
+    )
+
+  elif icon_name == "reset":
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    r = size * 0.42
+    path = QPainterPath()
+    path.arcMoveTo(QRectF(cx - r, cy - r, r * 2, r * 2), 60)
+    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 60, -290)
+    painter.drawPath(path)
+    # Arrowhead
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QBrush(color))
+    arr_s = max(2.2, size * 0.22)
+    arrow = [
+        QPointF(cx + r - arr_s * 0.3, cy - r * 0.3),
+        QPointF(cx + r + arr_s * 0.8, cy - r * 0.8),
+        QPointF(cx + r - arr_s * 0.3, cy - r * 1.3),
+    ]
+    painter.drawPolygon(arrow)
+
+  elif icon_name in ("mode", "game_mode"):
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    box_w = size * 0.95
+    box_h = size * 0.82
+    painter.drawRoundedRect(
+        QRectF(cx - box_w / 2.0, cy - box_h / 2.0, box_w, box_h), 1.8, 1.8
+    )
+    # Divider for card mode
+    painter.drawLine(
+        QPointF(cx - box_w * 0.08, cy - box_h / 2.0),
+        QPointF(cx - box_w * 0.08, cy + box_h / 2.0),
+    )
+
+  elif icon_name == "simple_mode":
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    bar_w = size * 1.0
+    bar_h = size * 0.44
+    painter.drawRoundedRect(
+        QRectF(cx - bar_w / 2.0, cy - bar_h / 2.0, bar_w, bar_h),
+        bar_h / 2.0,
+        bar_h / 2.0,
+    )
+
+  elif icon_name == "settings":
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    r_in = size * 0.22
+    painter.drawEllipse(QPointF(cx, cy), r_in, r_in)
+    r_out = size * 0.48
+    for i in range(6):
+      ang = i * math.pi / 3.0
+      p1 = QPointF(
+          cx + (r_in + 0.8) * math.cos(ang), cy + (r_in + 0.8) * math.sin(ang)
+      )
+      p2 = QPointF(cx + r_out * math.cos(ang), cy + r_out * math.sin(ang))
+      painter.drawLine(p1, p2)
+
+  elif icon_name == "close":
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    d = size * 0.36
+    painter.drawLine(QPointF(cx - d, cy - d), QPointF(cx + d, cy + d))
+    painter.drawLine(QPointF(cx - d, cy + d), QPointF(cx + d, cy - d))
+
+  elif icon_name == "autostart":
+    # Automotive Auto Start-Stop: Circular arrow with bold 'A'
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    r = size * 0.48
+    path = QPainterPath()
+    path.arcMoveTo(QRectF(cx - r, cy - r, r * 2, r * 2), 30)
+    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 30, 290)
+    painter.drawPath(path)
+
+    # Arrowhead
+    end_pt = path.currentPosition()
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QBrush(color))
+    s_arr = max(2.0, size * 0.20)
+    painter.drawPolygon([
+        end_pt + QPointF(-s_arr * 0.7, s_arr * 0.9),
+        end_pt + QPointF(s_arr * 0.9, 0),
+        end_pt + QPointF(-s_arr * 0.7, -s_arr * 0.9),
+    ])
+
+    # Bold 'A' in center
+    a_font = QFont("Arial", max(7, int(size * 0.65)), QFont.Weight.Bold)
+    painter.setFont(a_font)
+    painter.setPen(color)
+    painter.drawText(
+        QRectF(cx - r, cy - r - 0.5, r * 2, r * 2),
+        Qt.AlignmentFlag.AlignCenter,
+        "A",
+    )
+
+
+class SmoothButton(QPushButton):
+  """QPushButton with vector-smoothed anti-aliased background, vector icons, and hover states."""
+
+  def __init__(
+      self,
+      text: str = "",
+      parent=None,
+      is_close: bool = False,
+      icon_name: Optional[str] = None,
+  ):
     super().__init__(text, parent)
     self.is_close: bool = is_close
+    self.icon_name: Optional[str] = icon_name
     self.is_hovered: bool = False
     self.custom_bg: Optional[QColor] = None
     self.custom_border: Optional[QColor] = None
     self.custom_color: Optional[QColor] = None
     self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+  def set_icon_name(self, name: Optional[str]) -> None:
+    """Sets the vector icon name ('play', 'pause', 'reset', 'game_mode', 'simple_mode', 'settings', 'close', 'autostart')."""
+    self.icon_name = name
+    self.update()
 
   def enterEvent(self, event) -> None:
     self.is_hovered = True
@@ -412,7 +573,19 @@ class SmoothButton(QPushButton):
     self.custom_bg = bg
     self.custom_border = border
     self.custom_color = text_color
-    self.update()
+  def sizeHint(self) -> QSize:
+    sh = super().sizeHint()
+    if self.icon_name == "autostart":
+      fm = self.fontMetrics()
+      text_w = fm.horizontalAdvance(self.text())
+      w = text_w + 36
+      return QSize(max(sh.width(), w), max(sh.height(), 24))
+    elif self.icon_name and not self.text():
+      return QSize(24, 24)
+    return sh
+
+  def minimumSizeHint(self) -> QSize:
+    return self.sizeHint()
 
   def paintEvent(self, event) -> None:
     painter = QPainter(self)
@@ -459,6 +632,33 @@ class SmoothButton(QPushButton):
     painter.setPen(QPen(border, 1.0))
     painter.drawRoundedRect(rect, radius, radius)
 
-    painter.setPen(fg)
-    painter.setFont(self.font())
-    painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
+    cx = rect.center().x()
+    cy = rect.center().y()
+
+    if self.icon_name == "autostart":
+      # Auto-start with automotive (A) symbol on left + text
+      ic_size = min(rect.height() * 0.58, 14.0)
+      ic_x = rect.left() + max(14.0, rect.height() * 0.58)
+      draw_vector_icon(painter, "autostart", ic_x, cy, fg, ic_size)
+
+      text_rect = QRectF(
+          ic_x + ic_size * 0.5 + 6.0,
+          rect.top(),
+          rect.right() - (ic_x + ic_size * 0.5 + 6.0),
+          rect.height(),
+      )
+      painter.setFont(self.font())
+      painter.setPen(fg)
+      painter.drawText(
+          text_rect,
+          Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+          self.text(),
+      )
+    elif self.icon_name:
+      # Icon-only button: optically centered vector icon
+      ic_size = min(rect.width(), rect.height()) * 0.52
+      draw_vector_icon(painter, self.icon_name, cx, cy, fg, ic_size)
+    else:
+      painter.setPen(fg)
+      painter.setFont(self.font())
+      painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())

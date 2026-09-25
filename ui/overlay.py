@@ -197,27 +197,27 @@ class ArtaleExpOverlay(QWidget):
         """)
 
     # Vector-smoothed Control buttons (F7, F8, F9, Settings, Close)
-    self.btn_f7 = SmoothButton("▶", self)
+    self.btn_f7 = SmoothButton(parent=self, icon_name="play")
     self.btn_f7.setToolTip("開始 / 暫停 [F7]")
     self.btn_f7.setFixedSize(24, 24)
     self.btn_f7.clicked.connect(self.on_f7)
 
-    self.btn_f8 = SmoothButton("↺", self)
+    self.btn_f8 = SmoothButton(parent=self, icon_name="reset")
     self.btn_f8.setToolTip("重置本次計時 (不重置啟動初始經驗) [F8]")
     self.btn_f8.setFixedSize(24, 24)
     self.btn_f8.clicked.connect(self.on_f8)
 
-    self.btn_f9 = SmoothButton("◫", self)
+    self.btn_f9 = SmoothButton(parent=self, icon_name="game_mode")
     self.btn_f9.setToolTip("切換遊戲模式 [F9]")
     self.btn_f9.setFixedSize(24, 24)
     self.btn_f9.clicked.connect(self.on_f9)
 
-    self.btn_settings = SmoothButton("⚙", self)
+    self.btn_settings = SmoothButton(parent=self, icon_name="settings")
     self.btn_settings.setToolTip("指標顯示與排列設定")
     self.btn_settings.setFixedSize(24, 24)
     self.btn_settings.clicked.connect(self._open_game_mode_settings)
 
-    self.btn_close = SmoothButton("✕", self, is_close=True)
+    self.btn_close = SmoothButton(parent=self, is_close=True, icon_name="close")
     self.btn_close.setToolTip("關閉程式")
     self.btn_close.setFixedSize(24, 24)
     self.btn_close.clicked.connect(self.close)
@@ -251,7 +251,7 @@ class ArtaleExpOverlay(QWidget):
             }}
         """)
 
-    self.btn_auto_start = SmoothButton("⚡ 自動開始 [OFF]", self)
+    self.btn_auto_start = SmoothButton("自動開始 [OFF]", self, icon_name="autostart")
     self.btn_auto_start.setToolTip(
         "自動開始 [F6]：開啟時，偵測到經驗值增加即自動開始計時 (F7暫停或F8重置時自動關閉一次)"
     )
@@ -461,14 +461,14 @@ class ArtaleExpOverlay(QWidget):
 
   def _update_auto_start_button_style(self, enabled: bool):
     if enabled:
-      self.btn_auto_start.setText("⚡ 自動開始 [ON]")
+      self.btn_auto_start.setText("自動開始 [ON]")
       self.btn_auto_start.set_custom_style(
           bg=QColor(16, 185, 129, 45),
           border=QColor(52, 211, 153, 100),
           text_color=QColor("#34d399"),
       )
     else:
-      self.btn_auto_start.setText("⚡ 自動開始 [OFF]")
+      self.btn_auto_start.setText("自動開始 [OFF]")
       self.btn_auto_start.set_custom_style(
           bg=QColor(255, 255, 255, 15),
           border=QColor(255, 255, 255, 30),
@@ -549,22 +549,22 @@ class ArtaleExpOverlay(QWidget):
             }}
         """)
     if self.current_mode == "simple":
-      act_mode = menu.addAction("◫ 切換至完整模式 [F9]")
+      act_mode = menu.addAction("切換至完整模式 [F9]")
       act_mode.triggered.connect(self.on_f9)
-      act_game = menu.addAction("⊟ 切換至遊戲模式")
+      act_game = menu.addAction("切換至遊戲模式")
       act_game.triggered.connect(lambda: self._set_mode("game"))
     elif self.current_mode == "game":
-      act_mode = menu.addAction("▬ 切換至極簡模式 [F9]")
+      act_mode = menu.addAction("切換至極簡模式 [F9]")
       act_mode.triggered.connect(self.on_f9)
-      act_full = menu.addAction("◫ 切換至完整模式")
+      act_full = menu.addAction("切換至完整模式")
       act_full.triggered.connect(lambda: self._set_mode("full"))
     else:
-      act_mode = menu.addAction("⊟ 切換至遊戲模式 [F9]")
+      act_mode = menu.addAction("切換至遊戲模式 [F9]")
       act_mode.triggered.connect(self.on_f9)
-      act_simple = menu.addAction("▬ 切換至極簡模式")
+      act_simple = menu.addAction("切換至極簡模式")
       act_simple.triggered.connect(lambda: self._set_mode("simple"))
 
-    action_settings = menu.addAction("⚙ 指標顯示與排列設定...")
+    action_settings = menu.addAction("指標顯示與排列設定...")
     action_settings.triggered.connect(
         lambda: QTimer.singleShot(0, self._open_game_mode_settings)
     )
@@ -572,7 +572,7 @@ class ArtaleExpOverlay(QWidget):
 
     # UI Scale submenu
     cur_scale_pct = int(round(self.ui_scale * 100))
-    scale_menu = menu.addMenu(f"🔍 縮放大小 ({cur_scale_pct}%)")
+    scale_menu = menu.addMenu(f"縮放大小 ({cur_scale_pct}%)")
     for sc in [0.75, 0.85, 1.0, 1.15, 1.30, 1.50, 1.75]:
       sc_pct = int(round(sc * 100))
       label = f"{sc_pct}% (預設)" if sc == 1.0 else f"{sc_pct}%"
@@ -583,7 +583,7 @@ class ArtaleExpOverlay(QWidget):
 
     # Opacity submenu
     cur_opacity_pct = int(round(self.opacity_val * 100))
-    opacity_menu = menu.addMenu(f"👁 透明度 ({cur_opacity_pct}%)")
+    opacity_menu = menu.addMenu(f"透明度 ({cur_opacity_pct}%)")
     for op in [1.0, 0.95, 0.85, 0.70, 0.55, 0.40]:
       op_pct = int(round(op * 100))
       label = (
@@ -598,24 +598,24 @@ class ArtaleExpOverlay(QWidget):
 
     if config.IS_DEV:
       menu.addSeparator()
-      dev_menu = menu.addMenu("🛠️ 開發者選項")
+      dev_menu = menu.addMenu("開發者選項")
       win_label = (
           self.target_window_name
           if len(self.target_window_name) <= 20
           else self.target_window_name[:18] + "..."
       )
-      act_select_win = dev_menu.addAction(f"🎯 選擇擷取視窗... ({win_label})")
+      act_select_win = dev_menu.addAction(f"選擇擷取視窗... ({win_label})")
       act_select_win.triggered.connect(
           lambda: QTimer.singleShot(0, self._open_select_window_dialog)
       )
 
       if self.is_simulating:
         is_paused = self.video_worker.is_paused if self.video_worker else False
-        pause_text = "▶ 繼續影片模擬" if is_paused else "⏸ 暫停影片模擬"
+        pause_text = "繼續影片模擬" if is_paused else "暫停影片模擬"
         act_sim_pause = dev_menu.addAction(pause_text)
         act_sim_pause.triggered.connect(self.toggle_simulation_pause)
 
-        speed_menu = dev_menu.addMenu(f"⚡ 模擬速度 ({self.sim_speed:g}x)")
+        speed_menu = dev_menu.addMenu(f"模擬速度 ({self.sim_speed:g}x)")
         for sp in [1.0, 2.0, 5.0, 10.0]:
           label = f"{sp:g}x (正常速度)" if sp == 1.0 else f"{sp:g}x"
           act_sp = speed_menu.addAction(label)
@@ -625,10 +625,10 @@ class ArtaleExpOverlay(QWidget):
               lambda checked, s=sp: self.set_simulation_speed(s)
           )
 
-        act_stop_sim = dev_menu.addAction("⏹ 停止影片模擬 (切回視窗擷取)")
+        act_stop_sim = dev_menu.addAction("停止影片模擬 (切回視窗擷取)")
         act_stop_sim.triggered.connect(self.stop_video_simulation)
 
-        act_load_other = dev_menu.addAction("📁 載入其他模擬影片...")
+        act_load_other = dev_menu.addAction("載入其他模擬影片...")
         act_load_other.triggered.connect(
             lambda: QTimer.singleShot(0, self._open_video_file_dialog)
         )
@@ -644,9 +644,9 @@ class ArtaleExpOverlay(QWidget):
         if default_clip and os.path.isfile(default_clip):
           base_name = os.path.basename(default_clip)
           label = (
-              f"▶ 快速模擬影片 ({base_name[:18]}...)"
+              f"快速模擬影片 ({base_name[:18]}...)"
               if len(base_name) > 21
-              else f"▶ 快速模擬影片 ({base_name})"
+              else f"快速模擬影片 ({base_name})"
           )
           act_quick_sim = dev_menu.addAction(label)
           act_quick_sim.triggered.connect(
@@ -655,13 +655,13 @@ class ArtaleExpOverlay(QWidget):
               )
           )
 
-        act_load_sim = dev_menu.addAction("📁 載入模擬影片 (Simulate from Video)...")
+        act_load_sim = dev_menu.addAction("載入模擬影片 (Simulate from Video)...")
         act_load_sim.triggered.connect(
             lambda: QTimer.singleShot(0, self._open_video_file_dialog)
         )
 
     menu.addSeparator()
-    action_close = menu.addAction("✕ 關閉程式")
+    action_close = menu.addAction("關閉程式")
     action_close.triggered.connect(self.close)
 
     menu.exec(event.globalPos())
@@ -864,7 +864,8 @@ class ArtaleExpOverlay(QWidget):
         self.setMaximumSize(16777215, 16777215)
         self.setFixedWidth(int(290 * self.ui_scale))
         self.lbl_title.hide()
-        self.btn_f9.setText("⊟")
+        self.btn_f9.setText("")
+        self.btn_f9.set_icon_name("simple_mode")
         self.btn_f9.setToolTip("切換至極簡模式 [F9]")
         self.lbl_hotkey_hint.setText(
             "[F6] 自動開始  [F7] 暫停  [F8] 重置  [F9] 極簡模式"
@@ -880,7 +881,8 @@ class ArtaleExpOverlay(QWidget):
         self.setMaximumSize(16777215, 16777215)
         self.setFixedWidth(int(340 * self.ui_scale))
         self.lbl_title.show()
-        self.btn_f9.setText("◫")
+        self.btn_f9.setText("")
+        self.btn_f9.set_icon_name("game_mode")
         self.btn_f9.setToolTip("切換遊戲模式 [F9]")
         self.lbl_hotkey_hint.setText(
             "[F6] 自動開始  [F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
@@ -1309,21 +1311,24 @@ class ArtaleExpOverlay(QWidget):
     # State Badge (scaled) & F7 button text
     self._update_state_badge_style()
     if self.engine.is_running:
-      self.btn_f7.setText("⏸")
+      self.btn_f7.setText("")
+      self.btn_f7.set_icon_name("pause")
       self.btn_f7.set_custom_style(
           bg=QColor(239, 68, 68, 38),
           border=QColor(239, 68, 68, 80),
           text_color=QColor("#f87171"),
       )
     elif self.engine.is_paused:
-      self.btn_f7.setText("▶")
+      self.btn_f7.setText("")
+      self.btn_f7.set_icon_name("play")
       self.btn_f7.set_custom_style(
           bg=QColor(16, 185, 129, 38),
           border=QColor(52, 211, 153, 80),
           text_color=QColor("#34d399"),
       )
     else:
-      self.btn_f7.setText("▶")
+      self.btn_f7.setText("")
+      self.btn_f7.set_icon_name("play")
       self.btn_f7.set_custom_style(None, None, None)
 
     # Values in detailed mode (same rows are reused in game mode!)
