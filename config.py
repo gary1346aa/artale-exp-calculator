@@ -20,8 +20,29 @@ else:
   RESOURCE_DIR = APP_DIR
 
 BASE_DIR: str = RESOURCE_DIR
-CONFIG_FILE: str = os.path.join(APP_DIR, "hud_config.json")
-DEBUG_OUTPUT_DIR: str = os.path.join(APP_DIR, "debug_output")
+LEGACY_CONFIG_FILE: str = os.path.join(APP_DIR, "hud_config.json")
+
+
+def get_user_config_dir() -> str:
+  """Returns a platform-appropriate writable user directory for storing configuration."""
+  if sys.platform == "win32":
+    appdata = os.environ.get("APPDATA")
+    base_dir = appdata if appdata else os.path.expanduser("~")
+  elif sys.platform == "darwin":
+    base_dir = os.path.expanduser("~/Library/Application Support")
+  else:
+    base_dir = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+  target_dir = os.path.join(base_dir, "ArtaleExpCalculator")
+  try:
+    os.makedirs(target_dir, exist_ok=True)
+  except Exception:
+    pass
+  return target_dir
+
+
+USER_CONFIG_DIR: str = get_user_config_dir()
+CONFIG_FILE: str = os.path.join(USER_CONFIG_DIR, "hud_config.json")
+DEBUG_OUTPUT_DIR: str = os.path.join(USER_CONFIG_DIR, "debug_output")
 
 
 def get_resource_path(relative_path: str) -> str:
@@ -43,7 +64,7 @@ FONT_FALLBACK: str = "'Google Sans', 'PingFang TC', sans-serif"
 
 # Application metadata & About info
 APP_NAME: str = "Artale EXP Calculator"
-APP_VERSION: str = "1.0.0-rc.5"
+APP_VERSION: str = "1.0.0-rc.6"
 APP_AUTHOR: str = "G8G"
 APP_COPYRIGHT: str = "© 2026 By G8G"
 APP_DISCORD_ID: str = "garyhuang"

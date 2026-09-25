@@ -401,7 +401,15 @@ def apply_update_and_restart(
     )
 
   if target_dir is None:
-    target_dir = config.APP_DIR
+    if sys.platform == "darwin" and getattr(sys, "frozen", False):
+      exe_path = os.path.abspath(sys.executable)
+      parts = exe_path.split(".app")
+      if len(parts) > 1:
+        target_dir = parts[0] + ".app"
+      else:
+        target_dir = config.APP_DIR
+    else:
+      target_dir = config.APP_DIR
 
   current_pid = os.getpid()
 

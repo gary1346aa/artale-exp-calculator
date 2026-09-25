@@ -44,6 +44,7 @@ import config
 from config import (
     ALL_METRIC_KEYS,
     CONFIG_FILE,
+    LEGACY_CONFIG_FILE,
     DEFAULT_GAME_MODE_KEYS,
     DEFAULT_SIMPLE_MODE_KEYS,
     FONT_FAMILY,
@@ -221,15 +222,25 @@ class ArtaleExpOverlay(QWidget):
     self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     self.setFixedWidth(int(340 * self.ui_scale))
 
-    # In-window keyboard shortcuts (guarantee F6/F7/F8/F9 work across any focus state)
-    self.sc_f6 = QShortcut(QKeySequence(Qt.Key.Key_F6), self)
-    self.sc_f6.activated.connect(self.on_f6)
-    self.sc_f7 = QShortcut(QKeySequence(Qt.Key.Key_F7), self)
-    self.sc_f7.activated.connect(self.on_f7)
-    self.sc_f8 = QShortcut(QKeySequence(Qt.Key.Key_F8), self)
-    self.sc_f8.activated.connect(self.on_f8)
-    self.sc_f9 = QShortcut(QKeySequence(Qt.Key.Key_F9), self)
-    self.sc_f9.activated.connect(self.on_f9)
+    # In-window keyboard shortcuts (F6~F9, Ctrl+6~9, Ctrl+1~4)
+    self.shortcuts = []
+    for seq, handler in [
+        (QKeySequence(Qt.Key.Key_F6), self.on_f6),
+        (QKeySequence("Ctrl+6"), self.on_f6),
+        (QKeySequence("Ctrl+1"), self.on_f6),
+        (QKeySequence(Qt.Key.Key_F7), self.on_f7),
+        (QKeySequence("Ctrl+7"), self.on_f7),
+        (QKeySequence("Ctrl+2"), self.on_f7),
+        (QKeySequence(Qt.Key.Key_F8), self.on_f8),
+        (QKeySequence("Ctrl+8"), self.on_f8),
+        (QKeySequence("Ctrl+3"), self.on_f8),
+        (QKeySequence(Qt.Key.Key_F9), self.on_f9),
+        (QKeySequence("Ctrl+9"), self.on_f9),
+        (QKeySequence("Ctrl+4"), self.on_f9),
+    ]:
+      sc = QShortcut(seq, self)
+      sc.activated.connect(handler)
+      self.shortcuts.append(sc)
 
     # Outer container with modern vector-smoothed dark glass styling
     # (Note: Avoid QGraphicsDropShadowEffect here because on Windows layered translucent
@@ -549,13 +560,31 @@ class ArtaleExpOverlay(QWidget):
     prog_w.hide()
     self.simple_metric_widgets["EXP 進度條"] = prog_w
 
-    # Simple mode right-side auto-start quick toggle button (pure icon and status color)
+    # Simple mode right-side action buttons: [Start/Pause] [Reset] [Auto-Start]
+    self.simple_btn_f7 = SmoothButton(
+        "", parent=self.simple_widget, icon_name="play"
+    )
+    self.simple_btn_f7.custom_icon_size = 18.0
+    self.simple_btn_f7.setFixedSize(20, 20)
+    self.simple_btn_f7.setToolTip("開始/暫停 [F7/Ctrl+7]")
+    self.simple_btn_f7.clicked.connect(self.on_f7)
+    self.simple_btn_f7.hide()
+
+    self.simple_btn_f8 = SmoothButton(
+        "", parent=self.simple_widget, icon_name="reset"
+    )
+    self.simple_btn_f8.custom_icon_size = 18.0
+    self.simple_btn_f8.setFixedSize(20, 20)
+    self.simple_btn_f8.setToolTip("重置 [F8/Ctrl+8]")
+    self.simple_btn_f8.clicked.connect(self.on_f8)
+    self.simple_btn_f8.hide()
+
     self.simple_btn_auto_start = SmoothButton(
         "", parent=self.simple_widget, icon_name="autostart"
     )
     self.simple_btn_auto_start.custom_icon_size = 18.0
     self.simple_btn_auto_start.setFixedSize(20, 20)
-    self.simple_btn_auto_start.setToolTip("自動開始 [F6]")
+    self.simple_btn_auto_start.setToolTip("自動開始 [F6/Ctrl+6]")
     self.simple_btn_auto_start.clicked.connect(self._toggle_auto_start)
     self.simple_btn_auto_start.hide()
 
@@ -964,8 +993,10 @@ class ArtaleExpOverlay(QWidget):
         if idx < len(active_keys) - 1:
           self.simple_layout.addSpacing(inter_space)
 
-      # Auto-start quick toggle button on right round
+      # Action buttons on right round: [Start/Pause] [Reset] [Auto-Start]
       self.simple_layout.addSpacerItem(self.simple_right_spacer)
+      self.simple_layout.addWidget(self.simple_btn_f7)
+      self.simple_layout.addWidget(self.simple_btn_f8)
       self.simple_layout.addWidget(self.simple_btn_auto_start)
 
       self.simple_widget.show()
@@ -1038,7 +1069,7 @@ class ArtaleExpOverlay(QWidget):
     self._save_config()
 
   def _update_simple_mode_focus_state(self, force: bool = False):
-    """Shows/hides the auto-start button on the right round in simple mode based on focus/hover."""
+    """Shows/hides the action buttons on the right round in simple mode based on focus/hover."""
     if self.current_mode != "simple" or not hasattr(self, "simple_btn_auto_start"):
       return
     dot_space = max(4, int(8 * self.ui_scale))
@@ -1054,14 +1085,18 @@ class ArtaleExpOverlay(QWidget):
       self.simple_right_spacer.changeSize(
           dot_space, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
       )
+      self.simple_btn_f7.show()
+      self.simple_btn_f8.show()
       self.simple_btn_auto_start.show()
     else:
       self.simple_right_spacer.changeSize(
           0, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
       )
+      self.simple_btn_f7.hide()
+      self.simple_btn_f8.hide()
       self.simple_btn_auto_start.hide()
 
-    h = max(32, int(36 * self.ui_scale))
+    h = max(34, int(38 * self.ui_scale))
     self.setMinimumSize(0, 0)
     self.setMaximumSize(16777215, 16777215)
     self.simple_layout.activate()
@@ -1528,6 +1563,28 @@ class ArtaleExpOverlay(QWidget):
       self.btn_f7.set_icon_name("play")
       self.btn_f7.set_custom_style(None, None, None)
 
+    if hasattr(self, "simple_btn_f7"):
+      if self.engine.is_running:
+        self.simple_btn_f7.set_icon_name("pause")
+        self.simple_btn_f7.setToolTip("暫停測速 [F7/Ctrl+7]")
+        self.simple_btn_f7.set_custom_style(
+            bg=QColor(239, 68, 68, 38),
+            border=QColor(239, 68, 68, 80),
+            text_color=QColor("#f87171"),
+        )
+      elif self.engine.is_paused:
+        self.simple_btn_f7.set_icon_name("play")
+        self.simple_btn_f7.setToolTip("繼續測速 [F7/Ctrl+7]")
+        self.simple_btn_f7.set_custom_style(
+            bg=QColor(16, 185, 129, 38),
+            border=QColor(52, 211, 153, 80),
+            text_color=QColor("#34d399"),
+        )
+      else:
+        self.simple_btn_f7.set_icon_name("play")
+        self.simple_btn_f7.setToolTip("開始測速 [F7/Ctrl+7]")
+        self.simple_btn_f7.set_custom_style(None, None, None)
+
     # Values in detailed mode (same rows are reused in game mode!)
     self.row_duration.set_value(m["練功時長"])
     self.row_current.set_value(m["當前經驗"])
@@ -1600,8 +1657,17 @@ class ArtaleExpOverlay(QWidget):
 
   def _load_config(self):
     try:
-      if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+      config_path = (
+          CONFIG_FILE
+          if os.path.exists(CONFIG_FILE)
+          else (
+              LEGACY_CONFIG_FILE
+              if os.path.exists(LEGACY_CONFIG_FILE)
+              else None
+          )
+      )
+      if config_path:
+        with open(config_path, "r", encoding="utf-8") as f:
           cfg = json.load(f)
           x, y = cfg.get("x", 120), cfg.get("y", 120)
           self.move(x, y)
@@ -1622,6 +1688,8 @@ class ArtaleExpOverlay(QWidget):
           )
           self.ui_scale = cfg.get("ui_scale", 1.0)
           self.opacity_val = cfg.get("opacity", 0.95)
+          if "auto_start" in cfg:
+            self.engine.auto_start_enabled = bool(cfg["auto_start"])
           self.target_window_name = cfg.get(
               "target_window_name", config.DEFAULT_TARGET_WINDOW
           )
@@ -1641,7 +1709,8 @@ class ArtaleExpOverlay(QWidget):
       else:
         self.move(120, 120)
         self._apply_game_mode()
-    except Exception:
+    except Exception as e:
+      logger.warning("Error loading config: %s", e)
       self.move(120, 120)
       self._apply_game_mode()
 
@@ -1660,17 +1729,19 @@ class ArtaleExpOverlay(QWidget):
           "game_mode_items": self.game_mode_items,
           "ui_scale": getattr(self, "ui_scale", 1.0),
           "opacity": getattr(self, "opacity_val", 0.95),
+          "auto_start": getattr(self.engine, "auto_start_enabled", True),
           "target_window_name": getattr(
-              self, "target_window_name", "MapleStory Worlds-Artale"
+              self, "target_window_name", config.DEFAULT_TARGET_WINDOW
           ),
           "target_hwnd": getattr(self, "target_hwnd", None),
           "sim_video_path": getattr(self, "sim_video_path", None),
           "sim_speed": getattr(self, "sim_speed", 1.0),
       }
+      os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
       with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
-    except Exception:
-      pass
+    except Exception as e:
+      logger.warning("Error saving config to %s: %s", CONFIG_FILE, e)
 
   def closeEvent(self, event):
     self._save_config()
@@ -1715,7 +1786,7 @@ def main(
   font.setStyleStrategy(
       QFont.StyleStrategy.PreferAntialias | QFont.StyleStrategy.PreferQuality
   )
-  font.setHintingPreference(QFont.HintingPreference.PreferVerticalHinting)
+  font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
   app.setFont(font)
 
   overlay = ArtaleExpOverlay()

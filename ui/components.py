@@ -287,10 +287,10 @@ class SimpleMetricItem(QWidget):
 
   def update_scale(self, scale: float = 1.0) -> None:
     self.scale = scale
-    lbl_font_size = max(9, int(12 * scale))
-    val_font_size = max(10, int(13 * scale))
+    lbl_font_size = max(10, int(13 * scale))
+    val_font_size = max(12, int(15 * scale))
     self.layout().setSpacing(max(3, int(5 * scale)))
-    val_min_w = max(50, int(82 * scale))
+    val_min_w = max(55, int(86 * scale))
     self.lbl_value.setMinimumWidth(val_min_w)
     self.lbl_label.setStyleSheet(f"""
         QLabel {{
@@ -316,7 +316,7 @@ class SimpleMetricItem(QWidget):
   def set_value(self, val_str: str, color: Optional[str] = None) -> None:
     self.lbl_value.setText(val_str)
     self.current_val_color = color if color else "#f8fafc"
-    val_font_size = max(10, int(13 * self.scale))
+    val_font_size = max(12, int(15 * self.scale))
     self.lbl_value.setStyleSheet(f"""
         QLabel {{
             color: {self.current_val_color};
@@ -357,9 +357,9 @@ class SimpleProgressBarItem(QWidget):
 
   def update_scale(self, scale: float = 1.0) -> None:
     self.scale = scale
-    lbl_font_size = max(9, int(12 * scale))
-    bar_w = max(30, int(46 * scale))
-    bar_h = max(4, int(6 * scale))
+    lbl_font_size = max(10, int(13 * scale))
+    bar_w = max(35, int(50 * scale))
+    bar_h = max(5, int(7 * scale))
     radius = max(2, int(3 * scale))
     self.layout().setSpacing(max(2, int(4 * scale)))
     self.lbl_label.setStyleSheet(f"""

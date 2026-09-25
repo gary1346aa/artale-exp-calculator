@@ -3,10 +3,15 @@
 Complies with the Google Python Style Guide.
 """
 
+import logging
+import os
+import sys
+import tempfile
 from typing import List, Optional
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QDialog,
     QFrame,
     QHBoxLayout,
@@ -18,6 +23,8 @@ from PyQt6.QtWidgets import (
 )
 
 import config
+
+logger = logging.getLogger(__name__)
 
 
 class GameModeSettingsDialog(QDialog):
@@ -238,15 +245,19 @@ class UpdateDownloadWorker(QThread):
     self.dest_path = dest_path
 
   def run(self):
-    success = download_file(
-        self.download_url,
-        self.dest_path,
-        progress_callback=lambda d, t: self.progress.emit(d, t),
-    )
-    if success:
-      self.finished.emit(True, self.dest_path)
-    else:
-      self.finished.emit(False, "下載失敗，請檢查網路連線")
+    try:
+      success = download_file(
+          self.download_url,
+          self.dest_path,
+          progress_callback=lambda d, t: self.progress.emit(d, t),
+      )
+      if success:
+        self.finished.emit(True, self.dest_path)
+      else:
+        self.finished.emit(False, "下載失敗，請檢查網路連線")
+    except Exception as e:
+      logger.error("Download worker exception: %s", e)
+      self.finished.emit(False, f"下載發生錯誤: {e}")
 
 
 class AboutDialog(QDialog):
@@ -388,6 +399,11 @@ class AboutDialog(QDialog):
         self.btn_check_update.setEnabled(False)
         # Close dialog and app to let restart script take over
         QDialog.accept(self)
+        qapp = QApplication.instance()
+        if qapp:
+          qapp.quit()
+        else:
+          sys.exit(0)
       else:
         self.lbl_update_status.setText(msg)
         self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
@@ -437,20 +453,25 @@ class AboutDialog(QDialog):
 
   def _start_download(self, info: UpdateInfo):
     """Starts background downloading of the release asset."""
-    import tempfile
+    try:
+      self.btn_check_update.setEnabled(False)
+      self.btn_check_update.setText("下載中...")
+      self.lbl_update_status.setText("準備下載中...")
+      self.lbl_update_status.setStyleSheet("color: #94a3b8; font-size: 11px;")
 
-    self.btn_check_update.setEnabled(False)
-    self.btn_check_update.setText("下載中...")
-    self.lbl_update_status.setText("準備下載中...")
-    self.lbl_update_status.setStyleSheet("color: #94a3b8; font-size: 11px;")
+      dest_filename = info.asset_name if info.asset_name else "update.zip"
+      dest_path = os.path.join(tempfile.gettempdir(), dest_filename)
 
-    dest_filename = info.asset_name if info.asset_name else "update.zip"
-    dest_path = os.path.join(tempfile.gettempdir(), dest_filename)
-
-    self._download_worker = UpdateDownloadWorker(info.download_url, dest_path, self)
-    self._download_worker.progress.connect(self._on_download_progress)
-    self._download_worker.finished.connect(self._on_download_finished)
-    self._download_worker.start()
+      self._download_worker = UpdateDownloadWorker(info.download_url, dest_path, self)
+      self._download_worker.progress.connect(self._on_download_progress)
+      self._download_worker.finished.connect(self._on_download_finished)
+      self._download_worker.start()
+    except Exception as e:
+      logger.error("Failed to start download: %s", e)
+      self.btn_check_update.setEnabled(True)
+      self.btn_check_update.setText("重新下載")
+      self.lbl_update_status.setText(f"下載初始化失敗: {e}")
+      self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
 
   def _on_download_progress(self, downloaded: int, total: int):
     if total > 0:
