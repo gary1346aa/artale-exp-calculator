@@ -535,11 +535,11 @@ def draw_vector_icon(
 
   elif icon_name == "autostart":
     # Automotive Auto Start-Stop: Circular arrow with bold 'A' and stroked two-wing arrow
-    # Arc start and end are mathematically symmetrical about the Y-axis (270° ± 36°)
+    # Arc start and end are mathematically symmetrical about the Y-axis (270° ± 48°)
     painter.setPen(pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    r = size * 0.45
-    theta = 36.0
+    r = size * 0.40
+    theta = 48.0
     start_deg = (270.0 + theta) % 360.0
     end_deg = (270.0 - theta) % 360.0
     sweep_deg = 360.0 - 2.0 * theta
@@ -565,7 +565,7 @@ def draw_vector_icon(
     ny = ux
 
     # Wing dimensions proportional to size
-    w_len = max(2.5, size * 0.17)
+    w_len = max(2.4, size * 0.16)
     forward_dist = w_len * 0.85
     spread_dist = w_len * 0.65
 
@@ -579,15 +579,15 @@ def draw_vector_icon(
     arr.lineTo(p_wing2)
     painter.drawPath(arr)
 
-    # Bold 'A' in center with safe clearance to prevent overlap
-    a_font = QFont("Arial", max(7, int(size * 0.42)), QFont.Weight.Bold)
+    # Bold 'A' optically centered inside the circle
+    a_font = QFont("Arial", max(7, int(size * 0.38)), QFont.Weight.Bold)
     painter.setFont(a_font)
     painter.setPen(color)
-    painter.drawText(
-        QRectF(cx - r, cy - r - 0.5, r * 2, r * 2),
-        Qt.AlignmentFlag.AlignCenter,
-        "A",
-    )
+    fm = painter.fontMetrics()
+    tight = fm.tightBoundingRect("A")
+    draw_x = cx - tight.center().x()
+    draw_y = cy + 0.5 - tight.center().y()
+    painter.drawText(QPointF(draw_x, draw_y), "A")
 
 
 class SmoothButton(QPushButton):
@@ -634,15 +634,19 @@ class SmoothButton(QPushButton):
     self.custom_bg = bg
     self.custom_border = border
     self.custom_color = text_color
+    self.update()
+
   def sizeHint(self) -> QSize:
     sh = super().sizeHint()
     if self.icon_name == "autostart" and self.text():
       fm = self.fontMetrics()
       text_w = fm.horizontalAdvance(self.text())
-      ic_size = min(24 * 0.58, 13.0)
-      gap = 6.0
-      w = ic_size + gap + text_w + 24
-      return QSize(max(sh.width(), int(w)), max(sh.height(), 24))
+      h = self.height() if self.height() > 0 else 24
+      ic_size = self.custom_icon_size if self.custom_icon_size else h * 0.55
+      gap = max(4.0, ic_size * 0.45)
+      pad_h = max(12.0, h * 0.5)
+      w = ic_size + gap + text_w + pad_h
+      return QSize(max(sh.width(), int(w)), max(sh.height(), int(h)))
     elif self.icon_name:
       sz = int(self.custom_icon_size + 4) if self.custom_icon_size else 24
       return QSize(sz, sz)
@@ -701,8 +705,12 @@ class SmoothButton(QPushButton):
 
     if self.icon_name == "autostart" and self.text():
       # Auto-start with automotive (A) symbol on left + text (centered group)
-      ic_size = min(rect.height() * 0.58, 13.0)
-      gap = 6.0
+      ic_size = (
+          self.custom_icon_size
+          if self.custom_icon_size
+          else rect.height() * 0.55
+      )
+      gap = max(4.0, ic_size * 0.45)
       fm = painter.fontMetrics()
       text_w = fm.horizontalAdvance(self.text())
       total_w = ic_size + gap + text_w

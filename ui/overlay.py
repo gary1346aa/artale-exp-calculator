@@ -24,8 +24,10 @@ from PyQt6.QtGui import (
     QCursor,
     QFont,
     QIcon,
+    QKeySequence,
     QPainter,
     QPen,
+    QShortcut,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -148,7 +150,18 @@ class ArtaleExpOverlay(QWidget):
     self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
   def _init_ui(self):
+    self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     self.setFixedWidth(int(340 * self.ui_scale))
+
+    # In-window keyboard shortcuts (guarantee F6/F7/F8/F9 work across any focus state)
+    self.sc_f6 = QShortcut(QKeySequence(Qt.Key.Key_F6), self)
+    self.sc_f6.activated.connect(self.on_f6)
+    self.sc_f7 = QShortcut(QKeySequence(Qt.Key.Key_F7), self)
+    self.sc_f7.activated.connect(self.on_f7)
+    self.sc_f8 = QShortcut(QKeySequence(Qt.Key.Key_F8), self)
+    self.sc_f8.activated.connect(self.on_f8)
+    self.sc_f9 = QShortcut(QKeySequence(Qt.Key.Key_F9), self)
+    self.sc_f9.activated.connect(self.on_f9)
 
     # Outer container with modern vector-smoothed dark glass styling
     # (Note: Avoid QGraphicsDropShadowEffect here because on Windows layered translucent
@@ -156,6 +169,7 @@ class ArtaleExpOverlay(QWidget):
     # resulting in 'UpdateLayeredWindowIndirect failed: The parameter is incorrect.')
     self.outer_card = SmoothCard(self)
     self.outer_card.setObjectName("outerCard")
+    self.outer_card.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     main_layout = QVBoxLayout(self)
     main_layout.setContentsMargins(0, 0, 0, 0)
@@ -253,6 +267,7 @@ class ArtaleExpOverlay(QWidget):
         """)
 
     self.btn_auto_start = SmoothButton("自動開始 OFF", self, icon_name="autostart")
+    self.btn_auto_start.custom_icon_size = max(11.0, 14.0 * self.ui_scale)
     self.btn_auto_start.setToolTip(
         "自動開始 [F6]：開啟時，偵測到經驗值增加即自動開始計時 (F7暫停或F8重置時自動關閉一次)"
     )
@@ -505,6 +520,8 @@ class ArtaleExpOverlay(QWidget):
   def _toggle_auto_start(self):
     enabled = self.engine.toggle_auto_start()
     self._update_auto_start_button_style(enabled)
+    if self.current_mode == "simple":
+      self._update_simple_mode_focus_state()
     self._refresh_ui()
 
   def on_f6(self):
@@ -922,13 +939,16 @@ class ArtaleExpOverlay(QWidget):
     self._save_config()
 
   def _update_simple_mode_focus_state(self):
-    """Shows/hides the auto-start button on the right round in simple mode based on focus/hover."""
+    """Shows/hides the auto-start button on the right round in simple mode based on focus/hover or enabled state."""
     if self.current_mode != "simple" or not hasattr(self, "simple_btn_auto_start"):
       return
     dot_space = max(3, int(6 * self.ui_scale))
-    cursor_pos = QCursor.pos()
-    is_hovered = self.geometry().contains(cursor_pos)
-    is_active = self.isActiveWindow() or is_hovered
+    is_hovered = self.underMouse()
+    is_active = (
+        self.isActiveWindow()
+        or is_hovered
+        or getattr(self.engine, "auto_start_enabled", False)
+    )
 
     if is_active:
       self.simple_right_spacer.changeSize(
@@ -1200,6 +1220,7 @@ class ArtaleExpOverlay(QWidget):
     auto_start_h = max(20, int(24 * s))
     auto_start_font_size = max(9, int(11 * s))
     self.btn_auto_start.setFixedHeight(auto_start_h)
+    self.btn_auto_start.custom_icon_size = max(11.0, 14.0 * s)
     auto_font = QFont(self.btn_auto_start.font())
     auto_font.setPixelSize(auto_start_font_size)
     self.btn_auto_start.setFont(auto_font)
@@ -1432,6 +1453,7 @@ class ArtaleExpOverlay(QWidget):
   def mousePressEvent(self, event):
     if not self.isActiveWindow():
       self.activateWindow()
+    self.setFocus()
     self._update_focus_visibility()
     if event.button() == Qt.MouseButton.LeftButton:
       self.drag_position = (

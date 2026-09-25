@@ -445,7 +445,7 @@ class TestOverlayHud(unittest.TestCase):
       self.overlay._open_select_window_dialog()
 
   def test_f6_auto_start_toggle(self):
-    """Verify that F6 toggles auto start and updates button style."""
+    """Verify that F6 toggles auto start and updates button style and simple mode button."""
     self.assertFalse(self.overlay.engine.auto_start_enabled)
     self.assertIn("OFF", self.overlay.btn_auto_start.text())
 
@@ -458,6 +458,28 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.on_f6()
     self.assertFalse(self.overlay.engine.auto_start_enabled)
     self.assertIn("OFF", self.overlay.btn_auto_start.text())
+
+    # In Simple Mode: F6 toggles and auto start button reveals when ON
+    self.overlay._set_mode("simple")
+    self.overlay._has_active_focus = False
+    self.overlay._update_simple_mode_focus_state()
+    self.assertFalse(self.overlay.simple_btn_auto_start.isVisible())
+
+    self.overlay.on_f6()
+    self.assertTrue(self.overlay.engine.auto_start_enabled)
+    self.assertTrue(self.overlay.simple_btn_auto_start.isVisible())
+
+    self.overlay.on_f6()
+    self.assertFalse(self.overlay.engine.auto_start_enabled)
+    self.assertFalse(self.overlay.simple_btn_auto_start.isVisible())
+
+    # Verify Auto Start icon scaling in full & game mode
+    self.overlay._set_mode("full")
+    self.overlay.set_ui_scale(1.0)
+    ic_sz_1x = self.overlay.btn_auto_start.custom_icon_size
+    self.overlay.set_ui_scale(1.5)
+    ic_sz_15x = self.overlay.btn_auto_start.custom_icon_size
+    self.assertGreater(ic_sz_15x, ic_sz_1x)
 
   def test_status_indicator_dot_states(self):
     """Verify 4 indicator dot states:
