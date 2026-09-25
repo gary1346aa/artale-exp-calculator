@@ -872,7 +872,7 @@ class ArtaleExpOverlay(QWidget):
       self.simple_layout.addWidget(self.simple_btn_auto_start)
 
       self.simple_widget.show()
-      self._update_simple_mode_focus_state()
+      self._update_simple_mode_focus_state(force=True)
 
     else:
       self.outer_card.is_pill = False
@@ -938,17 +938,18 @@ class ArtaleExpOverlay(QWidget):
 
     self._save_config()
 
-  def _update_simple_mode_focus_state(self):
-    """Shows/hides the auto-start button on the right round in simple mode based on focus/hover or enabled state."""
+  def _update_simple_mode_focus_state(self, force: bool = False):
+    """Shows/hides the auto-start button on the right round in simple mode based on focus/hover."""
     if self.current_mode != "simple" or not hasattr(self, "simple_btn_auto_start"):
       return
     dot_space = max(4, int(8 * self.ui_scale))
     is_hovered = self.underMouse()
-    is_active = (
-        self.isActiveWindow()
-        or is_hovered
-        or getattr(self.engine, "auto_start_enabled", False)
-    )
+    is_active = self.isActiveWindow() or is_hovered
+
+    was_visible = self.simple_btn_auto_start.isVisible()
+    if not force and was_visible == is_active:
+      self.update()
+      return
 
     if is_active:
       self.simple_right_spacer.changeSize(
@@ -961,13 +962,15 @@ class ArtaleExpOverlay(QWidget):
       )
       self.simple_btn_auto_start.hide()
 
+    h = max(28, int(32 * self.ui_scale))
     self.setMinimumSize(0, 0)
     self.setMaximumSize(16777215, 16777215)
     self.simple_layout.activate()
     self.card_layout.activate()
     self.layout().activate()
     self.adjustSize()
-    self.setFixedSize(self.sizeHint())
+    self.setFixedHeight(h)
+    self.setFixedWidth(self.sizeHint().width())
     self.update()
 
   def _update_focus_visibility(self):

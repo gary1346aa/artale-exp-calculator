@@ -459,18 +459,31 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.engine.auto_start_enabled)
     self.assertIn("OFF", self.overlay.btn_auto_start.text())
 
-    # In Simple Mode: F6 toggles and auto start button reveals when ON
+    # In Simple Mode: F6 toggles auto start; button hides when unfocused and reveals on focus
     self.overlay._set_mode("simple")
-    self.overlay._has_active_focus = False
-    self.overlay._update_simple_mode_focus_state()
     self.assertFalse(self.overlay.simple_btn_auto_start.isVisible())
 
+    # Toggling F6 while unfocused changes state without revealing button or moving window
     self.overlay.on_f6()
     self.assertTrue(self.overlay.engine.auto_start_enabled)
+    self.assertFalse(self.overlay.simple_btn_auto_start.isVisible())
+
+    # When focused/hovered, button reveals on right round with status color
+    self.overlay.simple_btn_auto_start.show()
     self.assertTrue(self.overlay.simple_btn_auto_start.isVisible())
+    self.assertEqual(
+        self.overlay.simple_btn_auto_start.custom_color.name(), "#34d399"
+    )
 
     self.overlay.on_f6()
     self.assertFalse(self.overlay.engine.auto_start_enabled)
+    self.assertEqual(
+        self.overlay.simple_btn_auto_start.custom_color.name(), "#64748b"
+    )
+
+    # When unfocused, button hides even when auto start is ON
+    self.overlay.engine.auto_start_enabled = True
+    self.overlay._update_simple_mode_focus_state()
     self.assertFalse(self.overlay.simple_btn_auto_start.isVisible())
 
     # Verify Auto Start icon scaling in full & game mode
