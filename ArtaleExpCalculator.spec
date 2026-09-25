@@ -49,6 +49,7 @@ hiddenimports = [
     "core.metrics",
     "core.capture",
     "core.python_engine",
+    "core.updater",
     "ui",
     "ui.components",
     "ui.dialogs",

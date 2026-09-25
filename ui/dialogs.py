@@ -207,33 +207,48 @@ class GameModeSettingsDialog(QDialog):
     ]
 
 
+from core.updater import (
+    UpdateInfo,
+    apply_update_and_restart,
+    check_for_update,
+    download_file,
+)
+
+
 class UpdateCheckWorker(QThread):
   """Background thread to query GitHub Releases API without blocking the UI."""
 
-  result_ready = pyqtSignal(bool, str, str)  # (success, tag_or_error, release_url)
+  result_ready = pyqtSignal(bool, object, str)  # (has_update, update_info, status_msg)
 
   def run(self):
-    url = (
-        f"https://api.github.com/repos/{config.APP_GITHUB_REPO}/releases/latest"
+    has_update, info, msg = check_for_update(
+        repo=config.APP_GITHUB_REPO,
+        current_version=config.APP_VERSION,
     )
-    req = urllib.request.Request(
-        url,
-        headers={"User-Agent": "ArtaleExpCalculator-Client"},
+    self.result_ready.emit(has_update, info, msg)
+
+
+class UpdateDownloadWorker(QThread):
+  """Background thread to download update asset with progress reporting."""
+
+  progress = pyqtSignal(int, int)  # (downloaded, total)
+  finished = pyqtSignal(bool, str)  # (success, path_or_error)
+
+  def __init__(self, download_url: str, dest_path: str, parent=None):
+    super().__init__(parent)
+    self.download_url = download_url
+    self.dest_path = dest_path
+
+  def run(self):
+    success = download_file(
+        self.download_url,
+        self.dest_path,
+        progress_callback=lambda d, t: self.progress.emit(d, t),
     )
-    try:
-      with urllib.request.urlopen(req, timeout=5) as resp:
-        if resp.status == 200:
-          data = json.loads(resp.read().decode("utf-8"))
-          tag = data.get("tag_name", "").lstrip("v")
-          html_url = data.get(
-              "html_url",
-              f"https://github.com/{config.APP_GITHUB_REPO}/releases",
-          )
-          self.result_ready.emit(True, tag, html_url)
-          return
-      self.result_ready.emit(False, "伺服器無回應", "")
-    except Exception as e:
-      self.result_ready.emit(False, str(e), "")
+    if success:
+      self.finished.emit(True, self.dest_path)
+    else:
+      self.finished.emit(False, "下載失敗，請檢查網路連線")
 
 
 class AboutDialog(QDialog):
@@ -243,7 +258,7 @@ class AboutDialog(QDialog):
     super().__init__(parent)
     self.setWindowTitle("關於 (About)")
     self.setModal(True)
-    self.setFixedWidth(380)
+    self.setFixedWidth(400)
     self.setStyleSheet(f"""
         QDialog {{
             background-color: #181d28;
@@ -343,7 +358,7 @@ class AboutDialog(QDialog):
     btn_box.setSpacing(10)
 
     self.btn_check_update = QPushButton("檢查更新")
-    self.btn_check_update.clicked.connect(self._check_for_updates)
+    self.btn_check_update.clicked.connect(self._on_action_clicked)
     btn_box.addWidget(self.btn_check_update)
 
     self.lbl_update_status = QLabel("")
@@ -360,7 +375,33 @@ class AboutDialog(QDialog):
 
     layout.addLayout(btn_box)
 
-    self._worker = None
+    self.available_update: Optional[UpdateInfo] = None
+    self.downloaded_archive_path: Optional[str] = None
+    self._check_worker: Optional[UpdateCheckWorker] = None
+    self._download_worker: Optional[UpdateDownloadWorker] = None
+
+  def _on_action_clicked(self):
+    """Handles action button click depending on updater state."""
+    if self.downloaded_archive_path:
+      # Apply and restart
+      success, msg = apply_update_and_restart(self.downloaded_archive_path)
+      if success:
+        self.lbl_update_status.setText(msg)
+        self.btn_check_update.setEnabled(False)
+        # Close dialog and app to let restart script take over
+        QDialog.accept(self)
+      else:
+        self.lbl_update_status.setText(msg)
+        self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
+      return
+
+    if self.available_update:
+      # Start download
+      self._start_download(self.available_update)
+      return
+
+    # Check for updates
+    self._check_for_updates()
 
   def _check_for_updates(self):
     """Initiates an asynchronous check for updates against GitHub Releases."""
@@ -368,37 +409,78 @@ class AboutDialog(QDialog):
     self.lbl_update_status.setText("檢查中...")
     self.lbl_update_status.setStyleSheet("color: #94a3b8; font-size: 11px;")
 
-    self._worker = UpdateCheckWorker(self)
-    self._worker.result_ready.connect(self._on_update_result)
-    self._worker.start()
+    self._check_worker = UpdateCheckWorker(self)
+    self._check_worker.result_ready.connect(self._on_check_result)
+    self._check_worker.start()
 
-  def _on_update_result(self, success: bool, tag_or_err: str, release_url: str):
+  def _on_check_result(
+      self, has_update: bool, info: Optional[UpdateInfo], status_msg: str
+  ):
     self.btn_check_update.setEnabled(True)
-    if not success:
-      self.lbl_update_status.setText("無法連線至更新伺服器")
-      self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
-      return
-
-    def _parse_ver(v_str: str) -> tuple:
-      parts = []
-      for p in v_str.split("."):
-        digits = "".join(filter(str.isdigit, p))
-        parts.append(int(digits) if digits else 0)
-      return tuple(parts)
-
-    try:
-      latest_v = _parse_ver(tag_or_err)
-      current_v = _parse_ver(config.APP_VERSION)
-      if latest_v > current_v:
-        self.lbl_update_status.setText(
-            f'<a href="{release_url}" style="color: #38bdf8; text-decoration:'
-            f' underline;">發現新版本 v{tag_or_err}</a>'
-        )
-      else:
-        self.lbl_update_status.setText("已是最新版本 ✓")
+    if has_update and info:
+      self.available_update = info
+      self.btn_check_update.setText("立即下載更新")
+      self.btn_check_update.setStyleSheet(
+          "background-color: #0284c7; color: white; border: none; font-weight:"
+          " 600;"
+      )
+      self.lbl_update_status.setText(
+          f'<a href="{info.download_url}" style="color: #38bdf8; text-decoration:'
+          f' underline;">發現新版本 v{info.version}</a>'
+      )
+    else:
+      self.available_update = None
+      if "最新版本" in status_msg:
+        self.lbl_update_status.setText(status_msg)
         self.lbl_update_status.setStyleSheet("color: #34d399; font-size: 11px;")
-    except Exception:
-      self.lbl_update_status.setText("版本格式解析失敗")
+      else:
+        self.lbl_update_status.setText(status_msg)
+        self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
+
+  def _start_download(self, info: UpdateInfo):
+    """Starts background downloading of the release asset."""
+    import tempfile
+
+    self.btn_check_update.setEnabled(False)
+    self.btn_check_update.setText("下載中...")
+    self.lbl_update_status.setText("準備下載中...")
+    self.lbl_update_status.setStyleSheet("color: #94a3b8; font-size: 11px;")
+
+    dest_filename = info.asset_name if info.asset_name else "update.zip"
+    dest_path = os.path.join(tempfile.gettempdir(), dest_filename)
+
+    self._download_worker = UpdateDownloadWorker(info.download_url, dest_path, self)
+    self._download_worker.progress.connect(self._on_download_progress)
+    self._download_worker.finished.connect(self._on_download_finished)
+    self._download_worker.start()
+
+  def _on_download_progress(self, downloaded: int, total: int):
+    if total > 0:
+      pct = int(downloaded * 100 / total)
+      mb_down = downloaded / (1024 * 1024)
+      mb_total = total / (1024 * 1024)
+      self.lbl_update_status.setText(
+          f"下載中: {pct}% ({mb_down:.1f}/{mb_total:.1f} MB)"
+      )
+    else:
+      mb_down = downloaded / (1024 * 1024)
+      self.lbl_update_status.setText(f"已下載: {mb_down:.1f} MB")
+
+  def _on_download_finished(self, success: bool, path_or_err: str):
+    self.btn_check_update.setEnabled(True)
+    if success:
+      self.downloaded_archive_path = path_or_err
+      self.btn_check_update.setText("套用並重啟")
+      self.btn_check_update.setStyleSheet(
+          "background-color: #10b981; color: white; border: none; font-weight:"
+          " 600;"
+      )
+      self.lbl_update_status.setText("下載完成！點擊按鈕重啟套用")
+      self.lbl_update_status.setStyleSheet("color: #34d399; font-size: 11px;")
+    else:
+      self.lbl_update_status.setText(path_or_err)
       self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
+      self.btn_check_update.setText("重新下載")
+
 
 

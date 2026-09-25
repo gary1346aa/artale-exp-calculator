@@ -1,0 +1,158 @@
+name: Release Build & Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows (x86_64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build C++ Native Core (CMake)
+        run: |
+          cmake -B build -S src/cpp -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+          copy build\Release\artale_exp_core.dll artale_exp_core.dll
+
+      - name: Build Executable with PyInstaller
+        run: |
+          pyinstaller ArtaleExpCalculator.spec --noconfirm
+
+      - name: Package Windows Zip Archive
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/ArtaleExpCalculator/* -DestinationPath dist/ArtaleExpCalculator-win-x64.zip
+          $hash = (Get-FileHash dist/ArtaleExpCalculator-win-x64.zip -Algorithm SHA256).Hash
+          Set-Content -Path dist/ArtaleExpCalculator-win-x64.sha256 -Value $hash
+          Write-Host "Windows SHA256: $hash"
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            dist/ArtaleExpCalculator-win-x64.zip
+            dist/ArtaleExpCalculator-win-x64.sha256
+
+  build-macos:
+    name: Build macOS (Apple Silicon arm64)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build C++ Native Core (CMake)
+        run: |
+          cmake -B build -S src/cpp -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+          cp build/libartale_exp_core.dylib libartale_exp_core.dylib
+
+      - name: Build macOS App Bundle with PyInstaller
+        run: |
+          pyinstaller ArtaleExpCalculator.spec --noconfirm
+
+      - name: Package macOS Zip Archive
+        run: |
+          cd dist
+          zip -r -y ArtaleExpCalculator-mac-arm64.zip ArtaleExpCalculator.app
+          shasum -a 256 ArtaleExpCalculator-mac-arm64.zip | awk '{print $1}' > ArtaleExpCalculator-mac-arm64.sha256
+          echo "macOS SHA256: $(cat ArtaleExpCalculator-mac-arm64.sha256)"
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: |
+            dist/ArtaleExpCalculator-mac-arm64.zip
+            dist/ArtaleExpCalculator-mac-arm64.sha256
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Generate latest.json Manifest
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (-not $tag) { $tag = "v1.0.0" }
+          $version = $tag.TrimStart('v')
+          
+          $winSha = ""
+          if (Test-Path "release_assets/ArtaleExpCalculator-win-x64.sha256") {
+            $winSha = (Get-Content "release_assets/ArtaleExpCalculator-win-x64.sha256").Trim()
+          }
+          $macSha = ""
+          if (Test-Path "release_assets/ArtaleExpCalculator-mac-arm64.sha256") {
+            $macSha = (Get-Content "release_assets/ArtaleExpCalculator-mac-arm64.sha256").Trim()
+          }
+
+          $manifest = @{
+            version = $version
+            tag = $tag
+            release_date = (Get-Date -Format "yyyy-MM-dd")
+            downloads = @{
+              "win-x64" = @{
+                url = "https://github.com/${{ github.repository }}/releases/download/$tag/ArtaleExpCalculator-win-x64.zip"
+                sha256 = $winSha
+              }
+              "mac-arm64" = @{
+                url = "https://github.com/${{ github.repository }}/releases/download/$tag/ArtaleExpCalculator-mac-arm64.zip"
+                sha256 = $macSha
+              }
+            }
+          }
+
+          $manifest | ConvertTo-Json -Depth 4 | Set-Content -Path release_assets/latest.json
+          Get-Content release_assets/latest.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Artale EXP Calculator ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release_assets/ArtaleExpCalculator-win-x64.zip
+            release_assets/ArtaleExpCalculator-mac-arm64.zip
+            release_assets/latest.json
+            release_assets/*.sha256
