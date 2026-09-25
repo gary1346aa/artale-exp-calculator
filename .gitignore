@@ -12,6 +12,7 @@ bin/
 *.dylib
 *.png
 !data/*.png
+!assets/*.png
 hud_config.json
 debug_crops/
 bazel-*
