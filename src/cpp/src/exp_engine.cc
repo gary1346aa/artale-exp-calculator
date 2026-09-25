@@ -731,8 +731,8 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
       float64x2_t s_i2_lo = vsubq_f64(vld1q_f64(pref_i2 + nx + tw), vld1q_f64(pref_i2 + nx));
       float64x2_t s_i2_hi = vsubq_f64(vld1q_f64(pref_i2 + nx + tw + 2), vld1q_f64(pref_i2 + nx + 2));
 
-      float64x2_t var_lo = vsubq_f64(s_i2_lo, vmulq_f64(vmulq_f64(s_i_lo, s_i_lo), vinv_pix));
-      float64x2_t var_hi = vsubq_f64(s_i2_hi, vmulq_f64(vmulq_f64(s_i_hi, s_i_hi), vinv_pix));
+      float64x2_t var_lo = vfmsq_f64(s_i2_lo, vmulq_f64(s_i_lo, s_i_lo), vinv_pix);
+      float64x2_t var_hi = vfmsq_f64(s_i2_hi, vmulq_f64(s_i_hi, s_i_hi), vinv_pix);
 
       uint64x2_t mask_lo = vcgtq_f64(var_lo, veps);
       uint64x2_t mask_hi = vcgtq_f64(var_hi, veps);
