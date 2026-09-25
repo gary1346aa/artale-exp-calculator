@@ -184,25 +184,39 @@ class CaptureWorker(QThread):
   def _run_macos_capture(self) -> None:
     """Executes the macOS CoreGraphics window capture loop."""
     try:
-      from core.capture_macos import capture_macos_window, find_macos_window_by_title
+      from core.capture_macos import (
+          capture_macos_window,
+          check_and_request_macos_screen_recording_permission,
+          find_macos_window_by_title,
+      )
     except Exception as e:
       self.status_changed.emit(f"macOS 捕獲模組初始化失敗: {e}", False)
       while self.running:
         time.sleep(0.5)
       return
 
+    check_and_request_macos_screen_recording_permission()
+
     last_sample_time = 0.0
     last_res = None
-    win_desc = (
-        self.target_window
-        if self.target_window
-        else f"Window ID {self.target_hwnd}"
-    )
 
     while self.running:
+      win_to_find = (
+          self.target_window
+          if self.target_window
+          else config.DEFAULT_TARGET_WINDOW
+      )
+      win_desc = (
+          win_to_find
+          if not self.target_hwnd
+          else f"Window ID {self.target_hwnd}"
+      )
+
       target_id = self.target_hwnd
-      if not target_id and self.target_window:
-        target_id = find_macos_window_by_title(self.target_window)
+      if not target_id:
+        target_id = find_macos_window_by_title(win_to_find)
+        if not target_id and win_to_find != "MapleStory Worlds":
+          target_id = find_macos_window_by_title("MapleStory Worlds")
 
       if not target_id:
         self.status_changed.emit(

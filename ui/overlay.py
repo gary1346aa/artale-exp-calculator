@@ -108,7 +108,7 @@ class ArtaleExpOverlay(QWidget):
     self.ui_scale = 1.0
     self.opacity_val = 0.95
     self.drag_position = QPoint()
-    self.target_window_name: str = "MapleStory Worlds-Artale"
+    self.target_window_name: str = config.DEFAULT_TARGET_WINDOW
     self.target_hwnd: Optional[int] = None
     self.video_worker: Optional[VideoSimulationWorker] = None
     self.is_simulating: bool = False
@@ -1623,8 +1623,10 @@ class ArtaleExpOverlay(QWidget):
           self.ui_scale = cfg.get("ui_scale", 1.0)
           self.opacity_val = cfg.get("opacity", 0.95)
           self.target_window_name = cfg.get(
-              "target_window_name", "MapleStory Worlds-Artale"
+              "target_window_name", config.DEFAULT_TARGET_WINDOW
           )
+          if sys.platform == "darwin" and self.target_window_name == "MapleStory Worlds-Artale":
+            self.target_window_name = "MapleStory Worlds"
           self.target_hwnd = cfg.get("target_hwnd", None)
           self.sim_video_path = cfg.get("sim_video_path", None)
           self.sim_speed = cfg.get("sim_speed", 1.0)

@@ -32,6 +32,10 @@ def get_visible_windows() -> List[Tuple[int, str]]:
   Returns:
     List of (hwnd, title) tuples for visible windows.
   """
+  if sys.platform == "darwin":
+    from core.capture_macos import get_macos_visible_windows
+    return get_macos_visible_windows()
+
   if sys.platform != "win32":
     return []
 
