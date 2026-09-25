@@ -129,17 +129,18 @@ class TestExpMetricsEngine(unittest.TestCase):
       self.assertNotIn("%", m[key], f"Key {key} should not contain '%'")
       self.assertNotIn("+", m[key], f"Key {key} should not contain '+'")
 
-  def test_warmup_shows_calculating(self):
+  def test_immediate_prediction_without_warmup(self):
     engine = ExpMetricsEngine()
     engine.add_sample(1000000, 10.0, timestamp=100.0)
     engine.start_measurement(timestamp=100.0)
     engine.add_sample(1005000, 10.05, timestamp=105.0)
 
-    # At t = 105s (elapsed = 5s), warmup period (< 15s)
+    # At t = 105s (elapsed = 5s), calculates immediately without warmup delay
     m = engine.get_metrics(now=105.0)
-    self.assertEqual(m["預估10分"], "計算中...")
-    self.assertEqual(m["預估60分"], "計算中...")
-    self.assertEqual(m["升級預估時間"], "計算中...")
+    self.assertNotEqual(m["預估10分"], "計算中...")
+    self.assertEqual(m["預估10分"], "600,000")  # 5,000 / 5s * 600s
+    self.assertEqual(m["預估60分"], "3,600,000")  # 5,000 / 5s * 3600s
+    self.assertNotEqual(m["升級預估時間"], "計算中...")
 
   def test_progressive_convergence_at_10m_and_60m(self):
     engine = ExpMetricsEngine()

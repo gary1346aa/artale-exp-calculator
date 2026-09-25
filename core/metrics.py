@@ -361,9 +361,6 @@ class ExpMetricsEngine:
     if self.state == MeasurementState.IDLE or elapsed <= 0.0:
       rate_1m_exp = 0
       rate_1m_str = "0"
-    elif elapsed < 15.0 and dt_1m < 5.0:
-      rate_1m_exp = 0
-      rate_1m_str = "計算中..."
     elif dt_1m >= 5.0:
       rate_1m_exp = int(round((exp_1m / dt_1m) * 60.0))
       rate_1m_str = f"{rate_1m_exp:,d}"
@@ -383,10 +380,6 @@ class ExpMetricsEngine:
       accum_10m_str = "0"
       proj_10m_exp = 0
       proj_10m_str = "0"
-    elif elapsed < 15.0:
-      accum_10m_str = f"{accum_10m_exp:,d}"
-      proj_10m_exp = 0
-      proj_10m_str = "計算中..."
     elif elapsed >= 600.0:
       # At or past 10 minutes: prediction seamlessly equals 10-min accumulated actual
       accum_10m_str = f"{accum_10m_exp:,d}"
@@ -411,10 +404,6 @@ class ExpMetricsEngine:
       accum_60m_str = "0"
       proj_60m_exp = 0
       proj_60m_str = "0"
-    elif elapsed < 15.0:
-      accum_60m_str = f"{accum_60m_exp:,d}"
-      proj_60m_exp = 0
-      proj_60m_str = "計算中..."
     elif elapsed >= 3600.0:
       # At or past 60 minutes: prediction seamlessly equals 60-min accumulated actual
       accum_60m_str = f"{accum_60m_exp:,d}"
@@ -429,12 +418,10 @@ class ExpMetricsEngine:
 
     # 4. Level up ETA
     eta_str = "-"
-    if self.state == MeasurementState.RUNNING:
+    if self.state == MeasurementState.RUNNING and elapsed > 0.0:
       if cur_pct is not None:
         if cur_pct >= 100.0:
           eta_str = "已滿級"
-        elif elapsed < 15.0:
-          eta_str = "計算中..."
         else:
           if elapsed >= 600.0:
             _, pct_10m, dt_10m = self._get_window_gain(600.0)
@@ -458,10 +445,8 @@ class ExpMetricsEngine:
             else:
               eta_secs = int(sec_to_lvl % 60)
               eta_str = f"{eta_mins}分{eta_secs:02d}秒"
-          elif elapsed > 20.0:
-            eta_str = "經驗無變動"
           else:
-            eta_str = "計算中..."
+            eta_str = "經驗無變動"
     elif self.state == MeasurementState.PAUSED:
       eta_str = "已暫停"
 
