@@ -534,28 +534,53 @@ def draw_vector_icon(
     painter.drawLine(QPointF(cx - d, cy + d), QPointF(cx + d, cy - d))
 
   elif icon_name == "autostart":
-    # Automotive Auto Start-Stop: Circular arrow with bold 'A'
+    # Automotive Auto Start-Stop: Circular arrow with bold 'A' and stroked two-wing arrow
+    # Arc start and end are mathematically symmetrical about the Y-axis (270° ± 36°)
     painter.setPen(pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    r = size * 0.48
+    r = size * 0.45
+    theta = 36.0
+    start_deg = (270.0 + theta) % 360.0
+    end_deg = (270.0 - theta) % 360.0
+    sweep_deg = 360.0 - 2.0 * theta
+
     path = QPainterPath()
-    path.arcMoveTo(QRectF(cx - r, cy - r, r * 2, r * 2), 30)
-    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 30, 290)
+    path.arcMoveTo(QRectF(cx - r, cy - r, r * 2, r * 2), start_deg)
+    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), start_deg, sweep_deg)
     painter.drawPath(path)
 
-    # Arrowhead
-    end_pt = path.currentPosition()
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QBrush(color))
-    s_arr = max(2.0, size * 0.20)
-    painter.drawPolygon([
-        end_pt + QPointF(-s_arr * 0.7, s_arr * 0.9),
-        end_pt + QPointF(s_arr * 0.9, 0),
-        end_pt + QPointF(-s_arr * 0.7, -s_arr * 0.9),
-    ])
+    # Arc end point (base of the arrowhead)
+    end_rad = math.radians(end_deg)
+    base_x = cx + r * math.cos(end_rad)
+    base_y = cy - r * math.sin(end_rad)
 
-    # Bold 'A' in center
-    a_font = QFont("Arial", max(7, int(size * 0.65)), QFont.Weight.Bold)
+    # Tangent vector (pointing forward along the arc in screen coordinates)
+    tan_deg = math.degrees(math.atan2(math.cos(end_rad), -math.sin(end_rad)))
+    tan_rad = math.radians(tan_deg)
+    ux = math.cos(tan_rad)
+    uy = -math.sin(tan_rad)
+
+    # Normal vector pointing outward from circle
+    nx = -uy
+    ny = ux
+
+    # Wing dimensions proportional to size
+    w_len = max(2.5, size * 0.17)
+    forward_dist = w_len * 0.85
+    spread_dist = w_len * 0.65
+
+    tip = QPointF(base_x + ux * forward_dist, base_y + uy * forward_dist)
+    p_wing1 = QPointF(base_x + nx * spread_dist, base_y + ny * spread_dist)
+    p_wing2 = QPointF(base_x - nx * spread_dist, base_y - ny * spread_dist)
+
+    arr = QPainterPath()
+    arr.moveTo(p_wing1)
+    arr.lineTo(tip)
+    arr.lineTo(p_wing2)
+    painter.drawPath(arr)
+
+    # Bold 'A' in center with safe clearance to prevent overlap
+    a_font = QFont("Arial", max(7, int(size * 0.42)), QFont.Weight.Bold)
     painter.setFont(a_font)
     painter.setPen(color)
     painter.drawText(
