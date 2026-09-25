@@ -6,7 +6,6 @@ Complies with the Google Python Style Guide.
 """
 
 from datetime import datetime
-import os
 import sys
 import time
 from typing import Optional, Tuple

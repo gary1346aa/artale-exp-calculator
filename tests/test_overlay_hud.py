@@ -16,7 +16,6 @@ from config import (
     get_status_indicator_dot,
 )
 from core.metrics import MeasurementState
-from dev.video_simulation import VideoSimulationWorker
 from dev.window_picker import SelectWindowDialog
 from ui.dialogs import AboutDialog, GameModeSettingsDialog
 from ui.overlay import ArtaleExpOverlay

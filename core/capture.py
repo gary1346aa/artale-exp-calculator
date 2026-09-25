@@ -10,7 +10,6 @@ import os
 import sys
 import time
 from typing import Optional
-import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
 import config

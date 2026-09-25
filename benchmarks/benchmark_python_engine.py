@@ -7,7 +7,6 @@ Matches Google Benchmark's reporting metrics.
 import os
 import sys
 import time
-from typing import Dict, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

@@ -13,13 +13,10 @@ import ctypes
 import glob
 import os
 import sys
-import time
-from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import cv2
-import numpy as np
 from core import python_engine
 
 

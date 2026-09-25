@@ -7,7 +7,6 @@ dependencies in the native DLL and test binaries.
 
 import json
 import os
-import sys
 from typing import Dict, List, Tuple
 import cv2
 import numpy as np
@@ -73,7 +72,7 @@ def generate_pristine_font_header(json_path: str, output_path: str) -> None:
 
     lines.append(f'// Prototype for \'{char}\' (width={width}, height={height})')
     lines.append(f'inline constexpr float {var_name}[{len(float_map)}] = {{')
-    
+    lines.append('')
     # Format 8 floats per line for readability and compact file size
     chunk_size = 8
     for i in range(0, len(float_map), chunk_size):

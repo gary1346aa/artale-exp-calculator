@@ -3,9 +3,7 @@
 Complies with the Google Python Style Guide.
 """
 
-import json
-from typing import Any, Dict, List, Optional, Tuple
-import urllib.request
+from typing import List, Optional
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,

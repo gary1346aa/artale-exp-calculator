@@ -8,31 +8,24 @@ import json
 import os
 import sys
 import time
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from PyQt6.QtCore import (
     QEvent,
     QPoint,
-    QRectF,
     Qt,
     QTimer,
-    pyqtSignal,
 )
 from PyQt6.QtGui import (
-    QBrush,
     QColor,
-    QCursor,
     QFont,
     QFontDatabase,
     QIcon,
     QKeySequence,
-    QPainter,
-    QPen,
     QShortcut,
 )
 from PyQt6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QDialog,
     QFileDialog,
     QFrame,
@@ -40,7 +33,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMenu,
     QProgressBar,
-    QPushButton,
     QSizePolicy,
     QSpacerItem,
     QSlider,
@@ -60,7 +52,7 @@ from config import (
     get_accum_exp_color,
     get_status_indicator_dot,
 )
-from core.capture import CaptureWorker, find_window_by_title_safe
+from core.capture import CaptureWorker
 from core.metrics import ExpMetricsEngine, MeasurementState
 from ui.components import (
     MetricRow,

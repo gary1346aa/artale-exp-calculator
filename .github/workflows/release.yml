@@ -47,11 +47,11 @@ jobs:
       - name: Smoke Test Packaged Windows Executable
         shell: pwsh
         run: |
-          & dist/ArtaleExpCalculator/ArtaleExpCalculator.exe --version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Smoke test failed: ArtaleExpCalculator.exe crashed on launch!"
+          $proc = Start-Process -FilePath "dist/ArtaleExpCalculator/ArtaleExpCalculator.exe" -ArgumentList "--version" -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -ne 0) {
+            throw "Smoke test failed: ArtaleExpCalculator.exe crashed with exit code $($proc.ExitCode)!"
           }
-          Write-Host "Smoke test PASSED: ArtaleExpCalculator.exe launched successfully without errors!"
+          Write-Host "Smoke test PASSED: ArtaleExpCalculator.exe booted successfully!"
 
       - name: Package Windows Zip Archive
         shell: pwsh

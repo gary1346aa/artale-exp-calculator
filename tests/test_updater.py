@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.updater import (
-    UpdateInfo,
     check_for_update,
     parse_version_tuple,
     select_best_asset,
