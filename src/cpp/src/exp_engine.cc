@@ -17,6 +17,8 @@
 #if defined(__SSE2__) || defined(_M_X64) || defined(__x86_64__) || \
     defined(__AVX2__)
 #include <immintrin.h>
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+#include <arm_neon.h>
 #endif
 
 namespace artale {
@@ -27,6 +29,8 @@ namespace {
 inline int CvRound(float value) {
 #if defined(__SSE2__) || defined(_M_X64) || defined(__x86_64__)
   return _mm_cvtss_si32(_mm_set_ss(value));
+#elif defined(__aarch64__) || defined(__ARM_NEON)
+  return static_cast<int>(std::lrintf(value));
 #else
   int i = static_cast<int>(std::floor(value));
   float diff = value - i;
@@ -259,6 +263,156 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h,
       __m128i packed = _mm_packus_epi16(sum, sum);
       std::memcpy(dst_row + dx, &packed, 8);
     }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+    const int16x8_t vb0 = vdupq_n_s16(static_cast<int16_t>(b0));
+    const int16x8_t vb1 = vdupq_n_s16(static_cast<int16_t>(b1));
+    const int32x4_t vtwo = vdupq_n_s32(2);
+
+    // 16-pixel parallel unrolled NEON loop:
+    // Computes two 8-pixel blocks in parallel, packs into 16 bytes via
+    // saturating narrowing, and stores 16 destination pixels in a single 128-bit
+    // store instruction.
+    for (; dx + 16 <= dst_w && xofs[(dx + 15) * 2 + 0] < src_w - 1; dx += 16) {
+      alignas(16) uint16_t w0_0[8];
+      alignas(16) uint16_t w1_0[8];
+      alignas(16) uint16_t w0_1[8];
+      alignas(16) uint16_t w1_1[8];
+      const int* pxofs0 = xofs.data() + dx * 2;
+      const int* pxofs1 = xofs.data() + (dx + 8) * 2;
+      for (int k = 0; k < 8; ++k) {
+        w0_0[k] = *reinterpret_cast<const uint16_t*>(row0 + pxofs0[k * 2]);
+        w1_0[k] = *reinterpret_cast<const uint16_t*>(row1 + pxofs0[k * 2]);
+        w0_1[k] = *reinterpret_cast<const uint16_t*>(row0 + pxofs1[k * 2]);
+        w1_1[k] = *reinterpret_cast<const uint16_t*>(row1 + pxofs1[k * 2]);
+      }
+
+      // Block 0: pixels dx..dx+7
+      uint8x16_t r0_0_u8 = vld1q_u8(reinterpret_cast<const uint8_t*>(w0_0));
+      uint8x16_t r1_0_u8 = vld1q_u8(reinterpret_cast<const uint8_t*>(w1_0));
+      int16x8_t r0_0_lo = vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(r0_0_u8)));
+      int16x8_t r0_0_hi = vreinterpretq_s16_u16(vmovl_u8(vget_high_u8(r0_0_u8)));
+      int16x8_t r1_0_lo = vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(r1_0_u8)));
+      int16x8_t r1_0_hi = vreinterpretq_s16_u16(vmovl_u8(vget_high_u8(r1_0_u8)));
+
+      int16x8_t a0_lo = vld1q_s16(ialpha.data() + dx * 2);
+      int16x8_t a0_hi = vld1q_s16(ialpha.data() + dx * 2 + 8);
+
+      int32x4_t s0_0_lo = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r0_0_lo), vget_low_s16(a0_lo)),
+          vmull_s16(vget_high_s16(r0_0_lo), vget_high_s16(a0_lo))), 4);
+      int32x4_t s0_0_hi = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r0_0_hi), vget_low_s16(a0_hi)),
+          vmull_s16(vget_high_s16(r0_0_hi), vget_high_s16(a0_hi))), 4);
+
+      int32x4_t s1_0_lo = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r1_0_lo), vget_low_s16(a0_lo)),
+          vmull_s16(vget_high_s16(r1_0_lo), vget_high_s16(a0_lo))), 4);
+      int32x4_t s1_0_hi = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r1_0_hi), vget_low_s16(a0_hi)),
+          vmull_s16(vget_high_s16(r1_0_hi), vget_high_s16(a0_hi))), 4);
+
+      int16x8_t s0_0_16 = vcombine_s16(vqmovn_s32(s0_0_lo), vqmovn_s32(s0_0_hi));
+      int16x8_t s1_0_16 = vcombine_s16(vqmovn_s32(s1_0_lo), vqmovn_s32(s1_0_hi));
+
+      int32x4_t t0_0_lo = vshrq_n_s32(vmull_s16(vget_low_s16(s0_0_16), vget_low_s16(vb0)), 16);
+      int32x4_t t1_0_lo = vshrq_n_s32(vmull_s16(vget_low_s16(s1_0_16), vget_low_s16(vb1)), 16);
+      int32x4_t val0_lo = vshrq_n_s32(vaddq_s32(vaddq_s32(t0_0_lo, t1_0_lo), vtwo), 2);
+
+      int32x4_t t0_0_hi = vshrq_n_s32(vmull_s16(vget_high_s16(s0_0_16), vget_high_s16(vb0)), 16);
+      int32x4_t t1_0_hi = vshrq_n_s32(vmull_s16(vget_high_s16(s1_0_16), vget_high_s16(vb1)), 16);
+      int32x4_t val0_hi = vshrq_n_s32(vaddq_s32(vaddq_s32(t0_0_hi, t1_0_hi), vtwo), 2);
+
+      uint8x8_t res0 = vqmovun_s16(vcombine_s16(vqmovn_s32(val0_lo), vqmovn_s32(val0_hi)));
+
+      // Block 1: pixels dx+8..dx+15
+      uint8x16_t r0_1_u8 = vld1q_u8(reinterpret_cast<const uint8_t*>(w0_1));
+      uint8x16_t r1_1_u8 = vld1q_u8(reinterpret_cast<const uint8_t*>(w1_1));
+      int16x8_t r0_1_lo = vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(r0_1_u8)));
+      int16x8_t r0_1_hi = vreinterpretq_s16_u16(vmovl_u8(vget_high_u8(r0_1_u8)));
+      int16x8_t r1_1_lo = vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(r1_1_u8)));
+      int16x8_t r1_1_hi = vreinterpretq_s16_u16(vmovl_u8(vget_high_u8(r1_1_u8)));
+
+      int16x8_t a1_lo = vld1q_s16(ialpha.data() + (dx + 8) * 2);
+      int16x8_t a1_hi = vld1q_s16(ialpha.data() + (dx + 8) * 2 + 8);
+
+      int32x4_t s0_1_lo = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r0_1_lo), vget_low_s16(a1_lo)),
+          vmull_s16(vget_high_s16(r0_1_lo), vget_high_s16(a1_lo))), 4);
+      int32x4_t s0_1_hi = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r0_1_hi), vget_low_s16(a1_hi)),
+          vmull_s16(vget_high_s16(r0_1_hi), vget_high_s16(a1_hi))), 4);
+
+      int32x4_t s1_1_lo = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r1_1_lo), vget_low_s16(a1_lo)),
+          vmull_s16(vget_high_s16(r1_1_lo), vget_high_s16(a1_lo))), 4);
+      int32x4_t s1_1_hi = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_high_s16(r1_1_hi), vget_high_s16(a1_hi)),
+          vmull_s16(vget_high_s16(r1_1_hi), vget_high_s16(a1_hi))), 4);
+
+      int16x8_t s0_1_16 = vcombine_s16(vqmovn_s32(s0_1_lo), vqmovn_s32(s0_1_hi));
+      int16x8_t s1_1_16 = vcombine_s16(vqmovn_s32(s1_1_lo), vqmovn_s32(s1_1_hi));
+
+      int32x4_t t0_1_lo = vshrq_n_s32(vmull_s16(vget_low_s16(s0_1_16), vget_low_s16(vb0)), 16);
+      int32x4_t t1_1_lo = vshrq_n_s32(vmull_s16(vget_low_s16(s1_1_16), vget_low_s16(vb1)), 16);
+      int32x4_t val1_lo = vshrq_n_s32(vaddq_s32(vaddq_s32(t0_1_lo, t1_1_lo), vtwo), 2);
+
+      int32x4_t t0_1_hi = vshrq_n_s32(vmull_s16(vget_high_s16(s0_1_16), vget_high_s16(vb0)), 16);
+      int32x4_t t1_1_hi = vshrq_n_s32(vmull_s16(vget_high_s16(s1_1_16), vget_high_s16(vb1)), 16);
+      int32x4_t val1_hi = vshrq_n_s32(vaddq_s32(vaddq_s32(t0_1_hi, t1_1_hi), vtwo), 2);
+
+      uint8x8_t res1 = vqmovun_s16(vcombine_s16(vqmovn_s32(val1_lo), vqmovn_s32(val1_hi)));
+
+      vst1q_u8(dst_row + dx, vcombine_u8(res0, res1));
+    }
+
+    // 8-pixel remainder NEON loop
+    for (; dx + 8 <= dst_w && xofs[(dx + 7) * 2 + 0] < src_w - 1; dx += 8) {
+      alignas(16) uint16_t w0[8];
+      alignas(16) uint16_t w1[8];
+      const int* pxofs = xofs.data() + dx * 2;
+      for (int k = 0; k < 8; ++k) {
+        w0[k] = *reinterpret_cast<const uint16_t*>(row0 + pxofs[k * 2]);
+        w1[k] = *reinterpret_cast<const uint16_t*>(row1 + pxofs[k * 2]);
+      }
+
+      uint8x16_t r0_u8 = vld1q_u8(reinterpret_cast<const uint8_t*>(w0));
+      uint8x16_t r1_u8 = vld1q_u8(reinterpret_cast<const uint8_t*>(w1));
+      int16x8_t r0_lo = vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(r0_u8)));
+      int16x8_t r0_hi = vreinterpretq_s16_u16(vmovl_u8(vget_high_u8(r0_u8)));
+      int16x8_t r1_lo = vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(r1_u8)));
+      int16x8_t r1_hi = vreinterpretq_s16_u16(vmovl_u8(vget_high_u8(r1_u8)));
+
+      int16x8_t alpha_lo = vld1q_s16(ialpha.data() + dx * 2);
+      int16x8_t alpha_hi = vld1q_s16(ialpha.data() + dx * 2 + 8);
+
+      int32x4_t s0_lo = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r0_lo), vget_low_s16(alpha_lo)),
+          vmull_s16(vget_high_s16(r0_lo), vget_high_s16(alpha_lo))), 4);
+      int32x4_t s0_hi = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r0_hi), vget_low_s16(alpha_hi)),
+          vmull_s16(vget_high_s16(r0_hi), vget_high_s16(alpha_hi))), 4);
+
+      int32x4_t s1_lo = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_low_s16(r1_lo), vget_low_s16(alpha_lo)),
+          vmull_s16(vget_high_s16(r1_lo), vget_high_s16(alpha_lo))), 4);
+      int32x4_t s1_hi = vshrq_n_s32(vpaddq_s32(
+          vmull_s16(vget_high_s16(r1_hi), vget_high_s16(alpha_hi)),
+          vmull_s16(vget_high_s16(r1_hi), vget_high_s16(alpha_hi))), 4);
+
+      int16x8_t s0_16 = vcombine_s16(vqmovn_s32(s0_lo), vqmovn_s32(s0_hi));
+      int16x8_t s1_16 = vcombine_s16(vqmovn_s32(s1_lo), vqmovn_s32(s1_hi));
+
+      int32x4_t t0_lo = vshrq_n_s32(vmull_s16(vget_low_s16(s0_16), vget_low_s16(vb0)), 16);
+      int32x4_t t1_lo = vshrq_n_s32(vmull_s16(vget_low_s16(s1_16), vget_low_s16(vb1)), 16);
+      int32x4_t val_lo = vshrq_n_s32(vaddq_s32(vaddq_s32(t0_lo, t1_lo), vtwo), 2);
+
+      int32x4_t t0_hi = vshrq_n_s32(vmull_s16(vget_high_s16(s0_16), vget_high_s16(vb0)), 16);
+      int32x4_t t1_hi = vshrq_n_s32(vmull_s16(vget_high_s16(s1_16), vget_high_s16(vb1)), 16);
+      int32x4_t val_hi = vshrq_n_s32(vaddq_s32(vaddq_s32(t0_hi, t1_hi), vtwo), 2);
+
+      uint8x8_t res = vqmovun_s16(vcombine_s16(vqmovn_s32(val_lo), vqmovn_s32(val_hi)));
+      vst1_u8(dst_row + dx, res);
+    }
 #endif
 
     for (; dx < dst_w; ++dx) {
@@ -446,6 +600,22 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
           _mm256_storeu_pd(col_sum2 + c, cs2_lo);
           _mm256_storeu_pd(col_sum2 + c + 4, cs2_hi);
         }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+        for (; c + 3 < img_w; c += 4) {
+          float32x4_t v = vld1q_f32(img_row + c);
+          float64x2_t d_lo = vcvt_f64_f32(vget_low_f32(v));
+          float64x2_t d_hi = vcvt_high_f64_f32(v);
+
+          float64x2_t cs_lo = vld1q_f64(col_sum + c);
+          float64x2_t cs_hi = vld1q_f64(col_sum + c + 2);
+          vst1q_f64(col_sum + c, vaddq_f64(cs_lo, d_lo));
+          vst1q_f64(col_sum + c + 2, vaddq_f64(cs_hi, d_hi));
+
+          float64x2_t cs2_lo = vld1q_f64(col_sum2 + c);
+          float64x2_t cs2_hi = vld1q_f64(col_sum2 + c + 2);
+          vst1q_f64(col_sum2 + c, vfmaq_f64(cs2_lo, d_lo, d_lo));
+          vst1q_f64(col_sum2 + c + 2, vfmaq_f64(cs2_hi, d_hi, d_hi));
+        }
 #endif
         for (; c < img_w; ++c) {
           double val = static_cast<double>(img_row[c]);
@@ -485,6 +655,27 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
             _mm256_fmsub_pd(add_hi, add_hi, _mm256_mul_pd(sub_hi, sub_hi)));
         _mm256_storeu_pd(col_sum2 + c, cs2_lo);
         _mm256_storeu_pd(col_sum2 + c + 4, cs2_hi);
+      }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+      for (; c + 3 < img_w; c += 4) {
+        float32x4_t v_sub = vld1q_f32(row_sub + c);
+        float32x4_t v_add = vld1q_f32(row_add + c);
+        float64x2_t sub_lo = vcvt_f64_f32(vget_low_f32(v_sub));
+        float64x2_t sub_hi = vcvt_high_f64_f32(v_sub);
+        float64x2_t add_lo = vcvt_f64_f32(vget_low_f32(v_add));
+        float64x2_t add_hi = vcvt_high_f64_f32(v_add);
+
+        float64x2_t cs_lo = vld1q_f64(col_sum + c);
+        float64x2_t cs_hi = vld1q_f64(col_sum + c + 2);
+        vst1q_f64(col_sum + c, vaddq_f64(cs_lo, vsubq_f64(add_lo, sub_lo)));
+        vst1q_f64(col_sum + c + 2, vaddq_f64(cs_hi, vsubq_f64(add_hi, sub_hi)));
+
+        float64x2_t cs2_lo = vld1q_f64(col_sum2 + c);
+        float64x2_t cs2_hi = vld1q_f64(col_sum2 + c + 2);
+        float64x2_t diff2_lo = vsubq_f64(vmulq_f64(add_lo, add_lo), vmulq_f64(sub_lo, sub_lo));
+        float64x2_t diff2_hi = vsubq_f64(vmulq_f64(add_hi, add_hi), vmulq_f64(sub_hi, sub_hi));
+        vst1q_f64(col_sum2 + c, vaddq_f64(cs2_lo, diff2_lo));
+        vst1q_f64(col_sum2 + c + 2, vaddq_f64(cs2_hi, diff2_hi));
       }
 #endif
       for (; c < img_w; ++c) {
@@ -526,6 +717,34 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
 
       __m128 inv_f = _mm256_cvtpd_ps(inv);
       _mm_storeu_ps(inv_norm + nx, inv_f);
+    }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+    const float64x2_t vinv_pix = vdupq_n_f64(inv_pixels);
+    const float64x2_t vtpl_norm = vdupq_n_f64(tpl_norm);
+    const float64x2_t vone = vdupq_n_f64(1.0);
+    const float64x2_t veps = vdupq_n_f64(1e-5);
+    const uint64x2_t vzero_u64 = vdupq_n_u64(0);
+
+    for (; nx + 3 < out_w; nx += 4) {
+      float64x2_t s_i_lo = vsubq_f64(vld1q_f64(pref_i + nx + tw), vld1q_f64(pref_i + nx));
+      float64x2_t s_i_hi = vsubq_f64(vld1q_f64(pref_i + nx + tw + 2), vld1q_f64(pref_i + nx + 2));
+      float64x2_t s_i2_lo = vsubq_f64(vld1q_f64(pref_i2 + nx + tw), vld1q_f64(pref_i2 + nx));
+      float64x2_t s_i2_hi = vsubq_f64(vld1q_f64(pref_i2 + nx + tw + 2), vld1q_f64(pref_i2 + nx + 2));
+
+      float64x2_t var_lo = vsubq_f64(s_i2_lo, vmulq_f64(vmulq_f64(s_i_lo, s_i_lo), vinv_pix));
+      float64x2_t var_hi = vsubq_f64(s_i2_hi, vmulq_f64(vmulq_f64(s_i_hi, s_i_hi), vinv_pix));
+
+      uint64x2_t mask_lo = vcgtq_f64(var_lo, veps);
+      uint64x2_t mask_hi = vcgtq_f64(var_hi, veps);
+
+      float64x2_t inv_lo = vdivq_f64(vone, vmulq_f64(vtpl_norm, vsqrtq_f64(var_lo)));
+      float64x2_t inv_hi = vdivq_f64(vone, vmulq_f64(vtpl_norm, vsqrtq_f64(var_hi)));
+
+      inv_lo = vbslq_f64(mask_lo, inv_lo, vreinterpretq_f64_u64(vzero_u64));
+      inv_hi = vbslq_f64(mask_hi, inv_hi, vreinterpretq_f64_u64(vzero_u64));
+
+      float32x4_t inv_f = vcombine_f32(vcvt_f32_f64(inv_lo), vcvt_f32_f64(inv_hi));
+      vst1q_f32(inv_norm + nx, inv_f);
     }
 #endif
     for (; nx < out_w; ++nx) {
@@ -696,6 +915,158 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h,
       __m256 ncc = _mm256_mul_ps(acc, inv);
       ncc = _mm256_min_ps(_mm256_max_ps(ncc, vmin), vmax);
       _mm256_storeu_ps(resp_row + x, ncc);
+    }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+    const float32x4_t vmin = vdupq_n_f32(-1.0f);
+    const float32x4_t vmax = vdupq_n_f32(1.0f);
+
+    for (; x + 15 < out_w; x += 16) {
+      float32x4_t acc0 = vdupq_n_f32(0.0f);
+      float32x4_t acc1 = vdupq_n_f32(0.0f);
+      float32x4_t acc2 = vdupq_n_f32(0.0f);
+      float32x4_t acc3 = vdupq_n_f32(0.0f);
+      float32x4_t acc0_b = vdupq_n_f32(0.0f);
+      float32x4_t acc1_b = vdupq_n_f32(0.0f);
+      float32x4_t acc2_b = vdupq_n_f32(0.0f);
+      float32x4_t acc3_b = vdupq_n_f32(0.0f);
+
+      const float* t_ptr = tpl.zero_mean_fmap.data();
+      for (int r = 0; r < th; ++r) {
+        const float* img_row = image + (y + r) * img_stride + x;
+        int c = 0;
+        for (; c + 1 < tw; c += 2) {
+          float32x4_t t0 = vdupq_n_f32(t_ptr[c]);
+          float32x4_t t1 = vdupq_n_f32(t_ptr[c + 1]);
+
+          float32x4_t i0 = vld1q_f32(img_row + c);
+          float32x4_t i1 = vld1q_f32(img_row + c + 4);
+          float32x4_t i2 = vld1q_f32(img_row + c + 8);
+          float32x4_t i3 = vld1q_f32(img_row + c + 12);
+
+          acc0 = vmlaq_f32(acc0, t0, i0);
+          acc1 = vmlaq_f32(acc1, t0, i1);
+          acc2 = vmlaq_f32(acc2, t0, i2);
+          acc3 = vmlaq_f32(acc3, t0, i3);
+
+          float32x4_t i0_b = vld1q_f32(img_row + c + 1);
+          float32x4_t i1_b = vld1q_f32(img_row + c + 5);
+          float32x4_t i2_b = vld1q_f32(img_row + c + 9);
+          float32x4_t i3_b = vld1q_f32(img_row + c + 13);
+
+          acc0_b = vmlaq_f32(acc0_b, t1, i0_b);
+          acc1_b = vmlaq_f32(acc1_b, t1, i1_b);
+          acc2_b = vmlaq_f32(acc2_b, t1, i2_b);
+          acc3_b = vmlaq_f32(acc3_b, t1, i3_b);
+        }
+        for (; c < tw; ++c) {
+          float32x4_t t0 = vdupq_n_f32(t_ptr[c]);
+          float32x4_t i0 = vld1q_f32(img_row + c);
+          float32x4_t i1 = vld1q_f32(img_row + c + 4);
+          float32x4_t i2 = vld1q_f32(img_row + c + 8);
+          float32x4_t i3 = vld1q_f32(img_row + c + 12);
+
+          acc0 = vmlaq_f32(acc0, t0, i0);
+          acc1 = vmlaq_f32(acc1, t0, i1);
+          acc2 = vmlaq_f32(acc2, t0, i2);
+          acc3 = vmlaq_f32(acc3, t0, i3);
+        }
+        t_ptr += tw;
+      }
+      acc0 = vaddq_f32(acc0, acc0_b);
+      acc1 = vaddq_f32(acc1, acc1_b);
+      acc2 = vaddq_f32(acc2, acc2_b);
+      acc3 = vaddq_f32(acc3, acc3_b);
+
+      float32x4_t inv0 = vld1q_f32(inv_norm + x);
+      float32x4_t inv1 = vld1q_f32(inv_norm + x + 4);
+      float32x4_t inv2 = vld1q_f32(inv_norm + x + 8);
+      float32x4_t inv3 = vld1q_f32(inv_norm + x + 12);
+
+      float32x4_t ncc0 = vminq_f32(vmaxq_f32(vmulq_f32(acc0, inv0), vmin), vmax);
+      float32x4_t ncc1 = vminq_f32(vmaxq_f32(vmulq_f32(acc1, inv1), vmin), vmax);
+      float32x4_t ncc2 = vminq_f32(vmaxq_f32(vmulq_f32(acc2, inv2), vmin), vmax);
+      float32x4_t ncc3 = vminq_f32(vmaxq_f32(vmulq_f32(acc3, inv3), vmin), vmax);
+
+      vst1q_f32(resp_row + x, ncc0);
+      vst1q_f32(resp_row + x + 4, ncc1);
+      vst1q_f32(resp_row + x + 8, ncc2);
+      vst1q_f32(resp_row + x + 12, ncc3);
+    }
+
+    for (; x + 7 < out_w; x += 8) {
+      float32x4_t acc0 = vdupq_n_f32(0.0f);
+      float32x4_t acc1 = vdupq_n_f32(0.0f);
+      float32x4_t acc0_b = vdupq_n_f32(0.0f);
+      float32x4_t acc1_b = vdupq_n_f32(0.0f);
+
+      const float* t_ptr = tpl.zero_mean_fmap.data();
+      for (int r = 0; r < th; ++r) {
+        const float* img_row = image + (y + r) * img_stride + x;
+        int c = 0;
+        for (; c + 1 < tw; c += 2) {
+          float32x4_t t0 = vdupq_n_f32(t_ptr[c]);
+          float32x4_t t1 = vdupq_n_f32(t_ptr[c + 1]);
+
+          float32x4_t i0 = vld1q_f32(img_row + c);
+          float32x4_t i1 = vld1q_f32(img_row + c + 4);
+          acc0 = vmlaq_f32(acc0, t0, i0);
+          acc1 = vmlaq_f32(acc1, t0, i1);
+
+          float32x4_t i0_b = vld1q_f32(img_row + c + 1);
+          float32x4_t i1_b = vld1q_f32(img_row + c + 5);
+          acc0_b = vmlaq_f32(acc0_b, t1, i0_b);
+          acc1_b = vmlaq_f32(acc1_b, t1, i1_b);
+        }
+        for (; c < tw; ++c) {
+          float32x4_t t0 = vdupq_n_f32(t_ptr[c]);
+          float32x4_t i0 = vld1q_f32(img_row + c);
+          float32x4_t i1 = vld1q_f32(img_row + c + 4);
+          acc0 = vmlaq_f32(acc0, t0, i0);
+          acc1 = vmlaq_f32(acc1, t0, i1);
+        }
+        t_ptr += tw;
+      }
+      acc0 = vaddq_f32(acc0, acc0_b);
+      acc1 = vaddq_f32(acc1, acc1_b);
+
+      float32x4_t inv0 = vld1q_f32(inv_norm + x);
+      float32x4_t inv1 = vld1q_f32(inv_norm + x + 4);
+
+      float32x4_t ncc0 = vminq_f32(vmaxq_f32(vmulq_f32(acc0, inv0), vmin), vmax);
+      float32x4_t ncc1 = vminq_f32(vmaxq_f32(vmulq_f32(acc1, inv1), vmin), vmax);
+
+      vst1q_f32(resp_row + x, ncc0);
+      vst1q_f32(resp_row + x + 4, ncc1);
+    }
+
+    for (; x + 3 < out_w; x += 4) {
+      float32x4_t acc = vdupq_n_f32(0.0f);
+      float32x4_t acc_b = vdupq_n_f32(0.0f);
+
+      const float* t_ptr = tpl.zero_mean_fmap.data();
+      for (int r = 0; r < th; ++r) {
+        const float* img_row = image + (y + r) * img_stride + x;
+        int c = 0;
+        for (; c + 1 < tw; c += 2) {
+          float32x4_t t0 = vdupq_n_f32(t_ptr[c]);
+          float32x4_t t1 = vdupq_n_f32(t_ptr[c + 1]);
+          float32x4_t img0 = vld1q_f32(img_row + c);
+          float32x4_t img1 = vld1q_f32(img_row + c + 1);
+          acc = vmlaq_f32(acc, t0, img0);
+          acc_b = vmlaq_f32(acc_b, t1, img1);
+        }
+        for (; c < tw; ++c) {
+          float32x4_t t_val = vdupq_n_f32(t_ptr[c]);
+          float32x4_t img_val = vld1q_f32(img_row + c);
+          acc = vmlaq_f32(acc, t_val, img_val);
+        }
+        t_ptr += tw;
+      }
+      acc = vaddq_f32(acc, acc_b);
+      float32x4_t inv = vld1q_f32(inv_norm + x);
+      float32x4_t ncc = vmulq_f32(acc, inv);
+      ncc = vminq_f32(vmaxq_f32(ncc, vmin), vmax);
+      vst1q_f32(resp_row + x, ncc);
     }
 #endif
     for (; x < out_w; ++x) {

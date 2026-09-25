@@ -65,7 +65,12 @@ def _init_core():
         os.path.join(base_dir, "artale_exp_core.dll"),
         os.path.join(base_dir, "build", "artale_exp_core.dll"),
         os.path.join(base_dir, "libartale_exp_core.dylib"),
+        os.path.join(base_dir, "artale_exp_core.dylib"),
+        os.path.join(base_dir, "build", "libartale_exp_core.dylib"),
+        os.path.join(base_dir, "build", "artale_exp_core.dylib"),
         os.path.join(base_dir, "artale_exp_core.so"),
+        os.path.join(base_dir, "libartale_exp_core.so"),
+        os.path.join(base_dir, "build", "libartale_exp_core.so"),
     ]
     for p in candidates:
         if os.path.exists(p):

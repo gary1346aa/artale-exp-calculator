@@ -3,7 +3,11 @@
 
 #include "src/cpp/src/exp_engine.h"
 
+#if defined(__SSE2__) || defined(_M_X64) || defined(__x86_64__)
 #include <immintrin.h>
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
 #include <cmath>
 #include <cstdint>
@@ -17,6 +21,20 @@
 namespace artale {
 namespace exp {
 namespace {
+
+inline int TestCvRound(float value) {
+#if defined(__SSE2__) || defined(_M_X64) || defined(__x86_64__)
+  return _mm_cvtss_si32(_mm_set_ss(value));
+#elif defined(__aarch64__) || defined(__ARM_NEON)
+  return static_cast<int>(std::lrintf(value));
+#else
+  int i = static_cast<int>(std::floor(value));
+  float diff = value - i;
+  if (diff > 0.5f) return i + 1;
+  if (diff < 0.5f) return i;
+  return (i % 2 == 0) ? i : i + 1;
+#endif
+}
 
 TEST(ExpEngineTest, ResizeGrayPreservesUniformValues) {
   constexpr int kSrcW = 10;
@@ -81,9 +99,9 @@ void ResizeGrayScalarReference(const uint8_t* src, int src_w, int src_h,
     float c0 = 1.0f - fx;
     float c1 = fx;
     ialpha[dx * 2 + 0] =
-        static_cast<int16_t>(_mm_cvtss_si32(_mm_set_ss(c0 * kScale)));
+        static_cast<int16_t>(TestCvRound(c0 * kScale));
     ialpha[dx * 2 + 1] =
-        static_cast<int16_t>(_mm_cvtss_si32(_mm_set_ss(c1 * kScale)));
+        static_cast<int16_t>(TestCvRound(c1 * kScale));
   }
 
   std::vector<int> yofs(dst_h);
@@ -106,9 +124,9 @@ void ResizeGrayScalarReference(const uint8_t* src, int src_w, int src_h,
     float c0 = 1.0f - fy;
     float c1 = fy;
     ibeta[dy * 2 + 0] =
-        static_cast<int16_t>(_mm_cvtss_si32(_mm_set_ss(c0 * kScale)));
+        static_cast<int16_t>(TestCvRound(c0 * kScale));
     ibeta[dy * 2 + 1] =
-        static_cast<int16_t>(_mm_cvtss_si32(_mm_set_ss(c1 * kScale)));
+        static_cast<int16_t>(TestCvRound(c1 * kScale));
   }
 
   for (int dy = 0; dy < dst_h; ++dy) {

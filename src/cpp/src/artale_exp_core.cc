@@ -13,6 +13,10 @@
 #include <mutex>
 #include <vector>
 
+#if defined(__ARM_NEON) || defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "src/cpp/src/exp_engine.h"
 #include "src/cpp/src/real_exp_logo_data.h"
 
@@ -27,7 +31,7 @@ constexpr float kRefDisplayWidth = 3840.0f;
 constexpr float kRefDisplayHeight = 2160.0f;
 constexpr float kMinLogoScale = 0.24f;
 constexpr float kMaxLogoScale = 1.45f;
-constexpr float kLogoMatchThreshold = 0.50f;
+constexpr float kLogoMatchThreshold = 0.65f;
 constexpr int kNumLogoScales = 16;
 
 struct BoundingBox {
@@ -63,7 +67,60 @@ void ExtractGraySubRect(const uint8_t* bgr_data, int width, int height,
     const uint8_t* src_row = bgr_data + src_y * stride;
     uint8_t* dst_row = out_gray + y * rw;
 
-    for (int x = 0; x < rw; ++x) {
+    int x = 0;
+#if defined(__ARM_NEON) || defined(__aarch64__)
+    if (rx >= 0 && rx + rw <= width) {
+      if (bytes_per_px == 4) {
+        for (; x + 7 < rw; x += 8) {
+          const uint8_t* px = src_row + (rx + x) * 4;
+          uint8x8x4_t bgra = vld4_u8(px);
+          uint16x8_t b16 = vmovl_u8(bgra.val[0]);
+          uint16x8_t g16 = vmovl_u8(bgra.val[1]);
+          uint16x8_t r16 = vmovl_u8(bgra.val[2]);
+
+          uint32x4_t s_lo = vdupq_n_u32(16384);
+          s_lo = vmlal_n_u16(s_lo, vget_low_u16(b16), 3735);
+          s_lo = vmlal_n_u16(s_lo, vget_low_u16(g16), 19235);
+          s_lo = vmlal_n_u16(s_lo, vget_low_u16(r16), 9798);
+
+          uint32x4_t s_hi = vdupq_n_u32(16384);
+          s_hi = vmlal_n_u16(s_hi, vget_high_u16(b16), 3735);
+          s_hi = vmlal_n_u16(s_hi, vget_high_u16(g16), 19235);
+          s_hi = vmlal_n_u16(s_hi, vget_high_u16(r16), 9798);
+
+          uint16x4_t g_lo = vshrn_n_u32(s_lo, 15);
+          uint16x4_t g_hi = vshrn_n_u32(s_hi, 15);
+          uint8x8_t res = vmovn_u16(vcombine_u16(g_lo, g_hi));
+          vst1_u8(dst_row + x, res);
+        }
+      } else if (bytes_per_px == 3) {
+        for (; x + 7 < rw; x += 8) {
+          const uint8_t* px = src_row + (rx + x) * 3;
+          uint8x8x3_t bgr = vld3_u8(px);
+          uint16x8_t b16 = vmovl_u8(bgr.val[0]);
+          uint16x8_t g16 = vmovl_u8(bgr.val[1]);
+          uint16x8_t r16 = vmovl_u8(bgr.val[2]);
+
+          uint32x4_t s_lo = vdupq_n_u32(16384);
+          s_lo = vmlal_n_u16(s_lo, vget_low_u16(b16), 3735);
+          s_lo = vmlal_n_u16(s_lo, vget_low_u16(g16), 19235);
+          s_lo = vmlal_n_u16(s_lo, vget_low_u16(r16), 9798);
+
+          uint32x4_t s_hi = vdupq_n_u32(16384);
+          s_hi = vmlal_n_u16(s_hi, vget_high_u16(b16), 3735);
+          s_hi = vmlal_n_u16(s_hi, vget_high_u16(g16), 19235);
+          s_hi = vmlal_n_u16(s_hi, vget_high_u16(r16), 9798);
+
+          uint16x4_t g_lo = vshrn_n_u32(s_lo, 15);
+          uint16x4_t g_hi = vshrn_n_u32(s_hi, 15);
+          uint8x8_t res = vmovn_u16(vcombine_u16(g_lo, g_hi));
+          vst1_u8(dst_row + x, res);
+        }
+      }
+    }
+#endif
+
+    for (; x < rw; ++x) {
       int src_x = rx + x;
       if (src_x < 0 || src_x >= width) continue;
       const uint8_t* px = src_row + src_x * bytes_per_px;
@@ -163,7 +220,7 @@ bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride,
     }
   }
 
-  if (best_score < 0.65f) {
+  if (best_score < kLogoMatchThreshold) {
     return false;
   }
 
