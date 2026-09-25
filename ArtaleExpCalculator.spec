@@ -122,7 +122,7 @@ if sys.platform == "darwin":
       bundle_identifier="com.artale.expcalculator",
       info_plist={
           "CFBundleDisplayName": "Artale EXP Calculator",
-          "CFBundleShortVersionString": "1.0.0",
+          "CFBundleShortVersionString": "1.0.0-rc.1",
           "NSHighResolutionCapable": "True",
       },
   )

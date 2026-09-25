@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -37,14 +38,30 @@ class UpdateInfo:
   sha256: Optional[str] = None
 
 
-def parse_version_tuple(version_str: str) -> Tuple[int, ...]:
-  """Parses a semantic version string into a comparable tuple of integers."""
-  cleaned = version_str.lstrip("vV").strip()
-  parts = []
-  for segment in cleaned.split("."):
-    digits = "".join(filter(str.isdigit, segment))
-    parts.append(int(digits) if digits else 0)
-  return tuple(parts) if parts else (0,)
+def parse_version_tuple(version_str: str) -> Tuple[int, int, int, int, int]:
+  """Parses a semantic version string into a comparable tuple.
+
+  Adheres to SemVer 2.0 precedence:
+  - Official release (e.g. 1.0.0): (1, 0, 0, 1, 0)
+  - Release candidate (e.g. 1.0.0-rc.1): (1, 0, 0, 0, 1)
+  - Release candidate 2 (e.g. 1.0.0-rc.2): (1, 0, 0, 0, 2)
+  This guarantees: 1.0.0-rc.1 < 1.0.0-rc.2 < 1.0.0.
+  """
+  v = version_str.lstrip("vV").strip()
+  match = re.match(
+      r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-._]?([a-zA-Z0-9.]+))?$", v
+  )
+  if not match:
+    return (0, 0, 0, 1, 0)
+  major = int(match.group(1) or 0)
+  minor = int(match.group(2) or 0)
+  patch = int(match.group(3) or 0)
+  pre = match.group(4)
+  if pre is None or pre == "":
+    return (major, minor, patch, 1, 0)
+  digits = re.findall(r"\d+", pre)
+  pre_num = int(digits[0]) if digits else 0
+  return (major, minor, patch, 0, pre_num)
 
 
 def select_best_asset(

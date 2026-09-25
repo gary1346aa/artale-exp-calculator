@@ -21,9 +21,15 @@ from core.updater import (
 class TestUpdater(unittest.TestCase):
 
   def test_parse_version_tuple(self):
-    self.assertEqual(parse_version_tuple("1.0.0"), (1, 0, 0))
-    self.assertEqual(parse_version_tuple("v1.2.3"), (1, 2, 3))
-    self.assertEqual(parse_version_tuple("V2.0.1b"), (2, 0, 1))
+    self.assertEqual(parse_version_tuple("1.0.0"), (1, 0, 0, 1, 0))
+    self.assertEqual(parse_version_tuple("v1.2.3"), (1, 2, 3, 1, 0))
+    self.assertEqual(parse_version_tuple("1.0.0-rc.1"), (1, 0, 0, 0, 1))
+    self.assertEqual(parse_version_tuple("1.0.0-rc.2"), (1, 0, 0, 0, 2))
+    self.assertEqual(parse_version_tuple("V2.0.1b"), (2, 0, 1, 0, 0))
+    self.assertTrue(parse_version_tuple("1.0.0-rc.1") < parse_version_tuple("1.0.0-rc.2"))
+    self.assertTrue(parse_version_tuple("1.0.0-rc.1") < parse_version_tuple("1.0.0"))
+    self.assertTrue(parse_version_tuple("1.0.0-rc.2") < parse_version_tuple("1.0.0"))
+    self.assertTrue(parse_version_tuple("1.0.1-rc.1") > parse_version_tuple("1.0.0"))
     self.assertTrue(parse_version_tuple("1.10.0") > parse_version_tuple("1.9.5"))
     self.assertTrue(parse_version_tuple("2.0.0") > parse_version_tuple("1.99.99"))
     self.assertEqual(parse_version_tuple("1.0.0"), parse_version_tuple("v1.0.0"))

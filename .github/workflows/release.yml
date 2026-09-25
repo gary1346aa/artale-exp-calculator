@@ -3,7 +3,7 @@ name: Release Build & Publish
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -149,7 +149,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Artale EXP Calculator ${{ github.ref_name }}
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           files: |
             release_assets/ArtaleExpCalculator-win-x64.zip
