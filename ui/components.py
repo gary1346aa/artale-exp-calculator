@@ -535,8 +535,7 @@ def draw_vector_icon(
     painter.drawLine(QPointF(cx - d, cy + d), QPointF(cx + d, cy - d))
 
   elif icon_name == "autostart":
-    # Automotive Auto Start-Stop: Circular arrow with bold 'A' and stroked two-wing chevron
-    # Arc start and end are mathematically symmetrical about the Y-axis (270° ± 28°)
+    # Auto Start icon: clean continuous circle with bold 'A' centered inside
     pen_w = max(1.15, size * 0.10)
     pen = QPen(
         color,
@@ -549,47 +548,10 @@ def draw_vector_icon(
     painter.setBrush(Qt.BrushStyle.NoBrush)
 
     r = size * 0.42
-    theta = 28.0
-    start_deg = (270.0 + theta) % 360.0
-    sweep_deg = 360.0 - 2.0 * theta
-    end_deg = (270.0 - theta) % 360.0
-    end_rad = math.radians(end_deg)
-
-    path = QPainterPath()
-    path.arcMoveTo(QRectF(cx - r, cy - r, r * 2, r * 2), start_deg)
-    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), start_deg, sweep_deg)
-    painter.drawPath(path)
-
-    # Arc end point
-    px = cx + r * math.cos(end_rad)
-    py = cy - r * math.sin(end_rad)
-
-    # Tangent vector pointing forward along counter-clockwise circle
-    tx = -math.sin(end_rad)
-    ty = -math.cos(end_rad)
-    nx = -ty
-    ny = tx
-
-    # Clean, compact two-wing chevron pointing forward along the circle
-    arr_len = max(1.8, size * 0.14)
-    spread = arr_len * 0.50
-    tip_x = px + tx * (arr_len * 0.40)
-    tip_y = py + ty * (arr_len * 0.40)
-    w1 = QPointF(
-        tip_x - tx * arr_len + nx * spread, tip_y - ty * arr_len + ny * spread
-    )
-    w2 = QPointF(
-        tip_x - tx * arr_len - nx * spread, tip_y - ty * arr_len - ny * spread
-    )
-
-    arr = QPainterPath()
-    arr.moveTo(w1)
-    arr.lineTo(QPointF(tip_x, tip_y))
-    arr.lineTo(w2)
-    painter.drawPath(arr)
+    painter.drawEllipse(QPointF(cx, cy), r, r)
 
     # Bold 'A' optically centered inside the circle with subpixel precision
-    font_sz = max(6.0, size * 0.40)
+    font_sz = max(6.0, size * 0.48)
     a_font = QFont("Arial", int(round(font_sz)), QFont.Weight.Bold)
     painter.setFont(a_font)
     painter.setPen(color)
