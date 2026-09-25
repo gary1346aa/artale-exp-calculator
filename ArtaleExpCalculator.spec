@@ -115,14 +115,19 @@ coll = COLLECT(
 )
 
 if sys.platform == "darwin":
+  mac_icon = os.path.join("assets", "app_icon.icns")
+  if not os.path.exists(mac_icon):
+    mac_icon = None
   app = BUNDLE(
       coll,
       name="ArtaleExpCalculator.app",
-      icon=os.path.join("assets", "app_icon.png") if os.path.exists(os.path.join("assets", "app_icon.png")) else None,
+      icon=mac_icon,
       bundle_identifier="com.artale.expcalculator",
       info_plist={
           "CFBundleDisplayName": "Artale EXP Calculator",
+          "CFBundleName": "Artale EXP Calculator",
           "CFBundleShortVersionString": "1.0.0-rc.1",
+          "CFBundleVersion": "1.0.0-rc.1",
           "NSHighResolutionCapable": "True",
       },
   )
