@@ -437,10 +437,10 @@ def draw_vector_icon(
     painter.setPen(pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
     r = size * 0.40
-    # Arc from 84 deg clockwise by -316 deg to 128 deg
+    # Arc from 84 deg clockwise by -270 deg to 174 deg (plenty of breathing room for arrow)
     path = QPainterPath()
     path.arcMoveTo(QRectF(cx - r, cy - r, r * 2, r * 2), 84.0)
-    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 84.0, -316.0)
+    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 84.0, -270.0)
     painter.drawPath(path)
 
     # Arrowhead at top-left (~11:30) pointing leftwards along the arc
@@ -480,16 +480,24 @@ def draw_vector_icon(
     )
 
   elif icon_name == "settings":
-    painter.setPen(pen)
+    pen_w_gear = max(1.3, size * 0.12)
+    pen_gear = QPen(
+        color,
+        pen_w_gear,
+        Qt.PenStyle.SolidLine,
+        Qt.PenCapStyle.RoundCap,
+        Qt.PenJoinStyle.RoundJoin,
+    )
+    painter.setPen(pen_gear)
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    r_hole = size * 0.18
+    r_hole = size * 0.23
     painter.drawEllipse(QPointF(cx, cy), r_hole, r_hole)
 
-    r_base = size * 0.355
-    r_tip = size * 0.465
+    r_base = size * 0.38
+    r_tip = size * 0.46
     num_teeth = 6
-    tooth_tip_ang = math.radians(20.0)
-    tooth_base_ang = math.radians(26.0)
+    tooth_tip_ang = math.radians(15.0)
+    tooth_base_ang = math.radians(19.0)
 
     path = QPainterPath()
     for i in range(num_teeth):
@@ -574,6 +582,7 @@ class SmoothButton(QPushButton):
     self.custom_bg: Optional[QColor] = None
     self.custom_border: Optional[QColor] = None
     self.custom_color: Optional[QColor] = None
+    self.custom_icon_size: Optional[float] = None
     self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
   def set_icon_name(self, name: Optional[str]) -> None:
@@ -602,15 +611,16 @@ class SmoothButton(QPushButton):
     self.custom_color = text_color
   def sizeHint(self) -> QSize:
     sh = super().sizeHint()
-    if self.icon_name == "autostart":
+    if self.icon_name == "autostart" and self.text():
       fm = self.fontMetrics()
       text_w = fm.horizontalAdvance(self.text())
       ic_size = min(24 * 0.58, 13.0)
       gap = 6.0
       w = ic_size + gap + text_w + 24
       return QSize(max(sh.width(), int(w)), max(sh.height(), 24))
-    elif self.icon_name and not self.text():
-      return QSize(24, 24)
+    elif self.icon_name:
+      sz = int(self.custom_icon_size + 4) if self.custom_icon_size else 24
+      return QSize(sz, sz)
     return sh
 
   def minimumSizeHint(self) -> QSize:
@@ -664,7 +674,7 @@ class SmoothButton(QPushButton):
     cx = rect.center().x()
     cy = rect.center().y()
 
-    if self.icon_name == "autostart":
+    if self.icon_name == "autostart" and self.text():
       # Auto-start with automotive (A) symbol on left + text (centered group)
       ic_size = min(rect.height() * 0.58, 13.0)
       gap = 6.0
@@ -687,7 +697,11 @@ class SmoothButton(QPushButton):
       )
     elif self.icon_name:
       # Icon-only button: optically centered vector icon
-      ic_size = min(rect.width(), rect.height()) * 0.52
+      ic_size = (
+          self.custom_icon_size
+          if self.custom_icon_size
+          else min(rect.width(), rect.height()) * 0.52
+      )
       draw_vector_icon(painter, self.icon_name, cx, cy, fg, ic_size)
     else:
       painter.setPen(fg)

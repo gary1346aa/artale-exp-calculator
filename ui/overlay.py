@@ -39,6 +39,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSizePolicy,
+    QSpacerItem,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -446,6 +447,20 @@ class ArtaleExpOverlay(QWidget):
     prog_w.hide()
     self.simple_metric_widgets["EXP 進度條"] = prog_w
 
+    # Simple mode right-side auto-start quick toggle button (pure icon and status color)
+    self.simple_btn_auto_start = SmoothButton(
+        "", parent=self.simple_widget, icon_name="autostart"
+    )
+    self.simple_btn_auto_start.custom_icon_size = 12.0
+    self.simple_btn_auto_start.setFixedSize(14, 14)
+    self.simple_btn_auto_start.setToolTip("自動開始 [F6]")
+    self.simple_btn_auto_start.clicked.connect(self._toggle_auto_start)
+    self.simple_btn_auto_start.hide()
+
+    self.simple_right_spacer = QSpacerItem(
+        0, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+    )
+
     self.card_layout.addWidget(self.simple_widget)
     self.simple_widget.hide()
 
@@ -467,6 +482,12 @@ class ArtaleExpOverlay(QWidget):
           border=QColor(52, 211, 153, 100),
           text_color=QColor("#34d399"),
       )
+      if hasattr(self, "simple_btn_auto_start"):
+        self.simple_btn_auto_start.set_custom_style(
+            bg=QColor(0, 0, 0, 0),
+            border=QColor(0, 0, 0, 0),
+            text_color=QColor("#34d399"),
+        )
     else:
       self.btn_auto_start.setText("自動開始 OFF")
       self.btn_auto_start.set_custom_style(
@@ -474,6 +495,12 @@ class ArtaleExpOverlay(QWidget):
           border=QColor(255, 255, 255, 30),
           text_color=QColor("#94a3b8"),
       )
+      if hasattr(self, "simple_btn_auto_start"):
+        self.simple_btn_auto_start.set_custom_style(
+            bg=QColor(0, 0, 0, 0),
+            border=QColor(0, 0, 0, 0),
+            text_color=QColor("#64748b"),
+        )
 
   def _toggle_auto_start(self):
     enabled = self.engine.toggle_auto_start()
@@ -823,16 +850,12 @@ class ArtaleExpOverlay(QWidget):
         if idx < len(active_keys) - 1:
           self.simple_layout.addSpacing(inter_space)
 
-      self.simple_widget.show()
+      # Auto-start quick toggle button on right round
+      self.simple_layout.addSpacerItem(self.simple_right_spacer)
+      self.simple_layout.addWidget(self.simple_btn_auto_start)
 
-      # Unlock fixed width and adjust to pill sizeHint
-      self.setMinimumSize(0, 0)
-      self.setMaximumSize(16777215, 16777215)
-      self.card_layout.activate()
-      self.layout().activate()
-      self.adjustSize()
-      self.setFixedSize(self.sizeHint())
-      self.update()
+      self.simple_widget.show()
+      self._update_simple_mode_focus_state()
 
     else:
       self.outer_card.is_pill = False
@@ -898,12 +921,42 @@ class ArtaleExpOverlay(QWidget):
 
     self._save_config()
 
+  def _update_simple_mode_focus_state(self):
+    """Shows/hides the auto-start button on the right round in simple mode based on focus/hover."""
+    if self.current_mode != "simple" or not hasattr(self, "simple_btn_auto_start"):
+      return
+    dot_space = max(3, int(6 * self.ui_scale))
+    cursor_pos = QCursor.pos()
+    is_hovered = self.geometry().contains(cursor_pos)
+    is_active = self.isActiveWindow() or is_hovered
+
+    if is_active:
+      self.simple_right_spacer.changeSize(
+          dot_space, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+      )
+      self.simple_btn_auto_start.show()
+    else:
+      self.simple_right_spacer.changeSize(
+          0, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+      )
+      self.simple_btn_auto_start.hide()
+
+    self.setMinimumSize(0, 0)
+    self.setMaximumSize(16777215, 16777215)
+    self.simple_layout.activate()
+    self.card_layout.activate()
+    self.layout().activate()
+    self.adjustSize()
+    self.setFixedSize(self.sizeHint())
+    self.update()
+
   def _update_focus_visibility(self):
     """Updates visibility of focus-dependent components (sliders, and in game mode: header & hotkey footer)."""
     if self.current_mode == "simple":
       self.slider_panel.hide()
       self.header_widget.hide()
       self.lbl_hotkey_hint.hide()
+      self._update_simple_mode_focus_state()
       return
 
     is_active = self.isActiveWindow()
@@ -1209,6 +1262,10 @@ class ArtaleExpOverlay(QWidget):
           w.update_scale(s)
     if hasattr(self, "simple_status_dot"):
       self._update_status_indicator()
+    if hasattr(self, "simple_btn_auto_start"):
+      btn_sz = max(12, int(14 * s))
+      self.simple_btn_auto_start.setFixedSize(btn_sz, btn_sz)
+      self.simple_btn_auto_start.custom_icon_size = max(10.0, 12.0 * s)
 
     if self.current_mode == "simple":
       self._apply_game_mode()
@@ -1389,6 +1446,16 @@ class ArtaleExpOverlay(QWidget):
 
   def mouseReleaseEvent(self, event):
     self._save_config()
+
+  def enterEvent(self, event):
+    super().enterEvent(event)
+    if self.current_mode == "simple":
+      self._update_simple_mode_focus_state()
+
+  def leaveEvent(self, event):
+    super().leaveEvent(event)
+    if self.current_mode == "simple":
+      self._update_simple_mode_focus_state()
 
   def _load_config(self):
     try:

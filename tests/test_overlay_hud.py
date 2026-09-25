@@ -312,18 +312,19 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.lbl_hotkey_hint.isVisible())
     self.assertTrue(self.overlay.outer_card.is_pill)
 
-    # Verify Simple Mode ONLY shows the three requested items (plus status dot)
+    # Verify Simple Mode shows the three requested items, status dot, and auto-start button
     simple_widgets = [
         self.overlay.simple_layout.itemAt(i).widget()
         for i in range(self.overlay.simple_layout.count())
     ]
     # Filter out None if any
     simple_widgets = [w for w in simple_widgets if w is not None]
-    self.assertEqual(len(simple_widgets), 4)  # dot + 3 metrics
+    self.assertEqual(len(simple_widgets), 5)  # dot + 3 metrics + auto-start button
     self.assertIs(simple_widgets[0], self.overlay.simple_status_dot)
     self.assertIs(simple_widgets[1], self.overlay.simple_metric_widgets["練功時長"])
     self.assertIs(simple_widgets[2], self.overlay.simple_metric_widgets["預估10分"])
     self.assertIs(simple_widgets[3], self.overlay.simple_metric_widgets["累計經驗"])
+    self.assertIs(simple_widgets[4], self.overlay.simple_btn_auto_start)
 
     # Verify label texts: 練功時長 -> 時長, 預估10分 -> 10分, 累計經驗 -> 累積
     self.assertEqual(self.overlay.simple_metric_widgets["練功時長"].lbl_label.text(), "時長")
