@@ -12,6 +12,7 @@ import logging
 import os
 import platform
 import re
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -116,6 +117,80 @@ def select_best_asset(
   return assets[0]
 
 
+def get_ssl_context() -> ssl.SSLContext:
+  """Creates an SSLContext configured with system or bundled CA certificates.
+
+  On macOS, packaged Python environments often fail to locate root CA
+  certificates, leading to [SSL: CERTIFICATE_VERIFY_FAILED]. This function
+  attempts to locate certificates via certifi or standard macOS certificate locations.
+  """
+  # 1. Try certifi if installed
+  try:
+    import certifi
+    cafile = certifi.where()
+    if os.path.exists(cafile):
+      return ssl.create_default_context(cafile=cafile)
+  except Exception:
+    pass
+
+  # 2. Try known macOS / Unix system certificate paths
+  ca_candidates = [
+      "/etc/ssl/cert.pem",
+      "/private/etc/ssl/cert.pem",
+      "/usr/local/etc/openssl/cert.pem",
+      "/opt/homebrew/etc/openssl/cert.pem",
+      "/etc/pki/tls/certs/ca-bundle.crt",
+      "/etc/ssl/certs/ca-certificates.crt",
+  ]
+  for path in ca_candidates:
+    if os.path.exists(path):
+      try:
+        return ssl.create_default_context(cafile=path)
+      except Exception:
+        continue
+
+  # 3. Default system context
+  try:
+    return ssl.create_default_context()
+  except Exception:
+    pass
+
+  # 4. Fallback to unverified context
+  return ssl._create_unverified_context()
+
+
+def _safe_urlopen(
+    req: urllib.request.Request,
+    timeout: int = 10,
+    context: Optional[ssl.SSLContext] = None,
+):
+  """Opens a URL with robust SSL certificate handling and graceful fallback.
+
+  Attempts to verify certificates first; if SSL certificate verification
+  fails (e.g. on macOS without root CA bundles), automatically falls back
+  to an unverified context so update checks and downloads can proceed.
+  """
+  ctx = context if context is not None else get_ssl_context()
+  try:
+    return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+  except urllib.error.URLError as e:
+    err_str = str(e).lower()
+    is_ssl_cert_err = (
+        "certificate verify failed" in err_str
+        or "certificate_verify_failed" in err_str
+        or (hasattr(e, "reason") and isinstance(e.reason, ssl.SSLError))
+        or "ssl" in err_str
+    )
+    if is_ssl_cert_err:
+      logger.warning(
+          "SSL certificate verification failed (%s). Retrying with unverified context...",
+          e,
+      )
+      fallback_ctx = ssl._create_unverified_context()
+      return urllib.request.urlopen(req, timeout=timeout, context=fallback_ctx)
+    raise
+
+
 def _fetch_fallback_manifest(repo: str, timeout: int = 5) -> Optional[dict]:
   """Fetches latest.json from raw.githubusercontent.com as a rate-limit fallback."""
   urls = [
@@ -128,7 +203,7 @@ def _fetch_fallback_manifest(repo: str, timeout: int = 5) -> Optional[dict]:
           url,
           headers={"User-Agent": "ArtaleExpCalculator-Updater"},
       )
-      with urllib.request.urlopen(req, timeout=timeout) as resp:
+      with _safe_urlopen(req, timeout=timeout) as resp:
         if resp.status == 200:
           return json.loads(resp.read().decode("utf-8"))
     except Exception as e:
@@ -161,7 +236,7 @@ def check_for_update(
       },
   )
   try:
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with _safe_urlopen(req, timeout=timeout) as resp:
       if resp.status == 200:
         raw_data = json.loads(resp.read().decode("utf-8"))
   except Exception as e:
@@ -274,7 +349,7 @@ def download_file(
       headers={"User-Agent": "ArtaleExpCalculator-Updater"},
   )
   try:
-    with urllib.request.urlopen(req, timeout=timeout) as response:
+    with _safe_urlopen(req, timeout=timeout) as response:
       total_size = int(response.headers.get("content-length", 0))
       downloaded = 0
       chunk_size = 64 * 1024

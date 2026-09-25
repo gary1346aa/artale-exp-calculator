@@ -135,6 +135,46 @@ class TestUpdater(unittest.TestCase):
       if os.path.exists(f_path):
         os.remove(f_path)
 
+  def test_get_ssl_context(self):
+    from core.updater import get_ssl_context
+    import ssl
+    ctx = get_ssl_context()
+    self.assertIsInstance(ctx, ssl.SSLContext)
+
+  def test_safe_urlopen_ssl_retry(self):
+    from core.updater import _safe_urlopen
+    import ssl
+
+    mock_req = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+
+    ssl_error = urllib.error.URLError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")
+    call_count = 0
+
+    def fake_urlopen(req, timeout=10, context=None):
+      nonlocal call_count
+      call_count += 1
+      if call_count == 1:
+        raise ssl_error
+      return mock_resp
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+      resp = _safe_urlopen(mock_req, timeout=5)
+      self.assertEqual(resp, mock_resp)
+      self.assertEqual(call_count, 2)
+
+  def test_safe_urlopen_non_ssl_error(self):
+    from core.updater import _safe_urlopen
+
+    mock_req = MagicMock()
+    network_error = urllib.error.URLError("Connection refused")
+
+    with patch("urllib.request.urlopen", side_effect=network_error):
+      with self.assertRaises(urllib.error.URLError):
+        _safe_urlopen(mock_req, timeout=5)
+
 
 if __name__ == "__main__":
   unittest.main()
+

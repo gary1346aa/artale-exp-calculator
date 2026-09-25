@@ -41,6 +41,7 @@ datas = [
 ]
 
 hiddenimports = [
+    "certifi",
     "PyQt6.QtCore",
     "PyQt6.QtGui",
     "PyQt6.QtWidgets",
