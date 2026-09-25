@@ -17,10 +17,33 @@ import sys
 import config
 
 
+def init_windows_stdio() -> None:
+  """Ensures stdout/stderr exist in frozen GUI processes on Windows."""
+  if sys.platform == "win32":
+    import ctypes
+    # Attach to parent console if invoked from terminal
+    if ctypes.windll.kernel32.AttachConsole(-1):
+      try:
+        sys.stdout = open("CONOUT$", "w", encoding="utf-8", errors="replace")
+        sys.stderr = open("CONOUT$", "w", encoding="utf-8", errors="replace")
+      except Exception:
+        pass
+    if sys.stdout is None:
+      sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+      sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+
 def main() -> None:
   """Parses command line arguments and launches the application."""
+  init_windows_stdio()
   parser = argparse.ArgumentParser(
       description="Artale Desktop EXP Calculator - Real-time Gaming Overlay"
+  )
+  parser.add_argument(
+      "--version",
+      action="version",
+      version=f"{config.APP_NAME} {config.get_full_version_string()}",
   )
   parser.add_argument(
       "--dev",

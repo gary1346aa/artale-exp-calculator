@@ -47,7 +47,7 @@ jobs:
       - name: Smoke Test Packaged Windows Executable
         shell: pwsh
         run: |
-          & dist/ArtaleExpCalculator/ArtaleExpCalculator.exe --help
+          & dist/ArtaleExpCalculator/ArtaleExpCalculator.exe --version
           if ($LASTEXITCODE -ne 0) {
             throw "Smoke test failed: ArtaleExpCalculator.exe crashed on launch!"
           }

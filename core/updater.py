@@ -120,13 +120,18 @@ def check_for_update(
     repo: str = config.APP_GITHUB_REPO,
     current_version: str = config.APP_VERSION,
     timeout: int = 5,
+    include_prereleases: Optional[bool] = None,
 ) -> Tuple[bool, Optional[UpdateInfo], str]:
   """Checks GitHub Releases API for a newer version.
 
   Returns:
       (has_update, update_info_if_any, status_message)
   """
-  url = f"https://api.github.com/repos/{repo}/releases/latest"
+  if include_prereleases is None:
+    # If the user is currently on a pre-release (e.g. 1.0.0-rc.1), include pre-releases
+    include_prereleases = "-" in current_version
+
+  url = f"https://api.github.com/repos/{repo}/releases?per_page=10"
   req = urllib.request.Request(
       url,
       headers={
@@ -138,12 +143,32 @@ def check_for_update(
     with urllib.request.urlopen(req, timeout=timeout) as resp:
       if resp.status != 200:
         return False, None, f"伺服器回應狀態碼: {resp.status}"
-      data = json.loads(resp.read().decode("utf-8"))
+      raw_data = json.loads(resp.read().decode("utf-8"))
   except urllib.error.URLError as e:
     return False, None, f"網路連線失敗: {e}"
   except Exception as e:
     return False, None, f"更新檢查發生錯誤: {e}"
 
+  if isinstance(raw_data, dict):
+    releases_list = [raw_data]
+  elif isinstance(raw_data, list):
+    releases_list = raw_data
+  else:
+    return False, None, "未找到有效的發行版本資料"
+
+  if not releases_list:
+    return False, None, "尚未發布任何版本"
+
+  candidates = [
+      r for r in releases_list
+      if not r.get("draft", False)
+      and (include_prereleases or not r.get("prerelease", False))
+  ]
+  if not candidates:
+    return False, None, f"目前已是最新版本 ({config.get_full_version_string()}) ✓"
+
+  # Pick candidate with highest semantic version
+  data = max(candidates, key=lambda r: parse_version_tuple(r.get("tag_name", "")))
   tag_name = data.get("tag_name", "").strip()
   if not tag_name:
     return False, None, "未找到有效的發行版本標籤"
