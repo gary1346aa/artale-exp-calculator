@@ -70,7 +70,7 @@ from ui.components import (
     SmoothCard,
     StatusDotWidget,
 )
-from ui.dialogs import GameModeSettingsDialog
+from ui.dialogs import AboutDialog, GameModeSettingsDialog
 from ui.hotkeys import HotkeyWorker
 
 VideoSimulationWorker = None
@@ -441,6 +441,26 @@ class ArtaleExpOverlay(QWidget):
     self.lbl_hotkey_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.card_layout.addWidget(self.lbl_hotkey_hint)
 
+    # 7. Copyright Footer (strictly visible in Full Mode at bottom-right)
+    self.lbl_copyright = QLabel(self.outer_card)
+    self.lbl_copyright.setText(
+        '<span style="color: #94a3b8;">© 2026 By </span><b style="color:'
+        ' #f1f5f9; font-weight: 700;">G8G</b>'
+    )
+    self.lbl_copyright.setAlignment(
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
+    self.lbl_copyright.setStyleSheet(f"""
+            QLabel {{
+                font-size: 11px;
+                font-family: {FONT_FAMILY};
+                background: transparent;
+                padding-top: 1px;
+                padding-right: 2px;
+            }}
+        """)
+    self.card_layout.addWidget(self.lbl_copyright)
+
     # Metric key to widget mapping for Game Mode customization
     self.metric_widgets = {
         "練功時長": self.row_duration,
@@ -578,6 +598,11 @@ class ArtaleExpOverlay(QWidget):
       self.game_mode_items = dialog.get_ordered_items()
       self._save_config()
       self._apply_game_mode()
+
+  def _open_about_dialog(self):
+    """Opens the About dialog displaying author, version, and info."""
+    dialog = AboutDialog(self)
+    dialog.exec()
 
   def mouseDoubleClickEvent(self, event):
     if event.button() == Qt.MouseButton.LeftButton:
@@ -720,6 +745,10 @@ class ArtaleExpOverlay(QWidget):
         )
 
     menu.addSeparator()
+    action_about = menu.addAction("關於...")
+    action_about.triggered.connect(
+        lambda: QTimer.singleShot(0, self._open_about_dialog)
+    )
     action_close = menu.addAction("關閉程式")
     action_close.triggered.connect(self.close)
 
@@ -843,6 +872,7 @@ class ArtaleExpOverlay(QWidget):
       self.details_container.hide()
       self.slider_panel.hide()
       self.lbl_hotkey_hint.hide()
+      self.lbl_copyright.hide()
 
       # Set pill card padding: compact padding so the dot and content sit nicely inside the capsule curve
       pad_h = max(8, int(12 * self.ui_scale))
@@ -925,6 +955,7 @@ class ArtaleExpOverlay(QWidget):
         self.lbl_hotkey_hint.setText(
             "[F6] 自動開始  [F7] 暫停  [F8] 重置  [F9] 極簡模式"
         )
+        self.lbl_copyright.hide()
 
         for key in self.game_mode_items:
           if key in self.metric_widgets:
@@ -942,6 +973,7 @@ class ArtaleExpOverlay(QWidget):
         self.lbl_hotkey_hint.setText(
             "[F6] 自動開始  [F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
         )
+        self.lbl_copyright.show()
 
         for key in self.game_mode_order:
           if key in self.metric_widgets:
@@ -994,6 +1026,7 @@ class ArtaleExpOverlay(QWidget):
       self.slider_panel.hide()
       self.header_widget.hide()
       self.lbl_hotkey_hint.hide()
+      self.lbl_copyright.hide()
       self._update_simple_mode_focus_state()
       return
 
@@ -1011,6 +1044,7 @@ class ArtaleExpOverlay(QWidget):
     # When expanding/collapsing at top, anchor window position so Auto Start and metrics never jump on screen.
     h_delta = self.header_widget.sizeHint().height() + self.card_layout.spacing()
     if self.current_mode == "game":
+      self.lbl_copyright.hide()
       if is_active:
         was_hidden = not self.header_widget.isVisible()
         self.header_widget.show()
@@ -1031,6 +1065,7 @@ class ArtaleExpOverlay(QWidget):
         self._is_shifted_up = False
       self.header_widget.show()
       self.lbl_hotkey_hint.show()
+      self.lbl_copyright.show()
 
     self.card_layout.activate()
     self.layout().activate()
@@ -1255,7 +1290,19 @@ class ArtaleExpOverlay(QWidget):
         }}
     """)
 
-    # 8. Sliders panel labels & handles
+    # 8. Copyright footer
+    cr_size = max(9, int(11 * s))
+    self.lbl_copyright.setStyleSheet(f"""
+        QLabel {{
+            font-size: {cr_size}px;
+            font-family: {FONT_FAMILY};
+            background: transparent;
+            padding-top: {max(1, int(2 * s))}px;
+            padding-right: {max(1, int(2 * s))}px;
+        }}
+    """)
+
+    # 9. Sliders panel labels & handles
     slider_lbl_size = max(9, int(11 * s))
     val_w = max(28, int(36 * s))
     self.lbl_scale_val.setFixedWidth(val_w)

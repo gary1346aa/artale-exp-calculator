@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QLabel
 
 from config import (
     ALL_METRIC_KEYS,
@@ -17,7 +17,7 @@ from config import (
 from core.metrics import MeasurementState
 from dev.video_simulation import VideoSimulationWorker
 from dev.window_picker import SelectWindowDialog
-from ui.dialogs import GameModeSettingsDialog
+from ui.dialogs import AboutDialog, GameModeSettingsDialog
 from ui.overlay import ArtaleExpOverlay
 
 # Shared QApplication for testing
@@ -583,6 +583,55 @@ class TestOverlayHud(unittest.TestCase):
     self.assertIn("#eab308", self.overlay.simple_status_dot.styleSheet())
     self.assertFalse(self.overlay.simple_status_dot._is_breathing)
     self.assertFalse(self.overlay.simple_status_dot._breath_timer.isActive())
+
+  def test_copyright_visibility_modes(self):
+    """Verify that copyright is visible only in Full Mode at bottom right."""
+    # 1. Full Mode: Visible
+    self.overlay._set_mode("full")
+    self.assertTrue(self.overlay.lbl_copyright.isVisible())
+    self.assertIn("© 2026 By", self.overlay.lbl_copyright.text())
+    self.assertIn("G8G", self.overlay.lbl_copyright.text())
+
+    # 2. Game Mode: Hidden
+    self.overlay._set_mode("game")
+    self.assertFalse(self.overlay.lbl_copyright.isVisible())
+
+    # 3. Simple Mode: Hidden
+    self.overlay._set_mode("simple")
+    self.assertFalse(self.overlay.lbl_copyright.isVisible())
+
+  def test_about_dialog_content(self):
+    """Verify AboutDialog contains Author, Version, Contact Info, and Copyright."""
+    dlg = AboutDialog(parent=self.overlay)
+    self.assertEqual(dlg.windowTitle(), "關於 (About)")
+    # Collect all label texts in dialog
+    labels = [lbl.text() for lbl in dlg.findChildren(QLabel)]
+    full_text = " ".join(labels)
+    self.assertIn("G8G", full_text)
+    self.assertIn("1.0.0", full_text)
+    self.assertIn("TBD", full_text)
+    self.assertIn("© 2026 By", full_text)
+    self.assertIn("G8G", full_text)
+    dlg.close()
+
+  def test_context_menu_has_about(self):
+    """Verify context menu contains 關於... action."""
+    from unittest.mock import patch
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtGui import QContextMenuEvent
+
+    actions_seen = []
+    def fake_exec(menu_self, pos=None):
+      for act in menu_self.actions():
+        actions_seen.append(act.text())
+      return None
+
+    with patch("PyQt6.QtWidgets.QMenu.exec", new=fake_exec):
+      event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10))
+      self.overlay.contextMenuEvent(event)
+
+    self.assertIn("關於...", actions_seen)
+    self.assertIn("關閉程式", actions_seen)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -202,3 +203,109 @@ class GameModeSettingsDialog(QDialog):
         self.list_widget.item(i).text()
         for i in range(self.list_widget.count())
     ]
+
+
+class AboutDialog(QDialog):
+  """Dialog displaying application information, author, version, contact, and copyright."""
+
+  def __init__(self, parent=None):
+    super().__init__(parent)
+    self.setWindowTitle("關於 (About)")
+    self.setModal(True)
+    self.setFixedWidth(340)
+    self.setStyleSheet(f"""
+        QDialog {{
+            background-color: #181d28;
+            color: #e2e8f0;
+            font-family: {config.FONT_FAMILY};
+            font-size: 13px;
+        }}
+        QLabel {{
+            color: #94a3b8;
+            font-size: 12px;
+        }}
+        QPushButton {{
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 12px;
+            font-family: {config.FONT_FAMILY};
+        }}
+        QPushButton:hover {{
+            background-color: rgba(255, 255, 255, 0.18);
+        }}
+    """)
+
+    layout = QVBoxLayout(self)
+    layout.setContentsMargins(20, 20, 20, 20)
+    layout.setSpacing(14)
+
+    # Header title
+    lbl_app_title = QLabel(config.APP_NAME)
+    lbl_app_title.setStyleSheet(
+        "color: #f1f5f9; font-weight: 700; font-size: 16px; letter-spacing:"
+        " 0.5px;"
+    )
+    layout.addWidget(lbl_app_title)
+
+    # Info Card
+    info_card = QFrame(self)
+    info_card.setObjectName("infoCard")
+    info_card.setStyleSheet("""
+        QFrame#infoCard {
+            background-color: #111827;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+        }
+        QLabel {
+            border: none;
+            background: transparent;
+        }
+    """)
+    card_layout = QVBoxLayout(info_card)
+    card_layout.setContentsMargins(14, 12, 14, 12)
+    card_layout.setSpacing(10)
+
+    def _make_row(label: str, value: str, is_rich: bool = False) -> QHBoxLayout:
+      row = QHBoxLayout()
+      row.setSpacing(12)
+      lbl_k = QLabel(label)
+      lbl_k.setStyleSheet("color: #94a3b8; font-size: 12px;")
+      lbl_v = QLabel()
+      if is_rich:
+        lbl_v.setText(value)
+      else:
+        lbl_v.setText(value)
+      lbl_v.setStyleSheet("color: #f1f5f9; font-size: 12px; font-weight: 500;")
+      lbl_v.setTextInteractionFlags(
+          Qt.TextInteractionFlag.TextSelectableByMouse
+      )
+      row.addWidget(lbl_k)
+      row.addStretch()
+      row.addWidget(lbl_v)
+      return row
+
+    card_layout.addLayout(_make_row("作者 (Author)", config.APP_AUTHOR))
+    card_layout.addLayout(_make_row("版本 (Version)", f"v{config.APP_VERSION}"))
+    card_layout.addLayout(_make_row("聯絡資訊 (Contact)", config.APP_CONTACT))
+    card_layout.addLayout(
+        _make_row(
+            "版權 (Copyright)",
+            '<span style="color: #94a3b8;">© 2026 By </span><b style="color:'
+            ' #f1f5f9; font-weight: 700;">G8G</b>',
+            is_rich=True,
+        )
+    )
+    layout.addWidget(info_card)
+
+    # Close button
+    btn_box = QHBoxLayout()
+    btn_box.addStretch()
+    btn_ok = QPushButton("確定")
+    btn_ok.setFixedWidth(80)
+    btn_ok.clicked.connect(self.accept)
+    btn_box.addWidget(btn_ok)
+    layout.addLayout(btn_box)
+

@@ -33,6 +33,13 @@ DEFAULT_TARGET_WINDOW: str = "MapleStory Worlds-Artale"
 # Typography and fonts: strictly Google Sans for numbers/Latin, PingFang TC for Chinese
 FONT_FAMILY: str = "'Google Sans', 'PingFang TC', sans-serif"
 
+# Application metadata & About info
+APP_NAME: str = "Artale EXP Calculator"
+APP_VERSION: str = "1.0.0"
+APP_AUTHOR: str = "G8G"
+APP_COPYRIGHT: str = "© 2026 By G8G"
+APP_CONTACT: str = "content TBD"
+
 # Metric identifiers
 METRIC_DURATION: str = "練功時長"
 METRIC_1MIN_RATE: str = "1分鐘經驗"
