@@ -9,3 +9,4 @@ build --linkopt=-static
 build --linkopt=-lshlwapi
 build --extra_toolchains=//toolchain:cc_toolchain_windows_llvm
 test --test_output=errors
+test --test_env=PATH

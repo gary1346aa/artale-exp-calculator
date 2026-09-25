@@ -44,6 +44,15 @@ jobs:
         run: |
           pyinstaller ArtaleExpCalculator.spec --noconfirm
 
+      - name: Smoke Test Packaged Windows Executable
+        shell: pwsh
+        run: |
+          & dist/ArtaleExpCalculator/ArtaleExpCalculator.exe --help
+          if ($LASTEXITCODE -ne 0) {
+            throw "Smoke test failed: ArtaleExpCalculator.exe crashed on launch!"
+          }
+          Write-Host "Smoke test PASSED: ArtaleExpCalculator.exe launched successfully without errors!"
+
       - name: Package Windows Zip Archive
         shell: pwsh
         run: |
@@ -94,6 +103,11 @@ jobs:
       - name: Build macOS App Bundle with PyInstaller
         run: |
           pyinstaller ArtaleExpCalculator.spec --noconfirm
+
+      - name: Smoke Test Packaged macOS App Bundle
+        run: |
+          ./dist/ArtaleExpCalculator.app/Contents/MacOS/ArtaleExpCalculator --help
+          echo "Smoke test PASSED: macOS App Bundle launched successfully without errors!"
 
       - name: Package macOS Zip Archive
         run: |
