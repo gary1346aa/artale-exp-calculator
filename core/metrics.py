@@ -356,56 +356,112 @@ class ExpMetricsEngine:
     accum_exp_str = f"{self.total_gained_exp:,d}"
     total_gained_str = accum_exp_str
 
-    # 1-minute rate metrics
+    # 1. 1-minute rate metrics (Instantaneous tachometer)
     exp_1m, pct_1m, dt_1m = self._get_window_gain(60.0)
-    rate_exp_per_sec = (
-        (exp_1m / dt_1m)
-        if dt_1m > 5.0
-        else (self.total_gained_exp / elapsed if elapsed > 5.0 else 0.0)
-    )
-    rate_pct_per_sec = (
-        (pct_1m / dt_1m)
-        if dt_1m > 5.0
-        else (self.total_gained_pct / elapsed if elapsed > 5.0 else 0.0)
-    )
+    if self.state == MeasurementState.IDLE or elapsed <= 0.0:
+      rate_1m_exp = 0
+      rate_1m_str = "0"
+    elif elapsed < 15.0 and dt_1m < 5.0:
+      rate_1m_exp = 0
+      rate_1m_str = "計算中..."
+    elif dt_1m >= 5.0:
+      rate_1m_exp = int(round((exp_1m / dt_1m) * 60.0))
+      rate_1m_str = f"{rate_1m_exp:,d}"
+    else:
+      rate_1m_exp = int(round((self.total_gained_exp / elapsed) * 60.0))
+      rate_1m_str = f"{rate_1m_exp:,d}"
 
-    rate_1m_exp = int(rate_exp_per_sec * 60)
-    rate_1m_str = f"{rate_1m_exp:,d}"
+    # 2. 10-minute metrics: 累積10分 & 預估10分
+    # Cumulative actual gained within 10-min horizon:
+    if elapsed >= 600.0:
+      exp_10m_actual, _, _ = self._get_window_gain(600.0)
+      accum_10m_exp = exp_10m_actual
+    else:
+      accum_10m_exp = self.total_gained_exp
 
-    # 10-minute projection & actual
-    exp_10m_actual, _, _ = self._get_window_gain(600.0)
-    accum_10m_str = f"{exp_10m_actual:,d}"
-    proj_10m_exp = int(rate_exp_per_sec * 600)
-    proj_10m_str = f"{proj_10m_exp:,d}"
+    if self.state == MeasurementState.IDLE or elapsed <= 0.0:
+      accum_10m_str = "0"
+      proj_10m_exp = 0
+      proj_10m_str = "0"
+    elif elapsed < 15.0:
+      accum_10m_str = f"{accum_10m_exp:,d}"
+      proj_10m_exp = 0
+      proj_10m_str = "計算中..."
+    elif elapsed >= 600.0:
+      # At or past 10 minutes: prediction seamlessly equals 10-min accumulated actual
+      accum_10m_str = f"{accum_10m_exp:,d}"
+      proj_10m_exp = accum_10m_exp
+      proj_10m_str = f"{proj_10m_exp:,d}"
+    else:
+      # First 10 minutes: project via cumulative session average rate, converging into actual
+      accum_10m_str = f"{accum_10m_exp:,d}"
+      session_rate = self.total_gained_exp / elapsed
+      proj_10m_exp = int(round(session_rate * 600.0))
+      proj_10m_str = f"{proj_10m_exp:,d}"
 
-    # 60-minute projection & actual
-    exp_60m_actual, _, _ = self._get_window_gain(3600.0)
-    accum_60m_str = f"{exp_60m_actual:,d}"
-    proj_60m_exp = int(rate_exp_per_sec * 3600)
-    proj_60m_str = f"{proj_60m_exp:,d}"
+    # 3. 60-minute metrics: 累積60分 & 預估60分 (時薪)
+    # Cumulative actual gained within 60-min horizon:
+    if elapsed >= 3600.0:
+      exp_60m_actual, _, _ = self._get_window_gain(3600.0)
+      accum_60m_exp = exp_60m_actual
+    else:
+      accum_60m_exp = self.total_gained_exp
 
-    # Level up ETA
+    if self.state == MeasurementState.IDLE or elapsed <= 0.0:
+      accum_60m_str = "0"
+      proj_60m_exp = 0
+      proj_60m_str = "0"
+    elif elapsed < 15.0:
+      accum_60m_str = f"{accum_60m_exp:,d}"
+      proj_60m_exp = 0
+      proj_60m_str = "計算中..."
+    elif elapsed >= 3600.0:
+      # At or past 60 minutes: prediction seamlessly equals 60-min accumulated actual
+      accum_60m_str = f"{accum_60m_exp:,d}"
+      proj_60m_exp = accum_60m_exp
+      proj_60m_str = f"{proj_60m_exp:,d}"
+    else:
+      # Before 60 minutes: project via cumulative session average rate, converging into actual
+      accum_60m_str = f"{accum_60m_exp:,d}"
+      session_rate = self.total_gained_exp / elapsed
+      proj_60m_exp = int(round(session_rate * 3600.0))
+      proj_60m_str = f"{proj_60m_exp:,d}"
+
+    # 4. Level up ETA
     eta_str = "-"
     if self.state == MeasurementState.RUNNING:
       if cur_pct is not None:
         if cur_pct >= 100.0:
           eta_str = "已滿級"
-        elif rate_pct_per_sec > 1e-6:
-          rem_pct = 100.0 - cur_pct
-          sec_to_lvl = rem_pct / rate_pct_per_sec
-          eta_hrs = int(sec_to_lvl // 3600)
-          eta_mins = int((sec_to_lvl % 3600) // 60)
-          if eta_hrs > 99:
-            eta_str = ">99小時"
-          elif eta_hrs > 0:
-            eta_str = f"{eta_hrs}小時{eta_mins:02d}分"
-          else:
-            eta_secs = int(sec_to_lvl % 60)
-            eta_str = f"{eta_mins}分{eta_secs:02d}秒"
-        elif elapsed > 20.0:
-          eta_str = "經驗無變動"
-        else:
+        elif elapsed < 15.0:
           eta_str = "計算中..."
+        else:
+          if elapsed >= 600.0:
+            _, pct_10m, dt_10m = self._get_window_gain(600.0)
+            rate_pct_sec = (
+                pct_10m / dt_10m
+                if dt_10m > 30.0
+                else self.total_gained_pct / elapsed
+            )
+          else:
+            rate_pct_sec = self.total_gained_pct / elapsed
+
+          if rate_pct_sec > 1e-6:
+            rem_pct = 100.0 - cur_pct
+            sec_to_lvl = rem_pct / rate_pct_sec
+            eta_hrs = int(sec_to_lvl // 3600)
+            eta_mins = int((sec_to_lvl % 3600) // 60)
+            if eta_hrs > 99:
+              eta_str = ">99小時"
+            elif eta_hrs > 0:
+              eta_str = f"{eta_hrs}小時{eta_mins:02d}分"
+            else:
+              eta_secs = int(sec_to_lvl % 60)
+              eta_str = f"{eta_mins}分{eta_secs:02d}秒"
+          elif elapsed > 20.0:
+            eta_str = "經驗無變動"
+          else:
+            eta_str = "計算中..."
     elif self.state == MeasurementState.PAUSED:
       eta_str = "已暫停"
 
@@ -437,4 +493,7 @@ class ExpMetricsEngine:
         "total_gained_pct": self.total_gained_pct,
         "hourly_exp_rate": proj_60m_exp,
         "proj_10m_exp": proj_10m_exp,
+        "rate_1m_exp": rate_1m_exp,
+        "accum_10m_exp": accum_10m_exp,
+        "accum_60m_exp": accum_60m_exp,
     }

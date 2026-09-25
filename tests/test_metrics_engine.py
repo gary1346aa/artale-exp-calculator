@@ -129,6 +129,58 @@ class TestExpMetricsEngine(unittest.TestCase):
       self.assertNotIn("%", m[key], f"Key {key} should not contain '%'")
       self.assertNotIn("+", m[key], f"Key {key} should not contain '+'")
 
+  def test_warmup_shows_calculating(self):
+    engine = ExpMetricsEngine()
+    engine.add_sample(1000000, 10.0, timestamp=100.0)
+    engine.start_measurement(timestamp=100.0)
+    engine.add_sample(1005000, 10.05, timestamp=105.0)
+
+    # At t = 105s (elapsed = 5s), warmup period (< 15s)
+    m = engine.get_metrics(now=105.0)
+    self.assertEqual(m["預估10分"], "計算中...")
+    self.assertEqual(m["預估60分"], "計算中...")
+    self.assertEqual(m["升級預估時間"], "計算中...")
+
+  def test_progressive_convergence_at_10m_and_60m(self):
+    engine = ExpMetricsEngine()
+    # Baseline at t=0
+    engine.add_sample(10000000, 50.0, timestamp=0.0)
+    engine.start_measurement(timestamp=0.0)
+
+    # 1. At 60 seconds (1 minute): gain 100,000 EXP
+    engine.add_sample(10100000, 50.5, timestamp=60.0)
+    m_1m = engine.get_metrics(now=60.0)
+    # Session pace = 100,000 / 60s -> 10m prediction = 1,000,000; 60m prediction = 6,000,000
+    self.assertEqual(m_1m["預估10分"], "1,000,000")
+    self.assertEqual(m_1m["預估60分"], "6,000,000")
+    self.assertEqual(m_1m["累積10分"], "100,000")
+    self.assertEqual(m_1m["累積60分"], "100,000")
+
+    # 2. Simulate consistent grinding up to 600s (10 minutes): total 1,000,000 EXP gained
+    for t in range(120, 601, 60):
+      engine.add_sample(
+          10000000 + (t // 60) * 100000, 50.0 + (t / 60) * 0.5, timestamp=float(t)
+      )
+
+    m_10m = engine.get_metrics(now=600.0)
+    # At exactly 10 minutes: 預估10分 MUST EQUAL 累積10分!
+    self.assertEqual(m_10m["預估10分"], "1,000,000")
+    self.assertEqual(m_10m["累積10分"], "1,000,000")
+    self.assertEqual(m_10m["預估10分"], m_10m["累積10分"])
+    self.assertEqual(m_10m["預估60分"], "6,000,000")
+
+    # 3. Simulate consistent grinding up to 3600s (60 minutes): total 6,000,000 EXP gained
+    for t in range(720, 3601, 120):
+      engine.add_sample(
+          10000000 + (t // 60) * 100000, 50.0 + (t / 60) * 0.5, timestamp=float(t)
+      )
+
+    m_60m = engine.get_metrics(now=3600.0)
+    # At exactly 60 minutes: 預估60分 MUST EQUAL 累積60分!
+    self.assertEqual(m_60m["預估60分"], "6,000,000")
+    self.assertEqual(m_60m["累積60分"], "6,000,000")
+    self.assertEqual(m_60m["預估60分"], m_60m["累積60分"])
+
 
 if __name__ == "__main__":
   unittest.main()
