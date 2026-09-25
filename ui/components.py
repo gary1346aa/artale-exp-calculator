@@ -70,7 +70,7 @@ class StatusDotWidget(QLabel):
     if is_breathing != self._is_breathing:
       self._is_breathing = is_breathing
       if is_breathing:
-        self._breath_step = 0.0
+        self._breath_step = math.pi / 2.0  # Start at full brightness (1.0)
         self._breath_alpha = 1.0
         self._breath_timer.start()
       else:
@@ -80,8 +80,8 @@ class StatusDotWidget(QLabel):
 
   def _on_breath_tick(self) -> None:
     self._breath_step += 0.14
-    # Smooth sinusoidal breathing between 0.20 and 1.0
-    self._breath_alpha = 0.60 + 0.40 * math.sin(self._breath_step)
+    # Smooth sinusoidal breathing between 0.0 and 1.0
+    self._breath_alpha = 0.50 + 0.50 * math.sin(self._breath_step)
     self.update()
 
   def paintEvent(self, event) -> None:
@@ -89,10 +89,14 @@ class StatusDotWidget(QLabel):
       super().paintEvent(event)
       return
 
+    alpha = max(0.0, min(1.0, self._breath_alpha))
+    if alpha <= 0.005:
+      return
+
     painter = QPainter(self)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     col = QColor(self._color)
-    col.setAlphaF(max(0.15, min(1.0, self._breath_alpha)))
+    col.setAlphaF(alpha)
 
     # Circle radius
     r = max(2.0, (self._dot_size - 4) / 2.0)
