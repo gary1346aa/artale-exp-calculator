@@ -427,6 +427,20 @@ class TestOverlayHud(unittest.TestCase):
     self.assertAlmostEqual(self.overlay.ui_scale, 1.0, places=2)
     self.assertAlmostEqual(self.overlay.opacity_val, 0.95, places=2)
 
+  def test_open_game_mode_settings_dialog(self):
+    """Verify that _open_game_mode_settings can be invoked without NameError."""
+    from unittest.mock import patch
+    from PyQt6.QtWidgets import QDialog
+    with patch.object(GameModeSettingsDialog, "exec", return_value=QDialog.DialogCode.Accepted):
+      self.overlay._open_game_mode_settings()
+
+  def test_open_select_window_dialog(self):
+    """Verify that _open_select_window_dialog can be invoked without NameError."""
+    from unittest.mock import patch
+    from PyQt6.QtWidgets import QDialog
+    with patch.object(SelectWindowDialog, "exec", return_value=QDialog.DialogCode.Accepted):
+      self.overlay._open_select_window_dialog()
+
 
 if __name__ == "__main__":
   unittest.main()
