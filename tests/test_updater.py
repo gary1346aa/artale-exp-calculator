@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -92,6 +93,34 @@ class TestUpdater(unittest.TestCase):
       self.assertFalse(has_update)
       self.assertIsNone(info)
       self.assertIn("最新版本", msg)
+
+  def test_check_for_update_fallback_manifest(self):
+    mock_manifest = {
+        "tag": "v1.5.0",
+        "version": "1.5.0",
+        "release_date": "2026-09-26",
+        "downloads": {
+            "win-x64": {
+                "url": "https://github.com/repo/releases/download/v1.5.0/win.zip",
+                "sha256": "fakehash",
+            }
+        },
+    }
+    with patch(
+        "urllib.request.urlopen",
+        side_effect=urllib.error.HTTPError(
+            "url", 403, "Rate Limit", {}, None
+        ),
+    ):
+      with patch(
+          "core.updater._fetch_fallback_manifest", return_value=mock_manifest
+      ):
+        has_update, info, msg = check_for_update(current_version="1.0.0")
+        self.assertTrue(has_update)
+        self.assertIsNotNone(info)
+        self.assertEqual(info.version, "1.5.0")
+        self.assertEqual(info.sha256, "fakehash")
+        self.assertIn("1.5.0", msg)
 
   def test_verify_file_sha256(self):
     with tempfile.NamedTemporaryFile("w+", delete=False) as f:

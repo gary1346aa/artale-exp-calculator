@@ -116,6 +116,22 @@ def select_best_asset(
   return assets[0]
 
 
+def _fetch_fallback_manifest(repo: str, timeout: int = 5) -> Optional[dict]:
+  """Fetches latest.json from raw.githubusercontent.com as a rate-limit fallback."""
+  fallback_url = f"https://raw.githubusercontent.com/{repo}/master/latest.json"
+  try:
+    req = urllib.request.Request(
+        fallback_url,
+        headers={"User-Agent": "ArtaleExpCalculator-Updater"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+      if resp.status == 200:
+        return json.loads(resp.read().decode("utf-8"))
+  except Exception as e:
+    logger.debug("Fallback manifest fetch failed: %s", e)
+  return None
+
+
 def check_for_update(
     repo: str = config.APP_GITHUB_REPO,
     current_version: str = config.APP_VERSION,
@@ -131,6 +147,7 @@ def check_for_update(
     # If the user is currently on a pre-release (e.g. 1.0.0-rc.1), include pre-releases
     include_prereleases = "-" in current_version
 
+  raw_data = None
   url = f"https://api.github.com/repos/{repo}/releases?per_page=10"
   req = urllib.request.Request(
       url,
@@ -141,12 +158,43 @@ def check_for_update(
   )
   try:
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-      if resp.status != 200:
-        return False, None, f"伺服器回應狀態碼: {resp.status}"
-      raw_data = json.loads(resp.read().decode("utf-8"))
-  except urllib.error.URLError as e:
-    return False, None, f"網路連線失敗: {e}"
+      if resp.status == 200:
+        raw_data = json.loads(resp.read().decode("utf-8"))
   except Exception as e:
+    logger.debug("GitHub Releases API request failed: %s; trying manifest fallback", e)
+    # Attempt rate-limit-free fallback via latest.json
+    manifest = _fetch_fallback_manifest(repo, timeout=timeout)
+    if manifest:
+      tag_name = manifest.get("tag", "").strip()
+      remote_version = manifest.get("version", tag_name.lstrip("vV"))
+      latest_tuple = parse_version_tuple(remote_version)
+      current_tuple = parse_version_tuple(current_version)
+
+      if latest_tuple <= current_tuple:
+        return False, None, f"目前已是最新版本 ({config.get_full_version_string()}) ✓"
+
+      platform_key = "win-x64" if sys.platform == "win32" else "mac-arm64"
+      download_info = manifest.get("downloads", {}).get(platform_key, {})
+      download_url = download_info.get(
+          "url", f"https://github.com/{repo}/releases/tag/{tag_name}"
+      )
+      sha256 = download_info.get("sha256")
+      asset_name = download_url.split("/")[-1] if download_url else "update.zip"
+
+      info = UpdateInfo(
+          version=remote_version,
+          tag_name=tag_name,
+          release_notes="請前往 GitHub 查看最新發行版本說明",
+          download_url=download_url,
+          asset_name=asset_name,
+          asset_size=0,
+          published_at=manifest.get("release_date", ""),
+          sha256=sha256,
+      )
+      return True, info, f"發現新版本 v{remote_version}"
+
+    if isinstance(e, urllib.error.URLError):
+      return False, None, f"網路連線失敗: {e}"
     return False, None, f"更新檢查發生錯誤: {e}"
 
   if isinstance(raw_data, dict):

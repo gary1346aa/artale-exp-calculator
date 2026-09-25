@@ -1,0 +1,15 @@
+{
+  "tag": "v1.0.0-rc.1",
+  "version": "1.0.0-rc.1",
+  "release_date": "2026-09-25",
+  "downloads": {
+    "win-x64": {
+      "url": "https://github.com/gary1346aa/artale-exp-calculator/releases/download/v1.0.0-rc.1/ArtaleExpCalculator-win-x64.zip",
+      "sha256": "6572107B785FA31B0DA761C883A5C4061A1F5F876B795CE62BCF0F8A6C20D576"
+    },
+    "mac-arm64": {
+      "url": "https://github.com/gary1346aa/artale-exp-calculator/releases/download/v1.0.0-rc.1/ArtaleExpCalculator-mac-arm64.zip",
+      "sha256": "f35333beca7e101c9ca5a1ce2831a12ca415784deae3430d8c8342b7a9f92d0d"
+    }
+  }
+}
