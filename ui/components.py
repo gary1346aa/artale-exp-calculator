@@ -534,59 +534,68 @@ def draw_vector_icon(
     painter.drawLine(QPointF(cx - d, cy + d), QPointF(cx + d, cy - d))
 
   elif icon_name == "autostart":
-    # Automotive Auto Start-Stop: Circular arrow with bold 'A' and stroked two-wing arrow
-    # Arc start and end are mathematically symmetrical about the Y-axis (270° ± 48°)
+    # Automotive Auto Start-Stop: Circular arrow with bold 'A' and stroked two-wing chevron
+    # Arc start and end are mathematically symmetrical about the Y-axis (270° ± 28°)
+    pen_w = max(1.15, size * 0.10)
+    pen = QPen(
+        color,
+        pen_w,
+        Qt.PenStyle.SolidLine,
+        Qt.PenCapStyle.RoundCap,
+        Qt.PenJoinStyle.RoundJoin,
+    )
     painter.setPen(pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    r = size * 0.40
-    theta = 48.0
+
+    r = size * 0.42
+    theta = 28.0
     start_deg = (270.0 + theta) % 360.0
-    end_deg = (270.0 - theta) % 360.0
     sweep_deg = 360.0 - 2.0 * theta
+    end_deg = (270.0 - theta) % 360.0
+    end_rad = math.radians(end_deg)
 
     path = QPainterPath()
     path.arcMoveTo(QRectF(cx - r, cy - r, r * 2, r * 2), start_deg)
     path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), start_deg, sweep_deg)
     painter.drawPath(path)
 
-    # Arc end point (base of the arrowhead)
-    end_rad = math.radians(end_deg)
-    base_x = cx + r * math.cos(end_rad)
-    base_y = cy - r * math.sin(end_rad)
+    # Arc end point
+    px = cx + r * math.cos(end_rad)
+    py = cy - r * math.sin(end_rad)
 
-    # Tangent vector (pointing forward along the arc in screen coordinates)
-    tan_deg = math.degrees(math.atan2(math.cos(end_rad), -math.sin(end_rad)))
-    tan_rad = math.radians(tan_deg)
-    ux = math.cos(tan_rad)
-    uy = -math.sin(tan_rad)
+    # Tangent vector pointing forward along counter-clockwise circle
+    tx = -math.sin(end_rad)
+    ty = -math.cos(end_rad)
+    nx = -ty
+    ny = tx
 
-    # Normal vector pointing outward from circle
-    nx = -uy
-    ny = ux
-
-    # Wing dimensions proportional to size
-    w_len = max(2.4, size * 0.16)
-    forward_dist = w_len * 0.85
-    spread_dist = w_len * 0.65
-
-    tip = QPointF(base_x + ux * forward_dist, base_y + uy * forward_dist)
-    p_wing1 = QPointF(base_x + nx * spread_dist, base_y + ny * spread_dist)
-    p_wing2 = QPointF(base_x - nx * spread_dist, base_y - ny * spread_dist)
+    # Clean two-wing chevron pointing forward along the circle
+    arr_len = max(2.6, size * 0.22)
+    spread = arr_len * 0.55
+    tip_x = px + tx * (arr_len * 0.45)
+    tip_y = py + ty * (arr_len * 0.45)
+    w1 = QPointF(
+        tip_x - tx * arr_len + nx * spread, tip_y - ty * arr_len + ny * spread
+    )
+    w2 = QPointF(
+        tip_x - tx * arr_len - nx * spread, tip_y - ty * arr_len - ny * spread
+    )
 
     arr = QPainterPath()
-    arr.moveTo(p_wing1)
-    arr.lineTo(tip)
-    arr.lineTo(p_wing2)
+    arr.moveTo(w1)
+    arr.lineTo(QPointF(tip_x, tip_y))
+    arr.lineTo(w2)
     painter.drawPath(arr)
 
     # Bold 'A' optically centered inside the circle
-    a_font = QFont("Arial", max(7, int(size * 0.38)), QFont.Weight.Bold)
+    font_sz = max(6.0, size * 0.40)
+    a_font = QFont("Arial", int(round(font_sz)), QFont.Weight.Bold)
     painter.setFont(a_font)
     painter.setPen(color)
     fm = painter.fontMetrics()
     tight = fm.tightBoundingRect("A")
     draw_x = cx - tight.center().x()
-    draw_y = cy + 0.5 - tight.center().y()
+    draw_y = cy - tight.center().y()
     painter.drawText(QPointF(draw_x, draw_y), "A")
 
 
