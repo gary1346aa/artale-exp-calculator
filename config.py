@@ -4,6 +4,7 @@ Complies with the Google Python Style Guide.
 """
 
 import os
+import platform
 import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -38,7 +39,30 @@ APP_NAME: str = "Artale EXP Calculator"
 APP_VERSION: str = "1.0.0"
 APP_AUTHOR: str = "G8G"
 APP_COPYRIGHT: str = "© 2026 By G8G"
-APP_CONTACT: str = "content TBD"
+APP_DISCORD_ID: str = "garyhuang"
+APP_GITHUB_REPO: str = "gary1346aa/artale-exp-calculator"
+
+
+def get_isa_display_name() -> str:
+  """Detects CPU instruction set architecture and returns display name.
+
+  Returns:
+      'Apple Silicon' on macOS arm64/aarch64, 'x86_64' on x86-64 platforms, or platform.machine().
+  """
+  machine = platform.machine().lower()
+  if sys.platform == "darwin" and ("arm" in machine or "aarch64" in machine):
+    return "Apple Silicon"
+  if "64" in machine or "amd64" in machine or "x86_64" in machine:
+    return "x86_64"
+  if "arm" in machine or "aarch64" in machine:
+    return "ARM64"
+  return platform.machine()
+
+
+def get_full_version_string() -> str:
+  """Returns version string with ISA optimization label, e.g. '1.0.0 Apple Silicon' or '1.0.0 x86_64'."""
+  return f"{APP_VERSION} {get_isa_display_name()}"
+
 
 # Metric identifiers
 METRIC_DURATION: str = "練功時長"

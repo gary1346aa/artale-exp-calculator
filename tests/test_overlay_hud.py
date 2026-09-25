@@ -6,6 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QLabel
 
 from config import (
@@ -585,23 +586,34 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.simple_status_dot._breath_timer.isActive())
 
   def test_copyright_visibility_modes(self):
-    """Verify that copyright is visible only in Full Mode at bottom right."""
-    # 1. Full Mode: Visible
+    """Verify that copyright is visible only in Full Mode, centered, and hidden when unfocused."""
+    # 1. Full Mode: Centered alignment
     self.overlay._set_mode("full")
-    self.assertTrue(self.overlay.lbl_copyright.isVisible())
+    self.assertEqual(self.overlay.lbl_copyright.alignment(), Qt.AlignmentFlag.AlignCenter)
     self.assertIn("© 2026 By", self.overlay.lbl_copyright.text())
     self.assertIn("G8G", self.overlay.lbl_copyright.text())
 
-    # 2. Game Mode: Hidden
+    # Focus behavior: visible when active, hidden when inactive
+    from unittest.mock import patch
+    with patch.object(self.overlay, "isActiveWindow", return_value=True):
+      self.overlay._update_focus_visibility()
+      self.assertTrue(self.overlay.lbl_copyright.isVisible())
+
+    with patch.object(self.overlay, "isActiveWindow", return_value=False):
+      self.overlay._update_focus_visibility()
+      self.assertFalse(self.overlay.lbl_copyright.isVisible())
+
+    # 2. Game Mode: Always hidden
     self.overlay._set_mode("game")
     self.assertFalse(self.overlay.lbl_copyright.isVisible())
 
-    # 3. Simple Mode: Hidden
+    # 3. Simple Mode: Always hidden
     self.overlay._set_mode("simple")
     self.assertFalse(self.overlay.lbl_copyright.isVisible())
 
   def test_about_dialog_content(self):
-    """Verify AboutDialog contains Author, Version, Contact Info, and Copyright."""
+    """Verify AboutDialog contains Author, Version, Discord ID, and Check Update button."""
+    import config
     dlg = AboutDialog(parent=self.overlay)
     self.assertEqual(dlg.windowTitle(), "關於 (About)")
     # Collect all label texts in dialog
@@ -609,9 +621,12 @@ class TestOverlayHud(unittest.TestCase):
     full_text = " ".join(labels)
     self.assertIn("G8G", full_text)
     self.assertIn("1.0.0", full_text)
-    self.assertIn("TBD", full_text)
+    self.assertIn(config.get_isa_display_name(), full_text)
+    self.assertIn("Discord ID", full_text)
+    self.assertIn("garyhuang", full_text)
     self.assertIn("© 2026 By", full_text)
-    self.assertIn("G8G", full_text)
+    self.assertIsNotNone(dlg.btn_check_update)
+    self.assertEqual(dlg.btn_check_update.text(), "檢查更新")
     dlg.close()
 
   def test_context_menu_has_about(self):

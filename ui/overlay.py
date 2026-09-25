@@ -448,7 +448,7 @@ class ArtaleExpOverlay(QWidget):
         ' #f1f5f9; font-weight: 700;">G8G</b>'
     )
     self.lbl_copyright.setAlignment(
-        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        Qt.AlignmentFlag.AlignCenter
     )
     self.lbl_copyright.setStyleSheet(f"""
             QLabel {{
@@ -456,7 +456,6 @@ class ArtaleExpOverlay(QWidget):
                 font-family: {FONT_FAMILY};
                 background: transparent;
                 padding-top: 1px;
-                padding-right: 2px;
             }}
         """)
     self.card_layout.addWidget(self.lbl_copyright)
@@ -1065,7 +1064,10 @@ class ArtaleExpOverlay(QWidget):
         self._is_shifted_up = False
       self.header_widget.show()
       self.lbl_hotkey_hint.show()
-      self.lbl_copyright.show()
+      if is_active:
+        self.lbl_copyright.show()
+      else:
+        self.lbl_copyright.hide()
 
     self.card_layout.activate()
     self.layout().activate()
@@ -1298,7 +1300,6 @@ class ArtaleExpOverlay(QWidget):
             font-family: {FONT_FAMILY};
             background: transparent;
             padding-top: {max(1, int(2 * s))}px;
-            padding-right: {max(1, int(2 * s))}px;
         }}
     """)
 

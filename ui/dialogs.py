@@ -3,8 +3,10 @@
 Complies with the Google Python Style Guide.
 """
 
+import json
 from typing import List
-from PyQt6.QtCore import Qt
+import urllib.request
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -205,6 +207,35 @@ class GameModeSettingsDialog(QDialog):
     ]
 
 
+class UpdateCheckWorker(QThread):
+  """Background thread to query GitHub Releases API without blocking the UI."""
+
+  result_ready = pyqtSignal(bool, str, str)  # (success, tag_or_error, release_url)
+
+  def run(self):
+    url = (
+        f"https://api.github.com/repos/{config.APP_GITHUB_REPO}/releases/latest"
+    )
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "ArtaleExpCalculator-Client"},
+    )
+    try:
+      with urllib.request.urlopen(req, timeout=5) as resp:
+        if resp.status == 200:
+          data = json.loads(resp.read().decode("utf-8"))
+          tag = data.get("tag_name", "").lstrip("v")
+          html_url = data.get(
+              "html_url",
+              f"https://github.com/{config.APP_GITHUB_REPO}/releases",
+          )
+          self.result_ready.emit(True, tag, html_url)
+          return
+      self.result_ready.emit(False, "伺服器無回應", "")
+    except Exception as e:
+      self.result_ready.emit(False, str(e), "")
+
+
 class AboutDialog(QDialog):
   """Dialog displaying application information, author, version, contact, and copyright."""
 
@@ -212,7 +243,7 @@ class AboutDialog(QDialog):
     super().__init__(parent)
     self.setWindowTitle("關於 (About)")
     self.setModal(True)
-    self.setFixedWidth(340)
+    self.setFixedWidth(380)
     self.setStyleSheet(f"""
         QDialog {{
             background-color: #181d28;
@@ -229,12 +260,17 @@ class AboutDialog(QDialog):
             color: #e2e8f0;
             border: 1px solid rgba(255, 255, 255, 0.15);
             border-radius: 6px;
-            padding: 6px 16px;
+            padding: 6px 14px;
             font-size: 12px;
             font-family: {config.FONT_FAMILY};
         }}
         QPushButton:hover {{
             background-color: rgba(255, 255, 255, 0.18);
+        }}
+        QPushButton:disabled {{
+            color: #64748b;
+            background-color: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.08);
         }}
     """)
 
@@ -288,8 +324,10 @@ class AboutDialog(QDialog):
       return row
 
     card_layout.addLayout(_make_row("作者 (Author)", config.APP_AUTHOR))
-    card_layout.addLayout(_make_row("版本 (Version)", f"v{config.APP_VERSION}"))
-    card_layout.addLayout(_make_row("聯絡資訊 (Contact)", config.APP_CONTACT))
+    card_layout.addLayout(
+        _make_row("版本 (Version)", config.get_full_version_string())
+    )
+    card_layout.addLayout(_make_row("Discord ID", config.APP_DISCORD_ID))
     card_layout.addLayout(
         _make_row(
             "版權 (Copyright)",
@@ -300,12 +338,67 @@ class AboutDialog(QDialog):
     )
     layout.addWidget(info_card)
 
-    # Close button
+    # Action / Button row: [檢查更新] [狀態] ... [確定]
     btn_box = QHBoxLayout()
+    btn_box.setSpacing(10)
+
+    self.btn_check_update = QPushButton("檢查更新")
+    self.btn_check_update.clicked.connect(self._check_for_updates)
+    btn_box.addWidget(self.btn_check_update)
+
+    self.lbl_update_status = QLabel("")
+    self.lbl_update_status.setStyleSheet("font-size: 11px;")
+    self.lbl_update_status.setOpenExternalLinks(True)
+    btn_box.addWidget(self.lbl_update_status)
+
     btn_box.addStretch()
+
     btn_ok = QPushButton("確定")
-    btn_ok.setFixedWidth(80)
+    btn_ok.setFixedWidth(70)
     btn_ok.clicked.connect(self.accept)
     btn_box.addWidget(btn_ok)
+
     layout.addLayout(btn_box)
+
+    self._worker = None
+
+  def _check_for_updates(self):
+    """Initiates an asynchronous check for updates against GitHub Releases."""
+    self.btn_check_update.setEnabled(False)
+    self.lbl_update_status.setText("檢查中...")
+    self.lbl_update_status.setStyleSheet("color: #94a3b8; font-size: 11px;")
+
+    self._worker = UpdateCheckWorker(self)
+    self._worker.result_ready.connect(self._on_update_result)
+    self._worker.start()
+
+  def _on_update_result(self, success: bool, tag_or_err: str, release_url: str):
+    self.btn_check_update.setEnabled(True)
+    if not success:
+      self.lbl_update_status.setText("無法連線至更新伺服器")
+      self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
+      return
+
+    def _parse_ver(v_str: str) -> tuple:
+      parts = []
+      for p in v_str.split("."):
+        digits = "".join(filter(str.isdigit, p))
+        parts.append(int(digits) if digits else 0)
+      return tuple(parts)
+
+    try:
+      latest_v = _parse_ver(tag_or_err)
+      current_v = _parse_ver(config.APP_VERSION)
+      if latest_v > current_v:
+        self.lbl_update_status.setText(
+            f'<a href="{release_url}" style="color: #38bdf8; text-decoration:'
+            f' underline;">發現新版本 v{tag_or_err}</a>'
+        )
+      else:
+        self.lbl_update_status.setText("已是最新版本 ✓")
+        self.lbl_update_status.setStyleSheet("color: #34d399; font-size: 11px;")
+    except Exception:
+      self.lbl_update_status.setText("版本格式解析失敗")
+      self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
+
 
