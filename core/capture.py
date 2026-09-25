@@ -83,10 +83,16 @@ class CaptureWorker(QThread):
 
   def run(self) -> None:
     """Executes the capture event loop."""
+    if sys.platform == "darwin":
+      self._run_macos_capture()
+      return
+
     try:
       from windows_capture import Frame, WindowsCapture
     except ImportError:
-      self.status_changed.emit("未安裝 windows_capture 套件", False)
+      self.status_changed.emit(
+          "未安裝 windows_capture 套件 (請執行 pip install windows-capture)", False
+      )
       return
 
     last_sample_time = 0.0
@@ -174,6 +180,69 @@ class CaptureWorker(QThread):
           if not self.running:
             break
           time.sleep(0.1)
+
+  def _run_macos_capture(self) -> None:
+    """Executes the macOS CoreGraphics window capture loop."""
+    try:
+      from core.capture_macos import capture_macos_window, find_macos_window_by_title
+    except Exception as e:
+      self.status_changed.emit(f"macOS 捕獲模組初始化失敗: {e}", False)
+      while self.running:
+        time.sleep(0.5)
+      return
+
+    last_sample_time = 0.0
+    last_res = None
+    win_desc = (
+        self.target_window
+        if self.target_window
+        else f"Window ID {self.target_hwnd}"
+    )
+
+    while self.running:
+      target_id = self.target_hwnd
+      if not target_id and self.target_window:
+        target_id = find_macos_window_by_title(self.target_window)
+
+      if not target_id:
+        self.status_changed.emit(
+            f"尋找視窗 [{win_desc}]... (或使用 -v 模擬)", False
+        )
+        for _ in range(10):
+          if not self.running:
+            break
+          time.sleep(0.1)
+        continue
+
+      self.status_changed.emit(f"連線至視窗 [{win_desc}]...", False)
+      while self.running:
+        now = time.time()
+        if now - last_sample_time >= self.sample_interval:
+          last_sample_time = now
+          bgr = capture_macos_window(target_id)
+          if bgr is None:
+            # Window was closed or permission revoked
+            break
+
+          cur_res = (bgr.shape[1], bgr.shape[0])
+          res_changed = last_res != cur_res
+          if res_changed:
+            last_res = cur_res
+
+          parsed = parse_frame(bgr)
+          if parsed:
+            if res_changed and config.IS_DEV:
+              save_crop_debug(bgr, parsed)
+
+            exp_val, pct, raw_str, dt_ms = parsed[:4]
+            self.frame_parsed.emit(
+                exp_val, pct if pct is not None else -1.0, dt_ms
+            )
+            self.status_changed.emit("即時辨識鎖定中", True)
+          else:
+            self.status_changed.emit("搜尋經驗條中...", False)
+
+        time.sleep(0.05)
 
   def stop(self) -> None:
     """Stops the capture worker and releases underlying handles."""

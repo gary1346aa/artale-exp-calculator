@@ -47,6 +47,9 @@ from config import (
     DEFAULT_GAME_MODE_KEYS,
     DEFAULT_SIMPLE_MODE_KEYS,
     FONT_FAMILY,
+    FONT_LATIN,
+    FONT_CHINESE,
+    FONT_FALLBACK,
     SIMPLE_METRIC_CONFIG,
     format_chinese_exp,
     get_accum_exp_color,
@@ -149,12 +152,70 @@ class ArtaleExpOverlay(QWidget):
     self.capture_worker.start()
 
   def _init_window_flags(self):
-    self.setWindowFlags(
-        Qt.WindowType.FramelessWindowHint
-        | Qt.WindowType.WindowStaysOnTopHint
-        | Qt.WindowType.Tool
-    )
+    flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+    if sys.platform != "darwin":
+      flags |= Qt.WindowType.Tool
+    self.setWindowFlags(flags)
     self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+  def _setup_macos_overlay_behavior(self) -> None:
+    """Configures macOS Cocoa NSWindow to stay floating and never hide on deactivate."""
+    if sys.platform != "darwin":
+      return
+    try:
+      import ctypes
+
+      cocoa = ctypes.cdll.LoadLibrary(
+          "/System/Library/Frameworks/Cocoa.framework/Cocoa"
+      )
+      cocoa.objc_getClass.restype = ctypes.c_void_p
+      cocoa.sel_registerName.restype = ctypes.c_void_p
+
+      ns_view = ctypes.c_void_p(int(self.winId()))
+      sel_window = cocoa.sel_registerName(b"window")
+      msg_send_window = ctypes.cast(
+          cocoa.objc_msgSend,
+          ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p),
+      )
+      ns_window = msg_send_window(ns_view, sel_window)
+      if not ns_window:
+        return
+
+      # [ns_window setHidesOnDeactivate:NO]
+      sel_hides = cocoa.sel_registerName(b"setHidesOnDeactivate:")
+      msg_send_bool = ctypes.cast(
+          cocoa.objc_msgSend,
+          ctypes.CFUNCTYPE(
+              None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_bool
+          ),
+      )
+      msg_send_bool(ns_window, sel_hides, False)
+
+      # [ns_window setLevel:3] (kCGFloatingWindowLevelKey = 3)
+      sel_level = cocoa.sel_registerName(b"setLevel:")
+      msg_send_long = ctypes.cast(
+          cocoa.objc_msgSend,
+          ctypes.CFUNCTYPE(
+              None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long
+          ),
+      )
+      msg_send_long(ns_window, sel_level, 3)
+
+      # [ns_window setCollectionBehavior: 1 | 256] (CanJoinAllSpaces | FullScreenAuxiliary)
+      sel_col = cocoa.sel_registerName(b"setCollectionBehavior:")
+      msg_send_ulong = ctypes.cast(
+          cocoa.objc_msgSend,
+          ctypes.CFUNCTYPE(
+              None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong
+          ),
+      )
+      msg_send_ulong(ns_window, sel_col, 1 | 256)
+    except Exception:
+      pass
+
+  def showEvent(self, event) -> None:
+    super().showEvent(event)
+    self._setup_macos_overlay_behavior()
 
   def _init_ui(self):
     self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -199,8 +260,8 @@ class ArtaleExpOverlay(QWidget):
                 font-size: 14px;
                 font-weight: 700;
                 letter-spacing: 0.5px;
-                font-family: {FONT_FAMILY};
-                background: transparent;
+                font-family: {FONT_LATIN};
+                background-color: #0e121c;
             }}
         """)
 
@@ -214,7 +275,7 @@ class ArtaleExpOverlay(QWidget):
                 border-radius: 4px;
                 font-size: 11px;
                 font-weight: 600;
-                font-family: {FONT_FAMILY};
+                font-family: {FONT_CHINESE};
             }}
         """)
 
@@ -268,8 +329,8 @@ class ArtaleExpOverlay(QWidget):
             QLabel {{
                 color: #64748b;
                 font-size: 11px;
-                font-family: {FONT_FAMILY};
-                background: transparent;
+                font-family: {FONT_CHINESE};
+                background-color: #0e121c;
             }}
         """)
 
@@ -865,9 +926,9 @@ class ArtaleExpOverlay(QWidget):
       self.lbl_hotkey_hint.hide()
       self.lbl_copyright.hide()
 
-      # Set pill card padding: compact padding so the dot and content sit nicely inside the capsule curve
-      pad_h = max(8, int(12 * self.ui_scale))
-      pad_v = max(4, int(6 * self.ui_scale))
+      # Set pill card padding: comfortable padding so the dot and content sit nicely inside the capsule curve
+      pad_h = max(14, int(18 * self.ui_scale))
+      pad_v = max(4, int(5 * self.ui_scale))
       self.card_layout.setContentsMargins(pad_h, pad_v, pad_h, pad_v)
       self.card_layout.setSpacing(0)
 
@@ -888,14 +949,14 @@ class ArtaleExpOverlay(QWidget):
       self.simple_layout.addWidget(self.simple_status_dot)
       self.simple_status_dot.show()
 
-      # Compact spacing between dot and the first metric (dot does not need excessive space)
-      dot_space = max(3, int(6 * self.ui_scale))
+      # Compact spacing between dot and the first metric
+      dot_space = max(4, int(8 * self.ui_scale))
       self.simple_layout.addSpacing(dot_space)
 
       active_keys = [
           k for k in DEFAULT_SIMPLE_MODE_KEYS if k in self.simple_metric_widgets
       ]
-      inter_space = max(8, int(16 * self.ui_scale))
+      inter_space = max(10, int(14 * self.ui_scale))
       for idx, key in enumerate(active_keys):
         w = self.simple_metric_widgets[key]
         self.simple_layout.addWidget(w)
@@ -1000,7 +1061,7 @@ class ArtaleExpOverlay(QWidget):
       )
       self.simple_btn_auto_start.hide()
 
-    h = max(28, int(32 * self.ui_scale))
+    h = max(32, int(36 * self.ui_scale))
     self.setMinimumSize(0, 0)
     self.setMaximumSize(16777215, 16777215)
     self.simple_layout.activate()
@@ -1184,8 +1245,8 @@ class ArtaleExpOverlay(QWidget):
   def _apply_scaling(self):
     s = self.ui_scale
     if self.current_mode == "simple":
-      pad_h = max(10, int(16 * s))
-      pad_v = max(4, int(6 * s))
+      pad_h = max(14, int(18 * s))
+      pad_v = max(4, int(5 * s))
       self.card_layout.setContentsMargins(pad_h, pad_v, pad_h, pad_v)
       self.card_layout.setSpacing(0)
     else:
@@ -1230,8 +1291,8 @@ class ArtaleExpOverlay(QWidget):
             font-size: {title_size}px;
             font-weight: 700;
             letter-spacing: 0.5px;
-            font-family: {FONT_FAMILY};
-            background: transparent;
+            font-family: {FONT_LATIN};
+            background-color: #0e121c;
         }}
     """)
     self._update_state_badge_style()
@@ -1259,8 +1320,8 @@ class ArtaleExpOverlay(QWidget):
         QLabel {{
             color: #64748b;
             font-size: {status_size}px;
-            font-family: {FONT_FAMILY};
-            background: transparent;
+            font-family: {FONT_CHINESE};
+            background-color: #0e121c;
         }}
     """)
 
@@ -1278,9 +1339,9 @@ class ArtaleExpOverlay(QWidget):
         QLabel {{
             color: #64748b;
             font-size: {hint_size}px;
-            font-family: {FONT_FAMILY};
+            font-family: {FONT_CHINESE};
             padding-top: {max(2, int(4 * s))}px;
-            background: transparent;
+            background-color: #0e121c;
         }}
     """)
 
@@ -1289,8 +1350,8 @@ class ArtaleExpOverlay(QWidget):
     self.lbl_copyright.setStyleSheet(f"""
         QLabel {{
             font-size: {cr_size}px;
-            font-family: {FONT_FAMILY};
-            background: transparent;
+            font-family: {FONT_FALLBACK};
+            background-color: #0e121c;
             padding-top: {max(1, int(2 * s))}px;
         }}
     """)
@@ -1637,6 +1698,9 @@ def main(
   except Exception:
     pass
 
+  QApplication.setHighDpiScaleFactorRoundingPolicy(
+      Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+  )
   app = QApplication(sys.argv)
   app.setQuitOnLastWindowClosed(False)
 
@@ -1646,8 +1710,10 @@ def main(
   font = QFont()
   font.setFamilies(["Google Sans", "PingFang TC", "sans-serif"])
   font.setPointSize(10)
-  font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
-  font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
+  font.setStyleStrategy(
+      QFont.StyleStrategy.PreferAntialias | QFont.StyleStrategy.PreferQuality
+  )
+  font.setHintingPreference(QFont.HintingPreference.PreferVerticalHinting)
   app.setFont(font)
 
   overlay = ArtaleExpOverlay()

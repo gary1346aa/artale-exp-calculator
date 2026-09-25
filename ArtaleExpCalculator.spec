@@ -48,6 +48,7 @@ hiddenimports = [
     "core.engine",
     "core.metrics",
     "core.capture",
+    "core.capture_macos",
     "core.python_engine",
     "core.updater",
     "ui",

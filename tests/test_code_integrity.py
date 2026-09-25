@@ -27,6 +27,7 @@ class TestCodeIntegrity(unittest.TestCase):
       "config",
       "main",
       "core.capture",
+      "core.capture_macos",
       "core.engine",
       "core.metrics",
       "core.python_engine",

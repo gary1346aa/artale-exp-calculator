@@ -71,7 +71,7 @@ class StatusDotWidget(QLabel):
     self._color = QColor(color) if isinstance(color, str) else color
     self.setText("●" if is_solid else "○")
     self.setStyleSheet(
-        f"color: {self._color.name()}; font-size: {self._dot_size}px; background: transparent;"
+        f"color: {self._color.name()}; font-size: {self._dot_size}px; background-color: #0e121c;"
     )
     if tooltip:
       self.setToolTip(tooltip)
@@ -94,11 +94,7 @@ class StatusDotWidget(QLabel):
     self.update()
 
   def paintEvent(self, event) -> None:
-    if not self._is_breathing:
-      super().paintEvent(event)
-      return
-
-    alpha = max(0.0, min(1.0, self._breath_alpha))
+    alpha = max(0.0, min(1.0, self._breath_alpha)) if self._is_breathing else 1.0
     if alpha <= 0.005:
       return
 
@@ -121,7 +117,6 @@ class StatusDotWidget(QLabel):
       painter.setPen(pen)
       painter.setBrush(Qt.BrushStyle.NoBrush)
       painter.drawEllipse(QPointF(cx, cy), r, r)
-
 
 
 class MetricRow(QFrame):
@@ -150,7 +145,8 @@ class MetricRow(QFrame):
             color: #94a3b8;
             font-size: 13px;
             font-weight: 500;
-            font-family: {config.FONT_FAMILY};
+            font-family: {config.FONT_CHINESE};
+            background-color: #0e121c;
         }}
     """)
 
@@ -163,7 +159,8 @@ class MetricRow(QFrame):
             color: {val_color};
             font-size: {font_size};
             font-weight: {font_weight};
-            font-family: {config.FONT_FAMILY};
+            font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
+            background-color: #0e121c;
         }}
     """)
     self.lbl_value.setAlignment(
@@ -195,7 +192,8 @@ class MetricRow(QFrame):
             color: #94a3b8;
             font-size: {title_size}px;
             font-weight: 500;
-            font-family: {config.FONT_FAMILY};
+            font-family: {config.FONT_CHINESE};
+            background-color: #0e121c;
         }}
     """)
     self.lbl_value.setStyleSheet(f"""
@@ -203,7 +201,8 @@ class MetricRow(QFrame):
             color: {val_color};
             font-size: {val_size}px;
             font-weight: {font_weight};
-            font-family: {config.FONT_FAMILY};
+            font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
+            background-color: #0e121c;
         }}
     """)
 
@@ -221,7 +220,8 @@ class MetricRow(QFrame):
               color: {fg_color};
               font-size: {val_size}px;
               font-weight: {font_weight};
-              font-family: {config.FONT_FAMILY};
+              font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
+              background-color: #0e121c;
           }}
       """)
 
@@ -239,7 +239,7 @@ class SmoothCard(QFrame):
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
     rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
-    bg_color = QColor(14, 18, 28, 245)
+    bg_color = QColor(14, 18, 28, 255)
     border_color = QColor(255, 255, 255, 28)
 
     painter.setBrush(QBrush(bg_color))
@@ -267,7 +267,7 @@ class SimpleMetricItem(QWidget):
 
     layout = QHBoxLayout(self)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(4)
+    layout.setSpacing(5)
 
     self.lbl_label = QLabel(label_text, self)
     self.lbl_label.setAttribute(
@@ -289,16 +289,16 @@ class SimpleMetricItem(QWidget):
     self.scale = scale
     lbl_font_size = max(9, int(12 * scale))
     val_font_size = max(10, int(13 * scale))
-    self.layout().setSpacing(max(2, int(4 * scale)))
-    val_min_w = max(45, int(76 * scale))
+    self.layout().setSpacing(max(3, int(5 * scale)))
+    val_min_w = max(50, int(82 * scale))
     self.lbl_value.setMinimumWidth(val_min_w)
     self.lbl_label.setStyleSheet(f"""
         QLabel {{
             color: {self.label_color};
             font-size: {lbl_font_size}px;
             font-weight: 600;
-            font-family: {config.FONT_FAMILY};
-            background: transparent;
+            font-family: {config.FONT_CHINESE};
+            background-color: #0e121c;
         }}
     """)
     self.lbl_value.setStyleSheet(f"""
@@ -306,8 +306,8 @@ class SimpleMetricItem(QWidget):
             color: {self.current_val_color};
             font-size: {val_font_size}px;
             font-weight: 700;
-            font-family: {config.FONT_FAMILY};
-            background: transparent;
+            font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
+            background-color: #0e121c;
         }}
     """)
 
@@ -322,8 +322,8 @@ class SimpleMetricItem(QWidget):
             color: {self.current_val_color};
             font-size: {val_font_size}px;
             font-weight: 700;
-            font-family: {config.FONT_FAMILY};
-            background: transparent;
+            font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
+            background-color: #0e121c;
         }}
     """)
 
@@ -367,8 +367,8 @@ class SimpleProgressBarItem(QWidget):
             color: #38bdf8;
             font-size: {lbl_font_size}px;
             font-weight: 600;
-            font-family: {config.FONT_FAMILY};
-            background: transparent;
+            font-family: {config.FONT_CHINESE};
+            background-color: #0e121c;
         }}
     """)
     self.bar.setFixedSize(bar_w, bar_h)
