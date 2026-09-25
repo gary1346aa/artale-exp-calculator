@@ -118,17 +118,21 @@ def select_best_asset(
 
 def _fetch_fallback_manifest(repo: str, timeout: int = 5) -> Optional[dict]:
   """Fetches latest.json from raw.githubusercontent.com as a rate-limit fallback."""
-  fallback_url = f"https://raw.githubusercontent.com/{repo}/master/latest.json"
-  try:
-    req = urllib.request.Request(
-        fallback_url,
-        headers={"User-Agent": "ArtaleExpCalculator-Updater"},
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-      if resp.status == 200:
-        return json.loads(resp.read().decode("utf-8"))
-  except Exception as e:
-    logger.debug("Fallback manifest fetch failed: %s", e)
+  urls = [
+      f"https://raw.githubusercontent.com/{repo}/refs/heads/master/latest.json",
+      f"https://raw.githubusercontent.com/{repo}/master/latest.json",
+  ]
+  for url in urls:
+    try:
+      req = urllib.request.Request(
+          url,
+          headers={"User-Agent": "ArtaleExpCalculator-Updater"},
+      )
+      with urllib.request.urlopen(req, timeout=timeout) as resp:
+        if resp.status == 200:
+          return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+      logger.debug("Fallback manifest fetch failed for %s: %s", url, e)
   return None
 
 
