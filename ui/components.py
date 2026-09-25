@@ -1,0 +1,368 @@
+"""Reusable vector-rendered UI widgets and controls for Artale EXP Calculator.
+
+Complies with the Google Python Style Guide.
+"""
+
+from typing import Optional
+from PyQt6.QtCore import QRectF, Qt
+from PyQt6.QtGui import QBrush, QColor, QCursor, QPainter, QPen
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QSizePolicy,
+    QWidget,
+)
+
+import config
+
+
+class MetricRow(QFrame):
+  """Two-column key-value display row for Standard and Game Mode cards."""
+
+  def __init__(
+      self,
+      title: str,
+      default_val: str = "--",
+      parent=None,
+      is_highlight: bool = False,
+  ):
+    super().__init__(parent)
+    self.is_highlight: bool = is_highlight
+    self.scale: float = 1.0
+    self.current_color: Optional[str] = None
+    self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+    self.layout = QHBoxLayout(self)
+    self.layout.setContentsMargins(6, 3, 6, 3)
+    self.layout.setSpacing(10)
+
+    self.lbl_title = QLabel(title)
+    self.lbl_title.setStyleSheet(f"""
+        QLabel {{
+            color: #94a3b8;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: {config.FONT_FAMILY};
+        }}
+    """)
+
+    self.lbl_value = QLabel(default_val)
+    val_color = "#FFFFFF" if is_highlight else "#f1f5f9"
+    font_size = "16px" if is_highlight else "15px"
+    font_weight = "700" if is_highlight else "600"
+    self.lbl_value.setStyleSheet(f"""
+        QLabel {{
+            color: {val_color};
+            font-size: {font_size};
+            font-weight: {font_weight};
+            font-family: {config.FONT_FAMILY};
+        }}
+    """)
+    self.lbl_value.setAlignment(
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
+
+    self.layout.addWidget(self.lbl_title)
+    self.layout.addStretch()
+    self.layout.addWidget(self.lbl_value)
+
+  def update_scale(self, scale: float) -> None:
+    self.scale = scale
+    title_size = max(9, int(13 * scale))
+    val_size = max(11, int((16 if self.is_highlight else 15) * scale))
+    val_color = (
+        self.current_color
+        if self.current_color
+        else ("#FFFFFF" if self.is_highlight else "#f1f5f9")
+    )
+    font_weight = "700" if self.is_highlight else "600"
+    self.layout.setContentsMargins(
+        max(3, int(6 * scale)),
+        max(2, int(3 * scale)),
+        max(3, int(6 * scale)),
+        max(2, int(3 * scale)),
+    )
+    self.lbl_title.setStyleSheet(f"""
+        QLabel {{
+            color: #94a3b8;
+            font-size: {title_size}px;
+            font-weight: 500;
+            font-family: {config.FONT_FAMILY};
+        }}
+    """)
+    self.lbl_value.setStyleSheet(f"""
+        QLabel {{
+            color: {val_color};
+            font-size: {val_size}px;
+            font-weight: {font_weight};
+            font-family: {config.FONT_FAMILY};
+        }}
+    """)
+
+  def set_value(self, val_str: str, color: Optional[str] = None) -> None:
+    self.lbl_value.setText(val_str)
+    if color != self.current_color:
+      self.current_color = color
+      val_size = max(11, int((16 if self.is_highlight else 15) * self.scale))
+      font_weight = "700" if self.is_highlight else "600"
+      fg_color = (
+          color if color else ("#FFFFFF" if self.is_highlight else "#f1f5f9")
+      )
+      self.lbl_value.setStyleSheet(f"""
+          QLabel {{
+              color: {fg_color};
+              font-size: {val_size}px;
+              font-weight: {font_weight};
+              font-family: {config.FONT_FAMILY};
+          }}
+      """)
+
+
+class SmoothCard(QFrame):
+  """Container frame rendering anti-aliased rounded background and borders."""
+
+  def __init__(self, parent=None):
+    super().__init__(parent)
+    self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    self.is_pill: bool = False
+
+  def paintEvent(self, event) -> None:
+    painter = QPainter(self)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+    rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
+    bg_color = QColor(14, 18, 28, 245)
+    border_color = QColor(255, 255, 255, 28)
+
+    painter.setBrush(QBrush(bg_color))
+    painter.setPen(QPen(border_color, 1.2))
+    if getattr(self, "is_pill", False):
+      radius = rect.height() / 2.0
+      painter.drawRoundedRect(rect, radius, radius)
+    else:
+      painter.drawRoundedRect(rect, 12.0, 12.0)
+
+
+class SimpleMetricItem(QWidget):
+  """Compact horizontal label-value widget for Simple Mode."""
+
+  def __init__(
+      self, key: str, label_text: str, label_color: str, parent=None
+  ):
+    super().__init__(parent)
+    self.key: str = key
+    self.label_color: str = label_color
+    self.scale: float = 1.0
+    self.current_val_color: str = "#f8fafc"
+
+    self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    layout = QHBoxLayout(self)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(4)
+
+    self.lbl_label = QLabel(label_text, self)
+    self.lbl_label.setAttribute(
+        Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+    )
+    self.lbl_value = QLabel("--", self)
+    self.lbl_value.setAttribute(
+        Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+    )
+    self.lbl_value.setAlignment(
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    )
+
+    layout.addWidget(self.lbl_label)
+    layout.addWidget(self.lbl_value)
+    self.update_scale(1.0)
+
+  def update_scale(self, scale: float = 1.0) -> None:
+    self.scale = scale
+    lbl_font_size = max(9, int(12 * scale))
+    val_font_size = max(10, int(13 * scale))
+    self.layout().setSpacing(max(2, int(4 * scale)))
+    val_min_w = max(45, int(76 * scale))
+    self.lbl_value.setMinimumWidth(val_min_w)
+    self.lbl_label.setStyleSheet(f"""
+        QLabel {{
+            color: {self.label_color};
+            font-size: {lbl_font_size}px;
+            font-weight: 600;
+            font-family: {config.FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+    self.lbl_value.setStyleSheet(f"""
+        QLabel {{
+            color: {self.current_val_color};
+            font-size: {val_font_size}px;
+            font-weight: 700;
+            font-family: {config.FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+
+  update_style = update_scale
+
+  def set_value(self, val_str: str, color: Optional[str] = None) -> None:
+    self.lbl_value.setText(val_str)
+    self.current_val_color = color if color else "#f8fafc"
+    val_font_size = max(10, int(13 * self.scale))
+    self.lbl_value.setStyleSheet(f"""
+        QLabel {{
+            color: {self.current_val_color};
+            font-size: {val_font_size}px;
+            font-weight: 700;
+            font-family: {config.FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+
+
+class SimpleProgressBarItem(QWidget):
+  """Horizontal progress bar item for Simple Mode."""
+
+  def __init__(self, parent=None):
+    super().__init__(parent)
+    self.scale: float = 1.0
+    self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    layout = QHBoxLayout(self)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(4)
+
+    self.lbl_label = QLabel("進度", self)
+    self.lbl_label.setAttribute(
+        Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+    )
+
+    self.bar = QProgressBar(self)
+    self.bar.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+    self.bar.setTextVisible(False)
+    self.bar.setRange(0, 10000)
+    self.bar.setValue(0)
+
+    layout.addWidget(self.lbl_label)
+    layout.addWidget(self.bar)
+    self.update_scale(1.0)
+
+  def update_scale(self, scale: float = 1.0) -> None:
+    self.scale = scale
+    lbl_font_size = max(9, int(12 * scale))
+    bar_w = max(30, int(46 * scale))
+    bar_h = max(4, int(6 * scale))
+    radius = max(2, int(3 * scale))
+    self.layout().setSpacing(max(2, int(4 * scale)))
+    self.lbl_label.setStyleSheet(f"""
+        QLabel {{
+            color: #38bdf8;
+            font-size: {lbl_font_size}px;
+            font-weight: 600;
+            font-family: {config.FONT_FAMILY};
+            background: transparent;
+        }}
+    """)
+    self.bar.setFixedSize(bar_w, bar_h)
+    self.bar.setStyleSheet(f"""
+        QProgressBar {{
+            background-color: rgba(255, 255, 255, 0.12);
+            border-radius: {radius}px;
+            border: none;
+        }}
+        QProgressBar::chunk {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #38bdf8);
+            border-radius: {radius}px;
+        }}
+    """)
+
+  update_style = update_scale
+
+  def set_value(self, val_100x: int) -> None:
+    self.bar.setValue(min(10000, max(0, val_100x)))
+
+
+class SmoothButton(QPushButton):
+  """QPushButton with vector-smoothed anti-aliased background and hover states."""
+
+  def __init__(self, text: str = "", parent=None, is_close: bool = False):
+    super().__init__(text, parent)
+    self.is_close: bool = is_close
+    self.is_hovered: bool = False
+    self.custom_bg: Optional[QColor] = None
+    self.custom_border: Optional[QColor] = None
+    self.custom_color: Optional[QColor] = None
+    self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+  def enterEvent(self, event) -> None:
+    self.is_hovered = True
+    self.update()
+    super().enterEvent(event)
+
+  def leaveEvent(self, event) -> None:
+    self.is_hovered = False
+    self.update()
+    super().leaveEvent(event)
+
+  def set_custom_style(
+      self,
+      bg: Optional[QColor] = None,
+      border: Optional[QColor] = None,
+      text_color: Optional[QColor] = None,
+  ) -> None:
+    self.custom_bg = bg
+    self.custom_border = border
+    self.custom_color = text_color
+    self.update()
+
+  def paintEvent(self, event) -> None:
+    painter = QPainter(self)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+
+    rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
+    radius = min(rect.width(), rect.height()) / 2.0
+
+    if self.custom_bg:
+      bg = self.custom_bg
+      border = (
+          self.custom_border if self.custom_border else QColor(0, 0, 0, 0)
+      )
+      fg = self.custom_color if self.custom_color else QColor("#ffffff")
+      if self.is_hovered:
+        bg = bg.lighter(130)
+    elif self.is_close:
+      bg = (
+          QColor(239, 68, 68, 200)
+          if self.is_hovered
+          else QColor(255, 255, 255, 0)
+      )
+      border = (
+          QColor(239, 68, 68, 120)
+          if self.is_hovered
+          else QColor(255, 255, 255, 0)
+      )
+      fg = QColor("#ffffff") if self.is_hovered else QColor("#94a3b8")
+    else:
+      bg = (
+          QColor(255, 255, 255, 35)
+          if self.is_hovered
+          else QColor(255, 255, 255, 12)
+      )
+      border = (
+          QColor(255, 255, 255, 50)
+          if self.is_hovered
+          else QColor(255, 255, 255, 20)
+      )
+      fg = QColor("#ffffff") if self.is_hovered else QColor("#94a3b8")
+
+    painter.setBrush(QBrush(bg))
+    painter.setPen(QPen(border, 1.0))
+    painter.drawRoundedRect(rect, radius, radius)
+
+    painter.setPen(fg)
+    painter.setFont(self.font())
+    painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
