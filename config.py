@@ -134,19 +134,19 @@ def get_status_indicator_dot(
   """Computes (char, color, tooltip) for the status indicator dot.
 
   States:
-    1. Yellow hollow ('○', #eab308): exp number not captured correctly (window minimized or not found).
-    2. Green hollow ('○', #4ade80): not measuring (reset or just launched), window & exp captured correctly.
-    3. Green solid ('●', #4ade80): measuring.
+    1. Green hollow ('○', #4ade80): exp number not captured correctly (searching / minimized).
+    2. Green solid ('●', #4ade80): ready / not measuring (reset or launched, window & exp locked).
+    3. Red solid ('●', #ef4444): measuring (recording EXP like a camera REC button).
     4. Yellow solid ('●', #eab308): pause.
   """
   state_val = state.value if hasattr(state, "value") else str(state)
   if not is_locked:
-    return "○", "#eab308", "未鎖定經驗條 (視窗最小化或尚未找到遊戲視窗)"
+    return "○", "#4ade80", "未鎖定經驗條 (搜尋中、視窗最小化或尚未找到遊戲視窗)"
   if state_val == "RUNNING":
-    return "●", "#4ade80", "測量中 (視窗與經驗值正常擷取)"
+    return "●", "#ef4444", "測量中 (視窗與經驗值正常擷取)"
   elif state_val == "PAUSED":
     return "●", "#eab308", "測量暫停中"
   else:  # IDLE
-    return "○", "#4ade80", "已鎖定視窗與經驗值 (尚未開始測量)"
+    return "●", "#4ade80", "已鎖定視窗與經驗值 (待命中，尚未開始測量)"
 
 

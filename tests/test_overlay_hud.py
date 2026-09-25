@@ -461,75 +461,75 @@ class TestOverlayHud(unittest.TestCase):
   def test_status_indicator_dot_states(self):
     """Verify 4 indicator dot states:
 
-    1. green solid: measuring
+    1. red solid: measuring (like camera recording REC dot)
     2. yellow solid: pause
-    3. green hollow: not measuring (reset or just launched), window and exp number captured
-    4. yellow hollow: exp number not captured correctly (minimized or not found)
+    3. green solid: not measuring (reset or just launched), window and exp number captured
+    4. green hollow: exp number not captured correctly (searching, minimized, or not found)
     """
     # 1. Helper function checks
-    # Yellow hollow (unlocked)
+    # Green hollow (unlocked / searching)
     c, col, _ = get_status_indicator_dot(False, MeasurementState.IDLE)
-    self.assertEqual((c, col), ("○", "#eab308"))
+    self.assertEqual((c, col), ("○", "#4ade80"))
     c, col, _ = get_status_indicator_dot(False, MeasurementState.RUNNING)
-    self.assertEqual((c, col), ("○", "#eab308"))
+    self.assertEqual((c, col), ("○", "#4ade80"))
     c, col, _ = get_status_indicator_dot(False, MeasurementState.PAUSED)
-    self.assertEqual((c, col), ("○", "#eab308"))
-
-    # Green hollow (locked & idle)
-    c, col, _ = get_status_indicator_dot(True, MeasurementState.IDLE)
     self.assertEqual((c, col), ("○", "#4ade80"))
 
-    # Green solid (measuring)
-    c, col, _ = get_status_indicator_dot(True, MeasurementState.RUNNING)
+    # Green solid (locked & idle / ready)
+    c, col, _ = get_status_indicator_dot(True, MeasurementState.IDLE)
     self.assertEqual((c, col), ("●", "#4ade80"))
+
+    # Red solid (measuring / recording)
+    c, col, _ = get_status_indicator_dot(True, MeasurementState.RUNNING)
+    self.assertEqual((c, col), ("●", "#ef4444"))
 
     # Yellow solid (pause)
     c, col, _ = get_status_indicator_dot(True, MeasurementState.PAUSED)
     self.assertEqual((c, col), ("●", "#eab308"))
 
     # 2. Live UI widget transitions
-    # Initially: unlocked -> yellow hollow
+    # Initially: unlocked -> green hollow
     self.overlay._on_status_changed("尋找視窗中...", False)
     self.assertEqual(self.overlay.status_dot.text(), "○")
-    self.assertIn("#eab308", self.overlay.status_dot.styleSheet())
-
-    # Window locked, idle -> green hollow
-    self.overlay._on_status_changed("即時辨識鎖定中", True)
-    self.assertEqual(self.overlay.status_dot.text(), "○")
     self.assertIn("#4ade80", self.overlay.status_dot.styleSheet())
 
-    # Start measuring (F7) -> green solid
-    self.overlay.on_f7()
+    # Window locked, idle -> green solid
+    self.overlay._on_status_changed("即時辨識鎖定中", True)
     self.assertEqual(self.overlay.status_dot.text(), "●")
     self.assertIn("#4ade80", self.overlay.status_dot.styleSheet())
+
+    # Start measuring (F7) -> red solid
+    self.overlay.on_f7()
+    self.assertEqual(self.overlay.status_dot.text(), "●")
+    self.assertIn("#ef4444", self.overlay.status_dot.styleSheet())
 
     # Pause (F7) -> yellow solid
     self.overlay.on_f7()
     self.assertEqual(self.overlay.status_dot.text(), "●")
     self.assertIn("#eab308", self.overlay.status_dot.styleSheet())
 
-    # Reset (F8) -> green hollow (still locked)
+    # Reset (F8) -> green solid (still locked & idle)
     self.overlay.on_f8()
-    self.assertEqual(self.overlay.status_dot.text(), "○")
+    self.assertEqual(self.overlay.status_dot.text(), "●")
     self.assertIn("#4ade80", self.overlay.status_dot.styleSheet())
 
-    # Window lost -> yellow hollow
+    # Window lost -> green hollow
     self.overlay._on_status_changed("視窗已最小化", False)
     self.assertEqual(self.overlay.status_dot.text(), "○")
-    self.assertIn("#eab308", self.overlay.status_dot.styleSheet())
+    self.assertIn("#4ade80", self.overlay.status_dot.styleSheet())
 
     # Also test Simple Mode simple_status_dot updates in sync
     self.overlay._set_mode("simple")
     self.assertEqual(self.overlay.simple_status_dot.text(), "○")
-    self.assertIn("#eab308", self.overlay.simple_status_dot.styleSheet())
+    self.assertIn("#4ade80", self.overlay.simple_status_dot.styleSheet())
 
     self.overlay._on_status_changed("即時辨識鎖定中", True)
-    self.assertEqual(self.overlay.simple_status_dot.text(), "○")
+    self.assertEqual(self.overlay.simple_status_dot.text(), "●")
     self.assertIn("#4ade80", self.overlay.simple_status_dot.styleSheet())
 
     self.overlay.on_f7()
     self.assertEqual(self.overlay.simple_status_dot.text(), "●")
-    self.assertIn("#4ade80", self.overlay.simple_status_dot.styleSheet())
+    self.assertIn("#ef4444", self.overlay.simple_status_dot.styleSheet())
 
     self.overlay.on_f7()
     self.assertEqual(self.overlay.simple_status_dot.text(), "●")
