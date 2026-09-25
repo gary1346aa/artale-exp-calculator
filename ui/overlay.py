@@ -251,7 +251,7 @@ class ArtaleExpOverlay(QWidget):
             }}
         """)
 
-    self.btn_auto_start = SmoothButton("自動開始 [OFF]", self, icon_name="autostart")
+    self.btn_auto_start = SmoothButton("自動開始 OFF", self, icon_name="autostart")
     self.btn_auto_start.setToolTip(
         "自動開始 [F6]：開啟時，偵測到經驗值增加即自動開始計時 (F7暫停或F8重置時自動關閉一次)"
     )
@@ -461,14 +461,14 @@ class ArtaleExpOverlay(QWidget):
 
   def _update_auto_start_button_style(self, enabled: bool):
     if enabled:
-      self.btn_auto_start.setText("自動開始 [ON]")
+      self.btn_auto_start.setText("自動開始 ON")
       self.btn_auto_start.set_custom_style(
           bg=QColor(16, 185, 129, 45),
           border=QColor(52, 211, 153, 100),
           text_color=QColor("#34d399"),
       )
     else:
-      self.btn_auto_start.setText("自動開始 [OFF]")
+      self.btn_auto_start.setText("自動開始 OFF")
       self.btn_auto_start.set_custom_style(
           bg=QColor(255, 255, 255, 15),
           border=QColor(255, 255, 255, 30),

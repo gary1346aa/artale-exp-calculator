@@ -436,21 +436,23 @@ def draw_vector_icon(
   elif icon_name == "reset":
     painter.setPen(pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    r = size * 0.42
+    r = size * 0.40
+    # Arc from 84 deg clockwise by -316 deg to 128 deg
     path = QPainterPath()
-    path.arcMoveTo(QRectF(cx - r, cy - r, r * 2, r * 2), 60)
-    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 60, -290)
+    path.arcMoveTo(QRectF(cx - r, cy - r, r * 2, r * 2), 84.0)
+    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 84.0, -316.0)
     painter.drawPath(path)
-    # Arrowhead
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QBrush(color))
-    arr_s = max(2.2, size * 0.22)
-    arrow = [
-        QPointF(cx + r - arr_s * 0.3, cy - r * 0.3),
-        QPointF(cx + r + arr_s * 0.8, cy - r * 0.8),
-        QPointF(cx + r - arr_s * 0.3, cy - r * 1.3),
-    ]
-    painter.drawPolygon(arrow)
+
+    # Arrowhead at top-left (~11:30) pointing leftwards along the arc
+    tip = QPointF(cx - 0.245 * r, cy - 1.017 * r)
+    p_top = QPointF(cx + 0.114 * r, cy - 1.378 * r)
+    p_bot = QPointF(cx + 0.145 * r, cy - 0.578 * r)
+
+    arr = QPainterPath()
+    arr.moveTo(p_top)
+    arr.lineTo(tip)
+    arr.lineTo(p_bot)
+    painter.drawPath(arr)
 
   elif icon_name in ("mode", "game_mode"):
     painter.setPen(pen)
@@ -480,16 +482,41 @@ def draw_vector_icon(
   elif icon_name == "settings":
     painter.setPen(pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    r_in = size * 0.22
-    painter.drawEllipse(QPointF(cx, cy), r_in, r_in)
-    r_out = size * 0.48
-    for i in range(6):
-      ang = i * math.pi / 3.0
-      p1 = QPointF(
-          cx + (r_in + 0.8) * math.cos(ang), cy + (r_in + 0.8) * math.sin(ang)
+    r_hole = size * 0.18
+    painter.drawEllipse(QPointF(cx, cy), r_hole, r_hole)
+
+    r_base = size * 0.355
+    r_tip = size * 0.465
+    num_teeth = 6
+    tooth_tip_ang = math.radians(20.0)
+    tooth_base_ang = math.radians(26.0)
+
+    path = QPainterPath()
+    for i in range(num_teeth):
+      mid = i * (2.0 * math.pi / num_teeth) - math.pi / 2.0
+      ang_bl = mid - tooth_base_ang / 2.0
+      p_bl = QPointF(
+          cx + r_base * math.cos(ang_bl), cy + r_base * math.sin(ang_bl)
       )
-      p2 = QPointF(cx + r_out * math.cos(ang), cy + r_out * math.sin(ang))
-      painter.drawLine(p1, p2)
+      ang_tl = mid - tooth_tip_ang / 2.0
+      p_tl = QPointF(cx + r_tip * math.cos(ang_tl), cy + r_tip * math.sin(ang_tl))
+      ang_tr = mid + tooth_tip_ang / 2.0
+      p_tr = QPointF(cx + r_tip * math.cos(ang_tr), cy + r_tip * math.sin(ang_tr))
+      ang_br = mid + tooth_base_ang / 2.0
+      p_br = QPointF(
+          cx + r_base * math.cos(ang_br), cy + r_base * math.sin(ang_br)
+      )
+
+      if i == 0:
+        path.moveTo(p_bl)
+      else:
+        path.lineTo(p_bl)
+      path.lineTo(p_tl)
+      path.lineTo(p_tr)
+      path.lineTo(p_br)
+
+    path.closeSubpath()
+    painter.drawPath(path)
 
   elif icon_name == "close":
     painter.setPen(pen)
@@ -578,8 +605,10 @@ class SmoothButton(QPushButton):
     if self.icon_name == "autostart":
       fm = self.fontMetrics()
       text_w = fm.horizontalAdvance(self.text())
-      w = text_w + 36
-      return QSize(max(sh.width(), w), max(sh.height(), 24))
+      ic_size = min(24 * 0.58, 13.0)
+      gap = 6.0
+      w = ic_size + gap + text_w + 24
+      return QSize(max(sh.width(), int(w)), max(sh.height(), 24))
     elif self.icon_name and not self.text():
       return QSize(24, 24)
     return sh
@@ -636,17 +665,19 @@ class SmoothButton(QPushButton):
     cy = rect.center().y()
 
     if self.icon_name == "autostart":
-      # Auto-start with automotive (A) symbol on left + text
-      ic_size = min(rect.height() * 0.58, 14.0)
-      ic_x = rect.left() + max(14.0, rect.height() * 0.58)
+      # Auto-start with automotive (A) symbol on left + text (centered group)
+      ic_size = min(rect.height() * 0.58, 13.0)
+      gap = 6.0
+      fm = painter.fontMetrics()
+      text_w = fm.horizontalAdvance(self.text())
+      total_w = ic_size + gap + text_w
+      start_x = rect.center().x() - total_w / 2.0
+      ic_x = start_x + ic_size / 2.0
+
       draw_vector_icon(painter, "autostart", ic_x, cy, fg, ic_size)
 
-      text_rect = QRectF(
-          ic_x + ic_size * 0.5 + 6.0,
-          rect.top(),
-          rect.right() - (ic_x + ic_size * 0.5 + 6.0),
-          rect.height(),
-      )
+      text_x = start_x + ic_size + gap
+      text_rect = QRectF(text_x, rect.top(), text_w + 2.0, rect.height())
       painter.setFont(self.font())
       painter.setPen(fg)
       painter.drawText(
