@@ -13,11 +13,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+import config
+
 # Load pristine 25px / 21px prototypes from package data
-PROTOS_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
-    "pristine_font_protos.json",
+PROTOS_PATH = config.get_resource_path(
+    os.path.join("data", "pristine_font_protos.json")
 )
 
 

@@ -10,10 +10,22 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 # Developer mode flag: active if ARTALE_DEV=1 or --dev is passed in sys.argv.
 IS_DEV: bool = os.environ.get("ARTALE_DEV", "0") == "1" or "--dev" in sys.argv
 
-# Project directories
-BASE_DIR: str = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE: str = os.path.join(BASE_DIR, "hud_config.json")
-DEBUG_OUTPUT_DIR: str = os.path.join(BASE_DIR, "debug_output")
+# Project directories and resource resolution (supports both dev and PyInstaller frozen bundles)
+if getattr(sys, "frozen", False):
+  APP_DIR: str = os.path.dirname(sys.executable)
+  RESOURCE_DIR: str = getattr(sys, "_MEIPASS", APP_DIR)
+else:
+  APP_DIR = os.path.dirname(os.path.abspath(__file__))
+  RESOURCE_DIR = APP_DIR
+
+BASE_DIR: str = RESOURCE_DIR
+CONFIG_FILE: str = os.path.join(APP_DIR, "hud_config.json")
+DEBUG_OUTPUT_DIR: str = os.path.join(APP_DIR, "debug_output")
+
+
+def get_resource_path(relative_path: str) -> str:
+  """Resolves the absolute path to a bundled asset or data file."""
+  return os.path.join(RESOURCE_DIR, relative_path)
 
 # Target window title
 DEFAULT_TARGET_WINDOW: str = "MapleStory Worlds-Artale"

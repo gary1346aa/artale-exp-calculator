@@ -161,7 +161,7 @@ def _get_exp_tpl():
   if _tpl_exp is None:
     try:
       import cv2
-      tpl_path = os.path.join(config.BASE_DIR, "data", "real_exp_logo.png")
+      tpl_path = config.get_resource_path(os.path.join("data", "real_exp_logo.png"))
       _tpl_exp = cv2.imread(tpl_path, cv2.IMREAD_GRAYSCALE)
     except ImportError:
       _tpl_exp = None
