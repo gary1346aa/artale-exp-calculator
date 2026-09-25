@@ -23,6 +23,7 @@ from PyQt6.QtGui import (
     QColor,
     QCursor,
     QFont,
+    QIcon,
     QPainter,
     QPen,
 )
@@ -104,6 +105,16 @@ class ArtaleExpOverlay(QWidget):
     qapp = QApplication.instance()
     if qapp:
       qapp.setQuitOnLastWindowClosed(False)
+
+    self.setWindowTitle("Artale EXP Calculator")
+    icon_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "assets", "app_icon.png"
+    )
+    if os.path.isfile(icon_path):
+      app_icon = QIcon(icon_path)
+      self.setWindowIcon(app_icon)
+      if qapp:
+        qapp.setWindowIcon(app_icon)
 
     # Refresh timer (1 Hz)
     self.ui_timer = QTimer(self)
