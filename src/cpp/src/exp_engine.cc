@@ -685,7 +685,7 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int i
 
     // 3. Inverse normalizer inv_norm[x] = 1.0 / (tpl_norm * norm_i)
     int nx = 0;
-#if defined(__AVX2__) && defined(__FMA__)
+#if (defined(__AVX2__) && defined(__FMA__)) || (defined(_MSC_VER) && defined(__AVX2__))
     const __m256d vinv_pix = _mm256_set1_pd(inv_pixels);
     const __m256d vtpl_norm = _mm256_set1_pd(tpl_norm);
     const __m256d vone = _mm256_set1_pd(1.0);
@@ -749,7 +749,7 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int i
 
     // 4. Dot product with template zero-mean map: sum_it
     int x = 0;
-#if defined(__AVX2__) && defined(__FMA__)
+#if (defined(__AVX2__) && defined(__FMA__)) || (defined(_MSC_VER) && defined(__AVX2__))
     const __m256 vmin = _mm256_set1_ps(-1.0f);
     const __m256 vmax = _mm256_set1_ps(1.0f);
 

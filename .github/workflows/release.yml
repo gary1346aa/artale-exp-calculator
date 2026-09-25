@@ -29,10 +29,16 @@ jobs:
           pip install -r requirements.txt pyinstaller
 
       - name: Build C++ Native Core (CMake)
+        shell: pwsh
         run: |
           cmake -B build -S src/cpp -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
-          copy build\Release\artale_exp_core.dll artale_exp_core.dll
+          if (Test-Path "build/Release/artale_exp_core.dll") {
+            Copy-Item "build/Release/artale_exp_core.dll" "artale_exp_core.dll"
+          } elseif (Test-Path "build/artale_exp_core.dll") {
+            Copy-Item "build/artale_exp_core.dll" "artale_exp_core.dll"
+          }
+          Get-Item artale_exp_core.dll
 
       - name: Build Executable with PyInstaller
         run: |
@@ -76,7 +82,14 @@ jobs:
         run: |
           cmake -B build -S src/cpp -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
-          cp build/libartale_exp_core.dylib libartale_exp_core.dylib
+          if [ -f "build/libartale_exp_core.dylib" ]; then
+            cp build/libartale_exp_core.dylib libartale_exp_core.dylib
+          elif [ -f "build/artale_exp_core.dylib" ]; then
+            cp build/artale_exp_core.dylib libartale_exp_core.dylib
+          elif [ -f "build/Release/libartale_exp_core.dylib" ]; then
+            cp build/Release/libartale_exp_core.dylib libartale_exp_core.dylib
+          fi
+          ls -la libartale_exp_core.dylib
 
       - name: Build macOS App Bundle with PyInstaller
         run: |
