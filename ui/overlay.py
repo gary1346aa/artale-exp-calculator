@@ -23,6 +23,7 @@ from PyQt6.QtGui import (
     QColor,
     QCursor,
     QFont,
+    QFontDatabase,
     QIcon,
     QKeySequence,
     QPainter,
@@ -74,6 +75,21 @@ from ui.hotkeys import HotkeyWorker
 
 VideoSimulationWorker = None
 
+_fonts_initialized = False
+
+
+def init_application_fonts() -> None:
+  """Loads bundled Google Sans and PingFang TC fonts into the application font database."""
+  global _fonts_initialized
+  if _fonts_initialized:
+    return
+  fonts_dir = config.get_resource_path(os.path.join("assets", "fonts"))
+  if os.path.isdir(fonts_dir):
+    for f in ["GoogleSans.ttf", "PingFangTC-Regular.otf", "PingFangTC-Medium.otf"]:
+      p = os.path.join(fonts_dir, f)
+      if os.path.isfile(p):
+        QFontDatabase.addApplicationFont(p)
+  _fonts_initialized = True
 
 
 class ArtaleExpOverlay(QWidget):
@@ -89,6 +105,7 @@ class ArtaleExpOverlay(QWidget):
 
   def __init__(self):
     super().__init__()
+    init_application_fonts()
     self.engine = ExpMetricsEngine()
     self.current_mode = "full"  # "full", "game", "simple"
     self.game_mode_order = list(ALL_METRIC_KEYS)
@@ -1583,16 +1600,11 @@ def main(
   app = QApplication(sys.argv)
   app.setQuitOnLastWindowClosed(False)
 
-  # Configure font with anti-aliasing preference
+  init_application_fonts()
+
+  # Configure strictly: Google Sans for Latin/numbers, PingFang TC for Chinese
   font = QFont()
-  font.setFamilies([
-      "Google Sans",
-      "PingFang TC",
-      "PingFang HK",
-      "Microsoft JhengHei UI",
-      "Segoe UI",
-      "sans-serif",
-  ])
+  font.setFamilies(["Google Sans", "PingFang TC", "sans-serif"])
   font.setPointSize(10)
   font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
   font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)

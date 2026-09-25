@@ -30,12 +30,8 @@ def get_resource_path(relative_path: str) -> str:
 # Target window title
 DEFAULT_TARGET_WINDOW: str = "MapleStory Worlds-Artale"
 
-# Typography and fonts
-FONT_FAMILY: str = (
-    "'Google Sans', 'Google Sans Medium', 'PingFang TC', 'PingFang HK',"
-    " -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei UI',"
-    " 'Microsoft JhengHei', sans-serif"
-)
+# Typography and fonts: strictly Google Sans for numbers/Latin, PingFang TC for Chinese
+FONT_FAMILY: str = "'Google Sans', 'PingFang TC', sans-serif"
 
 # Metric identifiers
 METRIC_DURATION: str = "練功時長"
