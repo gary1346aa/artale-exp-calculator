@@ -12,6 +12,7 @@ from PyQt6.QtGui import (
     QColor,
     QCursor,
     QFont,
+    QFontMetricsF,
     QPainter,
     QPainterPath,
     QPen,
@@ -569,11 +570,11 @@ def draw_vector_icon(
     nx = -ty
     ny = tx
 
-    # Clean two-wing chevron pointing forward along the circle
-    arr_len = max(2.6, size * 0.22)
-    spread = arr_len * 0.55
-    tip_x = px + tx * (arr_len * 0.45)
-    tip_y = py + ty * (arr_len * 0.45)
+    # Clean, compact two-wing chevron pointing forward along the circle
+    arr_len = max(1.8, size * 0.14)
+    spread = arr_len * 0.50
+    tip_x = px + tx * (arr_len * 0.40)
+    tip_y = py + ty * (arr_len * 0.40)
     w1 = QPointF(
         tip_x - tx * arr_len + nx * spread, tip_y - ty * arr_len + ny * spread
     )
@@ -587,15 +588,15 @@ def draw_vector_icon(
     arr.lineTo(w2)
     painter.drawPath(arr)
 
-    # Bold 'A' optically centered inside the circle
+    # Bold 'A' optically centered inside the circle with subpixel precision
     font_sz = max(6.0, size * 0.40)
     a_font = QFont("Arial", int(round(font_sz)), QFont.Weight.Bold)
     painter.setFont(a_font)
     painter.setPen(color)
-    fm = painter.fontMetrics()
+    fm = QFontMetricsF(a_font)
     tight = fm.tightBoundingRect("A")
-    draw_x = cx - tight.center().x()
-    draw_y = cy - tight.center().y()
+    draw_x = cx - (tight.left() + tight.right()) / 2.0
+    draw_y = cy - (tight.top() + tight.bottom()) / 2.0
     painter.drawText(QPointF(draw_x, draw_y), "A")
 
 
