@@ -466,8 +466,8 @@ class ArtaleExpOverlay(QWidget):
     self.simple_btn_auto_start = SmoothButton(
         "", parent=self.simple_widget, icon_name="autostart"
     )
-    self.simple_btn_auto_start.custom_icon_size = 12.0
-    self.simple_btn_auto_start.setFixedSize(14, 14)
+    self.simple_btn_auto_start.custom_icon_size = 18.0
+    self.simple_btn_auto_start.setFixedSize(20, 20)
     self.simple_btn_auto_start.setToolTip("自動開始 [F6]")
     self.simple_btn_auto_start.clicked.connect(self._toggle_auto_start)
     self.simple_btn_auto_start.hide()
@@ -942,7 +942,7 @@ class ArtaleExpOverlay(QWidget):
     """Shows/hides the auto-start button on the right round in simple mode based on focus/hover or enabled state."""
     if self.current_mode != "simple" or not hasattr(self, "simple_btn_auto_start"):
       return
-    dot_space = max(3, int(6 * self.ui_scale))
+    dot_space = max(4, int(8 * self.ui_scale))
     is_hovered = self.underMouse()
     is_active = (
         self.isActiveWindow()
@@ -1284,9 +1284,9 @@ class ArtaleExpOverlay(QWidget):
     if hasattr(self, "simple_status_dot"):
       self._update_status_indicator()
     if hasattr(self, "simple_btn_auto_start"):
-      btn_sz = max(12, int(14 * s))
+      btn_sz = max(16, int(20 * s))
       self.simple_btn_auto_start.setFixedSize(btn_sz, btn_sz)
-      self.simple_btn_auto_start.custom_icon_size = max(10.0, 12.0 * s)
+      self.simple_btn_auto_start.custom_icon_size = max(14.0, 18.0 * s)
 
     if self.current_mode == "simple":
       self._apply_game_mode()

@@ -730,14 +730,12 @@ class SmoothButton(QPushButton):
       draw_vector_icon(painter, "autostart", ic_x, cy, fg, ic_size)
 
       text_x = start_x + ic_size + gap
-      text_rect = QRectF(text_x, rect.top(), text_w + 2.0, rect.height())
+      fm = QFontMetricsF(self.font())
+      tight_text = fm.tightBoundingRect(self.text())
+      draw_text_y = cy - (tight_text.top() + tight_text.bottom()) / 2.0
       painter.setFont(self.font())
       painter.setPen(fg)
-      painter.drawText(
-          text_rect,
-          Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-          self.text(),
-      )
+      painter.drawText(QPointF(text_x, draw_text_y), self.text())
     elif self.icon_name:
       # Icon-only button: optically centered vector icon
       ic_size = (
