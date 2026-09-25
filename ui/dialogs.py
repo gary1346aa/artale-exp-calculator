@@ -4,7 +4,7 @@ Complies with the Google Python Style Guide.
 """
 
 import json
-from typing import List
+from typing import Any, Dict, List, Optional, Tuple
 import urllib.request
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
