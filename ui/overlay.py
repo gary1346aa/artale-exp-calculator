@@ -64,6 +64,7 @@ from ui.components import (
     SimpleProgressBarItem,
     SmoothButton,
     SmoothCard,
+    StatusDotWidget,
 )
 from ui.dialogs import GameModeSettingsDialog
 from ui.hotkeys import HotkeyWorker
@@ -237,11 +238,8 @@ class ArtaleExpOverlay(QWidget):
     sub_layout.setContentsMargins(0, 0, 0, 2)
     sub_layout.setSpacing(6)
 
-    self.status_dot = QLabel("●")
+    self.status_dot = StatusDotWidget(size=13, parent=self.outer_card)
     self.status_dot.setToolTip("遊戲視窗與經驗條鎖定狀態指示燈")
-    self.status_dot.setStyleSheet(
-        "color: #eab308; font-size: 13px; background: transparent;"
-    )
 
     self.lbl_status = QLabel("正在連線至遊戲視窗...")
     self.lbl_status.setStyleSheet(f"""
@@ -432,14 +430,9 @@ class ArtaleExpOverlay(QWidget):
     self.simple_layout.setContentsMargins(0, 0, 0, 0)
     self.simple_layout.setSpacing(0)
 
-    self.simple_status_dot = QLabel("●", self.simple_widget)
+    self.simple_status_dot = StatusDotWidget(size=12, parent=self.simple_widget)
     self.simple_status_dot.setAttribute(
         Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
-    )
-    self.simple_status_dot.setFixedSize(12, 12)
-    self.simple_status_dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    self.simple_status_dot.setStyleSheet(
-        "color: #eab308; font-size: 10px; background: transparent;"
     )
 
     self.simple_metric_widgets = {}
@@ -1253,28 +1246,51 @@ class ArtaleExpOverlay(QWidget):
       3. Green hollow ('○', #4ade80): not measuring (reset or just launched), window & exp captured.
       4. Yellow hollow ('○', #eab308): exp number not captured correctly (window minimized or not found).
     """
+    is_measuring = self._is_locked and (
+        self.engine.state == MeasurementState.RUNNING or self.engine.is_running
+    )
     char, color, tooltip = get_status_indicator_dot(
         self._is_locked, self.engine.state
     )
+    is_solid = (char == "●")
 
     dot_size = max(10, int(13 * self.ui_scale))
-    self.status_dot.setText(char)
-    self.status_dot.setStyleSheet(
-        f"color: {color}; font-size: {dot_size}px; background: transparent;"
-    )
-    self.status_dot.setToolTip(tooltip)
+    if hasattr(self.status_dot, "update_scale"):
+      self.status_dot.update_scale(dot_size)
+    if hasattr(self.status_dot, "set_state"):
+      self.status_dot.set_state(
+          is_solid=is_solid,
+          color=color,
+          is_breathing=is_measuring,
+          tooltip=tooltip,
+      )
+    else:
+      self.status_dot.setText(char)
+      self.status_dot.setStyleSheet(
+          f"color: {color}; font-size: {dot_size}px; background: transparent;"
+      )
+      self.status_dot.setToolTip(tooltip)
 
     if hasattr(self, "simple_status_dot"):
-      dot_s = max(8, int(10 * self.ui_scale))
       dot_box = max(10, int(12 * self.ui_scale))
-      self.simple_status_dot.setFixedSize(dot_box, dot_box)
-      self.simple_status_dot.setText(char)
-      self.simple_status_dot.setStyleSheet(
-          f"color: {color}; font-size: {dot_s}px; background: transparent;"
-      )
       status_text = self.lbl_status.text() if hasattr(self, "lbl_status") else ""
       tip = f"{tooltip} ({status_text})" if status_text else tooltip
-      self.simple_status_dot.setToolTip(tip)
+      if hasattr(self.simple_status_dot, "update_scale"):
+        self.simple_status_dot.update_scale(dot_box)
+      if hasattr(self.simple_status_dot, "set_state"):
+        self.simple_status_dot.set_state(
+            is_solid=is_solid,
+            color=color,
+            is_breathing=is_measuring,
+            tooltip=tip,
+        )
+      else:
+        self.simple_status_dot.setFixedSize(dot_box, dot_box)
+        self.simple_status_dot.setText(char)
+        self.simple_status_dot.setStyleSheet(
+            f"color: {color}; font-size: {dot_box}px; background: transparent;"
+        )
+        self.simple_status_dot.setToolTip(tip)
 
   def _on_status_changed(self, msg: str, is_locked: bool):
     self._is_locked = is_locked

@@ -3,8 +3,10 @@
 Complies with the Google Python Style Guide.
 """
 
-from typing import Optional
-from PyQt6.QtCore import QRectF, Qt
+import math
+from typing import Optional, Union
+
+from PyQt6.QtCore import QPointF, QRectF, QTimer, Qt
 from PyQt6.QtGui import QBrush, QColor, QCursor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QFrame,
@@ -17,6 +19,96 @@ from PyQt6.QtWidgets import (
 )
 
 import config
+
+
+class StatusDotWidget(QLabel):
+  """Lightweight antialiased status indicator circle supporting solid, hollow, and breathing states."""
+
+  def __init__(self, size: int = 12, parent=None):
+    super().__init__("●", parent)
+    self._dot_size: int = size
+    self._is_solid: bool = True
+    self._color: QColor = QColor("#4ade80")
+    self._is_breathing: bool = False
+    self._breath_alpha: float = 1.0
+    self._breath_step: float = 0.0
+
+    self.setFixedSize(size, size)
+    self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+    self._breath_timer = QTimer(self)
+    self._breath_timer.setInterval(40)  # ~25 FPS
+    self._breath_timer.timeout.connect(self._on_breath_tick)
+
+  def update_scale(self, size: int) -> None:
+    """Updates the fixed bounding size of the dot."""
+    self._dot_size = max(8, size)
+    self.setFixedSize(self._dot_size, self._dot_size)
+    self.setStyleSheet(
+        f"color: {self._color.name()}; font-size: {self._dot_size}px; background: transparent;"
+    )
+    self.update()
+
+  def set_state(
+      self,
+      is_solid: bool,
+      color: Union[QColor, str],
+      is_breathing: bool = False,
+      tooltip: str = "",
+  ) -> None:
+    """Updates the state, color, breathing animation, and tooltip of the dot."""
+    self._is_solid = is_solid
+    self._color = QColor(color) if isinstance(color, str) else color
+    self.setText("●" if is_solid else "○")
+    self.setStyleSheet(
+        f"color: {self._color.name()}; font-size: {self._dot_size}px; background: transparent;"
+    )
+    if tooltip:
+      self.setToolTip(tooltip)
+
+    if is_breathing != self._is_breathing:
+      self._is_breathing = is_breathing
+      if is_breathing:
+        self._breath_step = 0.0
+        self._breath_alpha = 1.0
+        self._breath_timer.start()
+      else:
+        self._breath_timer.stop()
+        self._breath_alpha = 1.0
+    self.update()
+
+  def _on_breath_tick(self) -> None:
+    self._breath_step += 0.14
+    # Smooth sinusoidal breathing between 0.20 and 1.0
+    self._breath_alpha = 0.60 + 0.40 * math.sin(self._breath_step)
+    self.update()
+
+  def paintEvent(self, event) -> None:
+    if not self._is_breathing:
+      super().paintEvent(event)
+      return
+
+    painter = QPainter(self)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    col = QColor(self._color)
+    col.setAlphaF(max(0.15, min(1.0, self._breath_alpha)))
+
+    # Circle radius
+    r = max(2.0, (self._dot_size - 4) / 2.0)
+    cx = self.width() / 2.0
+    cy = self.height() / 2.0
+
+    if self._is_solid:
+      painter.setPen(Qt.PenStyle.NoPen)
+      painter.setBrush(QBrush(col))
+      painter.drawEllipse(QPointF(cx, cy), r, r)
+    else:
+      pen = QPen(col, max(1.5, self._dot_size * 0.15))
+      painter.setPen(pen)
+      painter.setBrush(Qt.BrushStyle.NoBrush)
+      painter.drawEllipse(QPointF(cx, cy), r, r)
+
 
 
 class MetricRow(QFrame):

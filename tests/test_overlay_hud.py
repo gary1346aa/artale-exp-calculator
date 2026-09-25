@@ -498,42 +498,55 @@ class TestOverlayHud(unittest.TestCase):
     self.assertEqual(self.overlay.status_dot.text(), "●")
     self.assertIn("#4ade80", self.overlay.status_dot.styleSheet())
 
-    # Start measuring (F7) -> red solid
+    # Start measuring (F7) -> red solid + breathing active
     self.overlay.on_f7()
     self.assertEqual(self.overlay.status_dot.text(), "●")
     self.assertIn("#ef4444", self.overlay.status_dot.styleSheet())
+    self.assertTrue(self.overlay.status_dot._is_breathing)
+    self.assertTrue(self.overlay.status_dot._breath_timer.isActive())
 
-    # Pause (F7) -> yellow solid
+    # Pause (F7) -> yellow solid + breathing stopped
     self.overlay.on_f7()
     self.assertEqual(self.overlay.status_dot.text(), "●")
     self.assertIn("#eab308", self.overlay.status_dot.styleSheet())
+    self.assertFalse(self.overlay.status_dot._is_breathing)
+    self.assertFalse(self.overlay.status_dot._breath_timer.isActive())
 
-    # Reset (F8) -> green solid (still locked & idle)
+    # Reset (F8) -> green solid (still locked & idle) + breathing stopped
     self.overlay.on_f8()
     self.assertEqual(self.overlay.status_dot.text(), "●")
     self.assertIn("#4ade80", self.overlay.status_dot.styleSheet())
+    self.assertFalse(self.overlay.status_dot._is_breathing)
+    self.assertFalse(self.overlay.status_dot._breath_timer.isActive())
 
-    # Window lost -> green hollow
+    # Window lost -> green hollow + breathing stopped
     self.overlay._on_status_changed("視窗已最小化", False)
     self.assertEqual(self.overlay.status_dot.text(), "○")
     self.assertIn("#4ade80", self.overlay.status_dot.styleSheet())
+    self.assertFalse(self.overlay.status_dot._is_breathing)
 
     # Also test Simple Mode simple_status_dot updates in sync
     self.overlay._set_mode("simple")
     self.assertEqual(self.overlay.simple_status_dot.text(), "○")
     self.assertIn("#4ade80", self.overlay.simple_status_dot.styleSheet())
+    self.assertFalse(self.overlay.simple_status_dot._is_breathing)
 
     self.overlay._on_status_changed("即時辨識鎖定中", True)
     self.assertEqual(self.overlay.simple_status_dot.text(), "●")
     self.assertIn("#4ade80", self.overlay.simple_status_dot.styleSheet())
+    self.assertFalse(self.overlay.simple_status_dot._is_breathing)
 
     self.overlay.on_f7()
     self.assertEqual(self.overlay.simple_status_dot.text(), "●")
     self.assertIn("#ef4444", self.overlay.simple_status_dot.styleSheet())
+    self.assertTrue(self.overlay.simple_status_dot._is_breathing)
+    self.assertTrue(self.overlay.simple_status_dot._breath_timer.isActive())
 
     self.overlay.on_f7()
     self.assertEqual(self.overlay.simple_status_dot.text(), "●")
     self.assertIn("#eab308", self.overlay.simple_status_dot.styleSheet())
+    self.assertFalse(self.overlay.simple_status_dot._is_breathing)
+    self.assertFalse(self.overlay.simple_status_dot._breath_timer.isActive())
 
 
 if __name__ == "__main__":

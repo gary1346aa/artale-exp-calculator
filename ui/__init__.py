@@ -6,6 +6,7 @@ from ui.components import (
     SimpleProgressBarItem,
     SmoothButton,
     SmoothCard,
+    StatusDotWidget,
 )
 from ui.dialogs import GameModeSettingsDialog
 from ui.hotkeys import HotkeyWorker
@@ -17,6 +18,7 @@ __all__ = [
     "SimpleProgressBarItem",
     "SmoothButton",
     "SmoothCard",
+    "StatusDotWidget",
     "GameModeSettingsDialog",
     "HotkeyWorker",
     "ArtaleExpOverlay",
