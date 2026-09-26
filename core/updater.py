@@ -515,8 +515,19 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
       # 1. Unpack archive into temp directory
       tmp_dir = tempfile.mkdtemp(prefix="artale_update_")
       logger.info("[UPDATER] Unpacking update archive to temp dir: %s", tmp_dir)
-      with zipfile.ZipFile(archive_path, "r") as zf:
-        zf.extractall(tmp_dir)
+      res_ditto = subprocess.run(
+          ["ditto", "-xk", archive_path, tmp_dir],
+          capture_output=True,
+          text=True,
+      )
+      if res_ditto.returncode != 0:
+        logger.warning(
+            "[UPDATER] ditto -xk failed (%d): %s. Falling back to zipfile...",
+            res_ditto.returncode,
+            res_ditto.stderr.strip(),
+        )
+        with zipfile.ZipFile(archive_path, "r") as zf:
+          zf.extractall(tmp_dir)
 
       # 2. Find new ArtaleExpCalculator.app
       new_app = None
@@ -534,6 +545,11 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         return False, "更新檔案損毀：未找到 ArtaleExpCalculator.app"
 
       logger.info("[UPDATER] Discovered new app bundle at: %s", new_app)
+
+      # Ensure executable bit on binaries inside Contents/MacOS
+      macos_bin_dir = os.path.join(new_app, "Contents", "MacOS")
+      if os.path.isdir(macos_bin_dir):
+        subprocess.run(["chmod", "-R", "+x", macos_bin_dir], check=False)
 
       # 3. Check if target_dir is directly writable by user
       target_parent = os.path.dirname(target_dir)
@@ -555,6 +571,8 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         if os.path.exists(target_dir):
           os.rename(target_dir, backup_dir)
         subprocess.run(["ditto", new_app, target_dir], check=True)
+        target_bin_dir = os.path.join(target_dir, "Contents", "MacOS")
+        subprocess.run(["chmod", "-R", "+x", target_bin_dir], check=False, stderr=subprocess.DEVNULL)
         subprocess.run(
             ["xattr", "-dr", "com.apple.quarantine", target_dir],
             check=False,
@@ -567,8 +585,10 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         logger.info(
             "[UPDATER] Target requires root permissions. Presenting native macOS authorization prompt..."
         )
+        target_bin = f"{target_dir}/Contents/MacOS"
         admin_script = (
             f'ditto "{new_app}" "{target_dir}" && '
+            f'chmod -R +x "{target_bin}" && '
             f'xattr -dr com.apple.quarantine "{target_dir}"'
         )
         res = subprocess.run(

@@ -3,5 +3,4 @@ opencv-python>=4.8.0
 windows-capture>=1.2.0; platform_system == "Windows"
 PyQt6>=6.6.0
 certifi>=2024.2.2
-pynput>=1.7.6
 

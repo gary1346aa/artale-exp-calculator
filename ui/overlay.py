@@ -93,7 +93,7 @@ def init_application_fonts() -> None:
 
 
 class AppHotkeyFilter(QObject):
-  """Application-wide event filter to capture user-configured hotkeys when window is focused."""
+  """Application-wide event filter to capture ⌘6~⌘9 (macOS) or F6~F9 (Windows)."""
 
   def __init__(self, overlay):
     super().__init__()
@@ -101,37 +101,21 @@ class AppHotkeyFilter(QObject):
 
   def eventFilter(self, watched, event):
     if event.type() == QEvent.Type.KeyPress:
-      clean_mods = event.modifiers().value & ~Qt.KeyboardModifier.KeypadModifier.value
-      val = int(event.key().value if hasattr(event.key(), "value") else event.key()) | clean_mods
-      ev_seq = QKeySequence(val)
-
-      # Check against active hotkeys
-      hotkeys = getattr(self.overlay, "hotkey_settings", {})
-      for action_name in [
-          config.HOTKEY_AUTO_START,
-          config.HOTKEY_START_PAUSE,
-          config.HOTKEY_RESET,
-          config.HOTKEY_SWITCH_MODE,
-      ]:
-        seq_str = hotkeys.get(action_name, "")
-        if seq_str:
-          seq = QKeySequence(seq_str)
-          if seq.matches(ev_seq) == QKeySequence.SequenceMatch.ExactMatch:
-            self.overlay.trigger_hotkey_action(action_name)
-            return True
-
-      # Fallback backward compatibility for direct F6~F9
       key = event.key()
-      if key == Qt.Key.Key_F6 and not hotkeys.get(config.HOTKEY_AUTO_START):
+      is_cmd = bool(
+          event.modifiers()
+          & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)
+      )
+      if (key == Qt.Key.Key_6 and is_cmd) or key == Qt.Key.Key_F6:
         self.overlay.on_f6()
         return True
-      elif key == Qt.Key.Key_F7 and not hotkeys.get(config.HOTKEY_START_PAUSE):
+      elif (key == Qt.Key.Key_7 and is_cmd) or key == Qt.Key.Key_F7:
         self.overlay.on_f7()
         return True
-      elif key == Qt.Key.Key_F8 and not hotkeys.get(config.HOTKEY_RESET):
+      elif (key == Qt.Key.Key_8 and is_cmd) or key == Qt.Key.Key_F8:
         self.overlay.on_f8()
         return True
-      elif key == Qt.Key.Key_F9 and not hotkeys.get(config.HOTKEY_SWITCH_MODE):
+      elif (key == Qt.Key.Key_9 and is_cmd) or key == Qt.Key.Key_F9:
         self.overlay.on_f9()
         return True
     return super().eventFilter(watched, event)
@@ -156,7 +140,6 @@ class ArtaleExpOverlay(QWidget):
     self.current_mode = "full"  # "full", "game", "simple"
     self.game_mode_order = list(ALL_METRIC_KEYS)
     self.game_mode_items = list(DEFAULT_GAME_MODE_KEYS)
-    self.hotkey_settings: dict = dict(config.DEFAULT_HOTKEYS)
     self.ui_scale = 1.0
     self.opacity_val = 0.95
     self.drag_position = QPoint()
@@ -181,7 +164,6 @@ class ArtaleExpOverlay(QWidget):
     self._apply_scaling()
     self._apply_game_mode()
     self._update_auto_start_button_style(self.engine.auto_start_enabled)
-    self._update_hotkey_tooltips()
     self._is_initializing = False
 
     qapp = QApplication.instance()
@@ -203,9 +185,8 @@ class ArtaleExpOverlay(QWidget):
     self.ui_timer.timeout.connect(self._refresh_ui)
     self.ui_timer.start(1000)
 
-    # Global hotkey listener with dynamic bindings
-    self.hotkey_worker = HotkeyWorker(self.hotkey_settings)
-    self.hotkey_worker.hotkey_triggered.connect(self.trigger_hotkey_action)
+    # Global hotkey listener (F6~F9 on Windows, ⌘6~⌘9 on macOS)
+    self.hotkey_worker = HotkeyWorker()
     self.hotkey_worker.f6_pressed.connect(self.on_f6)
     self.hotkey_worker.f7_pressed.connect(self.on_f7)
     self.hotkey_worker.f8_pressed.connect(self.on_f8)
@@ -305,14 +286,22 @@ class ArtaleExpOverlay(QWidget):
     self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     self.setFixedWidth(int(340 * self.ui_scale))
 
-    # In-window keyboard shortcuts (F6~F9)
+    # In-window keyboard shortcuts (F6~F9 on Windows, both F6~F9 and ⌘6~⌘9 on macOS)
     self.shortcuts = []
-    for seq, handler in [
+    shortcut_pairs = [
         (QKeySequence(Qt.Key.Key_F6), self.on_f6),
         (QKeySequence(Qt.Key.Key_F7), self.on_f7),
         (QKeySequence(Qt.Key.Key_F8), self.on_f8),
         (QKeySequence(Qt.Key.Key_F9), self.on_f9),
-    ]:
+    ]
+    if sys.platform == "darwin":
+      shortcut_pairs.extend([
+          (QKeySequence("Ctrl+6"), self.on_f6),
+          (QKeySequence("Ctrl+7"), self.on_f7),
+          (QKeySequence("Ctrl+8"), self.on_f8),
+          (QKeySequence("Ctrl+9"), self.on_f9),
+      ])
+    for seq, handler in shortcut_pairs:
       sc = QShortcut(seq, self)
       sc.activated.connect(handler)
       self.shortcuts.append(sc)
@@ -367,17 +356,17 @@ class ArtaleExpOverlay(QWidget):
 
     # Vector-smoothed Control buttons (F7, F8, F9, Settings, Close)
     self.btn_f7 = SmoothButton(parent=self, icon_name="play")
-    self.btn_f7.setToolTip("開始 / 暫停 [F7]")
+    self.btn_f7.setToolTip(f"開始 / 暫停 [{config.HOTKEY_LABEL_START_PAUSE}]")
     self.btn_f7.setFixedSize(24, 24)
     self.btn_f7.clicked.connect(self.on_f7)
 
     self.btn_f8 = SmoothButton(parent=self, icon_name="reset")
-    self.btn_f8.setToolTip("重置本次計時 (不重置啟動初始經驗) [F8]")
+    self.btn_f8.setToolTip(f"重置本次計時 (不重置啟動初始經驗) [{config.HOTKEY_LABEL_RESET}]")
     self.btn_f8.setFixedSize(24, 24)
     self.btn_f8.clicked.connect(self.on_f8)
 
     self.btn_f9 = SmoothButton(parent=self, icon_name="game_mode")
-    self.btn_f9.setToolTip("切換遊戲模式 [F9]")
+    self.btn_f9.setToolTip(f"切換遊戲模式 [{config.HOTKEY_LABEL_SWITCH_MODE}]")
     self.btn_f9.setFixedSize(24, 24)
     self.btn_f9.clicked.connect(self.on_f9)
 
@@ -423,7 +412,7 @@ class ArtaleExpOverlay(QWidget):
     self.btn_auto_start = SmoothButton("自動開始 OFF", self, icon_name="autostart")
     self.btn_auto_start.custom_icon_size = max(11.0, 14.0 * self.ui_scale)
     self.btn_auto_start.setToolTip(
-        "自動開始 [F6]：開啟時，偵測到經驗值增加即自動開始計時 (F7暫停或F8重置時自動關閉一次)"
+        f"自動開始 [{config.HOTKEY_LABEL_AUTO_START}]：開啟時，偵測到經驗值增加即自動開始計時 ({config.HOTKEY_LABEL_START_PAUSE}暫停或{config.HOTKEY_LABEL_RESET}重置時自動關閉一次)"
     )
     self.btn_auto_start.setFixedHeight(24)
     self._update_auto_start_button_style(False)
@@ -628,9 +617,9 @@ class ArtaleExpOverlay(QWidget):
     self.simple_actions_layout.setContentsMargins(0, 0, 0, 0)
     self.simple_actions_layout.setSpacing(btn_gap)
 
-    f6_key = "Fn+F6" if sys.platform == "darwin" else "F6"
-    f7_key = "Fn+F7" if sys.platform == "darwin" else "F7"
-    f8_key = "Fn+F8" if sys.platform == "darwin" else "F8"
+    f6_key = config.HOTKEY_LABEL_AUTO_START
+    f7_key = config.HOTKEY_LABEL_START_PAUSE
+    f8_key = config.HOTKEY_LABEL_RESET
 
     self.simple_btn_f7 = SmoothButton(
         "", parent=self.simple_actions_widget, icon_name="play"
@@ -750,37 +739,6 @@ class ArtaleExpOverlay(QWidget):
     dialog = AboutDialog(self)
     dialog.exec()
 
-  def _open_hotkey_settings(self):
-    """Opens OBS-style dialog to customize keyboard shortcuts."""
-    from ui.dialogs import HotkeySettingsDialog
-    dialog = HotkeySettingsDialog(self.hotkey_settings, self)
-    if dialog.exec() == QDialog.DialogCode.Accepted:
-      new_hotkeys = dialog.get_hotkeys()
-      self.hotkey_settings.update(new_hotkeys)
-      self._save_config()
-      if hasattr(self, "hotkey_worker"):
-        self.hotkey_worker.update_hotkeys(self.hotkey_settings)
-      self._update_hotkey_tooltips()
-
-  def trigger_hotkey_action(self, action: str):
-    """Triggers the corresponding action based on action identifier."""
-    if action == config.HOTKEY_AUTO_START:
-      self.on_f6()
-    elif action == config.HOTKEY_START_PAUSE:
-      self.on_f7()
-    elif action == config.HOTKEY_RESET:
-      self.on_f8()
-    elif action == config.HOTKEY_SWITCH_MODE:
-      self.on_f9()
-
-  def _update_hotkey_tooltips(self):
-    """Updates overlay button tooltips with current hotkey sequence representations."""
-    auto_start_key = config.format_hotkey_display(
-        self.hotkey_settings.get(config.HOTKEY_AUTO_START, "")
-    )
-    if hasattr(self, "simple_btn_auto_start"):
-      self.simple_btn_auto_start.setToolTip(f"自動開始 [{auto_start_key}]")
-
   def mouseDoubleClickEvent(self, event):
     if event.button() == Qt.MouseButton.LeftButton:
       self.on_f9()
@@ -809,7 +767,7 @@ class ArtaleExpOverlay(QWidget):
                 background-color: rgba(255, 255, 255, 0.12);
             }}
         """)
-    f9_key = "Fn+F9" if sys.platform == "darwin" else "F9"
+    f9_key = config.HOTKEY_LABEL_SWITCH_MODE
     if self.current_mode == "simple":
       act_mode = menu.addAction(f"切換至完整模式 [{f9_key}]")
       act_mode.triggered.connect(self.on_f9)
@@ -830,24 +788,18 @@ class ArtaleExpOverlay(QWidget):
     action_settings.triggered.connect(
         lambda: QTimer.singleShot(0, self._open_game_mode_settings)
     )
-
-    action_hotkeys = menu.addAction("快捷鍵設定...")
-    action_hotkeys.triggered.connect(
-        lambda: QTimer.singleShot(0, self._open_hotkey_settings)
-    )
     menu.addSeparator()
 
     # Hotkey Submenu ("快捷鍵")
     hk_menu = menu.addMenu("快捷鍵")
-    for act_key, act_label in [
-        (config.HOTKEY_AUTO_START, "自動開始"),
-        (config.HOTKEY_START_PAUSE, "開始 / 暫停"),
-        (config.HOTKEY_RESET, "重置統計"),
-        (config.HOTKEY_SWITCH_MODE, "切換模式"),
+    for act_label, act_disp, handler in [
+        ("自動開始", config.HOTKEY_LABEL_AUTO_START, self.on_f6),
+        ("開始 / 暫停", config.HOTKEY_LABEL_START_PAUSE, self.on_f7),
+        ("重置測速", config.HOTKEY_LABEL_RESET, self.on_f8),
+        ("切換模式", config.HOTKEY_LABEL_SWITCH_MODE, self.on_f9),
     ]:
-      disp = config.format_hotkey_display(self.hotkey_settings.get(act_key, ""))
-      act_item = hk_menu.addAction(f"{act_label}\t{disp}")
-      act_item.triggered.connect(lambda _, a=act_key: self.trigger_hotkey_action(a))
+      act_item = hk_menu.addAction(f"{act_label}\t{act_disp}")
+      act_item.triggered.connect(handler)
 
     menu.addSeparator()
 
@@ -1147,7 +1099,7 @@ class ArtaleExpOverlay(QWidget):
         self.lbl_title.hide()
         self.btn_f9.setText("")
         self.btn_f9.set_icon_name("simple_mode")
-        self.btn_f9.setToolTip(f"切換至極簡模式 [{'Fn+F9' if sys.platform == 'darwin' else 'F9'}]")
+        self.btn_f9.setToolTip(f"切換至極簡模式 [{config.HOTKEY_LABEL_SWITCH_MODE}]")
         self.lbl_copyright.hide()
 
         for key in self.game_mode_items:
@@ -1162,7 +1114,7 @@ class ArtaleExpOverlay(QWidget):
         self.lbl_title.show()
         self.btn_f9.setText("")
         self.btn_f9.set_icon_name("game_mode")
-        self.btn_f9.setToolTip(f"切換遊戲模式 [{'Fn+F9' if sys.platform == 'darwin' else 'F9'}]")
+        self.btn_f9.setToolTip(f"切換遊戲模式 [{config.HOTKEY_LABEL_SWITCH_MODE}]")
         self.lbl_copyright.show()
 
         for key in self.game_mode_order:
@@ -1544,33 +1496,21 @@ class ArtaleExpOverlay(QWidget):
     self._save_config()
 
   def keyPressEvent(self, event):
-    clean_mods = event.modifiers().value & ~Qt.KeyboardModifier.KeypadModifier.value
-    val = int(event.key().value if hasattr(event.key(), "value") else event.key()) | clean_mods
-    ev_seq = QKeySequence(val)
-
-    for action_name in [
-        config.HOTKEY_AUTO_START,
-        config.HOTKEY_START_PAUSE,
-        config.HOTKEY_RESET,
-        config.HOTKEY_SWITCH_MODE,
-    ]:
-      seq_str = self.hotkey_settings.get(action_name, "")
-      if seq_str and QKeySequence(seq_str).matches(ev_seq) == QKeySequence.SequenceMatch.ExactMatch:
-        self.trigger_hotkey_action(action_name)
-        event.accept()
-        return
-
     key = event.key()
-    if key == Qt.Key.Key_F6:
+    is_cmd = bool(
+        event.modifiers()
+        & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)
+    )
+    if (key == Qt.Key.Key_6 and is_cmd) or key == Qt.Key.Key_F6:
       self.on_f6()
       event.accept()
-    elif key == Qt.Key.Key_F7:
+    elif (key == Qt.Key.Key_7 and is_cmd) or key == Qt.Key.Key_F7:
       self.on_f7()
       event.accept()
-    elif key == Qt.Key.Key_F8:
+    elif (key == Qt.Key.Key_8 and is_cmd) or key == Qt.Key.Key_F8:
       self.on_f8()
       event.accept()
-    elif key == Qt.Key.Key_F9:
+    elif (key == Qt.Key.Key_9 and is_cmd) or key == Qt.Key.Key_F9:
       self.on_f9()
       event.accept()
     else:
@@ -1674,7 +1614,7 @@ class ArtaleExpOverlay(QWidget):
       self.btn_f7.set_custom_style(None, None, None)
 
     if hasattr(self, "simple_btn_f7"):
-      f7_key = "Fn+F7" if sys.platform == "darwin" else "F7"
+      f7_key = config.HOTKEY_LABEL_START_PAUSE
       if self.engine.is_running:
         self.simple_btn_f7.set_icon_name("pause")
         self.simple_btn_f7.setToolTip(f"暫停測速 [{f7_key}]")
@@ -1832,9 +1772,6 @@ class ArtaleExpOverlay(QWidget):
           if "auto_start" in cfg:
             self.engine.auto_start_enabled = bool(cfg["auto_start"])
 
-          if "hotkeys" in cfg and isinstance(cfg["hotkeys"], dict):
-            self.hotkey_settings.update(cfg["hotkeys"])
-
           self.target_window_name = cfg.get(
               "target_window_name", config.DEFAULT_TARGET_WINDOW
           )
@@ -1888,7 +1825,6 @@ class ArtaleExpOverlay(QWidget):
           "ui_scale": getattr(self, "ui_scale", 1.0),
           "opacity": getattr(self, "opacity_val", 0.95),
           "auto_start": getattr(self.engine, "auto_start_enabled", True),
-          "hotkeys": getattr(self, "hotkey_settings", {}),
           "target_window_name": getattr(
               self, "target_window_name", config.DEFAULT_TARGET_WINDOW
           ),

@@ -64,7 +64,7 @@ FONT_FALLBACK: str = "'Google Sans', 'PingFang TC', sans-serif"
 
 # Application metadata & About info
 APP_NAME: str = "Artale EXP Calculator"
-APP_VERSION: str = "1.0.0-rc.22"
+APP_VERSION: str = "1.0.0-rc.23"
 APP_AUTHOR: str = "G8G"
 APP_COPYRIGHT: str = "© 2026 By G8G"
 APP_DISCORD_ID: str = "garyhuang"
@@ -143,39 +143,11 @@ SIMPLE_METRIC_CONFIG: Dict[str, Dict[str, str]] = {
     METRIC_TIME_TO_LEVEL: {"label": "升級預估", "color": "#34d399"},
 }
 
-# Hotkey actions and default key sequences (Portable Qt key sequence format)
-HOTKEY_AUTO_START: str = "auto_start"
-HOTKEY_START_PAUSE: str = "start_pause"
-HOTKEY_RESET: str = "reset"
-HOTKEY_SWITCH_MODE: str = "switch_mode"
-
-HOTKEY_ACTION_NAMES: Dict[str, str] = {
-    HOTKEY_AUTO_START: "自動開始",
-    HOTKEY_START_PAUSE: "開始 / 暫停",
-    HOTKEY_RESET: "重置統計",
-    HOTKEY_SWITCH_MODE: "切換模式",
-}
-
-DEFAULT_HOTKEYS: Dict[str, str] = {
-    HOTKEY_AUTO_START: "F6",
-    HOTKEY_START_PAUSE: "F7",
-    HOTKEY_RESET: "F8",
-    HOTKEY_SWITCH_MODE: "F9",
-}
-
-
-def format_hotkey_display(seq_str: str) -> str:
-  """Formats a portable hotkey string (e.g. 'Alt+F6') for display on the current platform."""
-  if not seq_str:
-    return "無"
-  if sys.platform == "darwin":
-    if seq_str.startswith("Alt+"):
-      return seq_str.replace("Alt+", "Fn+Option+")
-    if seq_str.startswith("Meta+"):
-      return seq_str.replace("Meta+", "Cmd+")
-    if seq_str.startswith("F") and len(seq_str) <= 3 and seq_str[1:].isdigit():
-      return f"Fn+{seq_str}"
-  return seq_str
+# Default hotkey descriptions
+HOTKEY_LABEL_AUTO_START: str = "⌘6" if sys.platform == "darwin" else "F6"
+HOTKEY_LABEL_START_PAUSE: str = "⌘7" if sys.platform == "darwin" else "F7"
+HOTKEY_LABEL_RESET: str = "⌘8" if sys.platform == "darwin" else "F8"
+HOTKEY_LABEL_SWITCH_MODE: str = "⌘9" if sys.platform == "darwin" else "F9"
 
 
 def format_chinese_exp(val: Optional[Union[int, float]]) -> str:

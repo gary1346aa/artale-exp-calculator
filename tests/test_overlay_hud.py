@@ -657,6 +657,7 @@ class TestOverlayHud(unittest.TestCase):
     from unittest.mock import patch
     from PyQt6.QtCore import QPoint
     from PyQt6.QtGui import QContextMenuEvent
+    import config
 
     # Test macOS submenu structure
     sub_actions_mac = []
@@ -667,14 +668,18 @@ class TestOverlayHud(unittest.TestCase):
             sub_actions_mac.append(sub_act.text())
       return None
 
-    with patch("PyQt6.QtWidgets.QMenu.exec", new=fake_exec_mac), patch("sys.platform", "darwin"):
+    with patch("PyQt6.QtWidgets.QMenu.exec", new=fake_exec_mac), \
+         patch.object(config, "HOTKEY_LABEL_AUTO_START", "⌘6"), \
+         patch.object(config, "HOTKEY_LABEL_START_PAUSE", "⌘7"), \
+         patch.object(config, "HOTKEY_LABEL_RESET", "⌘8"), \
+         patch.object(config, "HOTKEY_LABEL_SWITCH_MODE", "⌘9"):
       event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10))
       self.overlay.contextMenuEvent(event)
 
-    self.assertTrue(any("Fn+F6" in text for text in sub_actions_mac))
-    self.assertTrue(any("Fn+F7" in text for text in sub_actions_mac))
-    self.assertTrue(any("Fn+F8" in text for text in sub_actions_mac))
-    self.assertTrue(any("Fn+F9" in text for text in sub_actions_mac))
+    self.assertTrue(any("⌘6" in text for text in sub_actions_mac))
+    self.assertTrue(any("⌘7" in text for text in sub_actions_mac))
+    self.assertTrue(any("⌘8" in text for text in sub_actions_mac))
+    self.assertTrue(any("⌘9" in text for text in sub_actions_mac))
     self.assertEqual(len(sub_actions_mac), 4)
 
     # Test Windows submenu structure
@@ -686,18 +691,22 @@ class TestOverlayHud(unittest.TestCase):
             sub_actions_win.append(sub_act.text())
       return None
 
-    with patch("PyQt6.QtWidgets.QMenu.exec", new=fake_exec_win), patch("sys.platform", "win32"):
+    with patch("PyQt6.QtWidgets.QMenu.exec", new=fake_exec_win), \
+         patch.object(config, "HOTKEY_LABEL_AUTO_START", "F6"), \
+         patch.object(config, "HOTKEY_LABEL_START_PAUSE", "F7"), \
+         patch.object(config, "HOTKEY_LABEL_RESET", "F8"), \
+         patch.object(config, "HOTKEY_LABEL_SWITCH_MODE", "F9"):
       event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10))
       self.overlay.contextMenuEvent(event)
 
-    self.assertTrue(any("F6" in text and "Fn" not in text for text in sub_actions_win))
-    self.assertTrue(any("F7" in text and "Fn" not in text for text in sub_actions_win))
-    self.assertTrue(any("F8" in text and "Fn" not in text for text in sub_actions_win))
-    self.assertTrue(any("F9" in text and "Fn" not in text for text in sub_actions_win))
+    self.assertTrue(any("F6" in text for text in sub_actions_win))
+    self.assertTrue(any("F7" in text for text in sub_actions_win))
+    self.assertTrue(any("F8" in text for text in sub_actions_win))
+    self.assertTrue(any("F9" in text for text in sub_actions_win))
     self.assertEqual(len(sub_actions_win), 4)
 
   def test_keypress_event_shortcuts(self):
-    """Verifies that keyPressEvent triggers correct handlers for F-keys."""
+    """Verifies that keyPressEvent triggers correct handlers for F-keys and ⌘-keys."""
     from unittest.mock import MagicMock
     from PyQt6.QtCore import QEvent, Qt
     from PyQt6.QtGui import QKeyEvent
@@ -726,6 +735,26 @@ class TestOverlayHud(unittest.TestCase):
     ev_f9 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F9, Qt.KeyboardModifier.NoModifier)
     self.overlay.keyPressEvent(ev_f9)
     self.assertEqual(self.overlay.on_f9.call_count, 1)
+
+    # ⌘6 (Command + 6 / ControlModifier on macOS)
+    ev_cmd6 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_6, Qt.KeyboardModifier.ControlModifier)
+    self.overlay.keyPressEvent(ev_cmd6)
+    self.assertEqual(self.overlay.on_f6.call_count, 2)
+
+    # ⌘7
+    ev_cmd7 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_7, Qt.KeyboardModifier.ControlModifier)
+    self.overlay.keyPressEvent(ev_cmd7)
+    self.assertEqual(self.overlay.on_f7.call_count, 2)
+
+    # ⌘8
+    ev_cmd8 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_8, Qt.KeyboardModifier.ControlModifier)
+    self.overlay.keyPressEvent(ev_cmd8)
+    self.assertEqual(self.overlay.on_f8.call_count, 2)
+
+    # ⌘9
+    ev_cmd9 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_9, Qt.KeyboardModifier.ControlModifier)
+    self.overlay.keyPressEvent(ev_cmd9)
+    self.assertEqual(self.overlay.on_f9.call_count, 2)
 
 
 class TestSettingsPersistence(unittest.TestCase):
