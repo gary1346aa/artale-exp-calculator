@@ -561,32 +561,39 @@ class ArtaleExpOverlay(QWidget):
     self.simple_metric_widgets["EXP 進度條"] = prog_w
 
     # Simple mode right-side action buttons: [Start/Pause] [Reset] [Auto-Start]
+    btn_sz = max(18, int(24 * self.ui_scale))
+    btn_gap = max(3, int(5 * self.ui_scale))
+
+    self.simple_actions_widget = QWidget(self.simple_widget)
+    self.simple_actions_layout = QHBoxLayout(self.simple_actions_widget)
+    self.simple_actions_layout.setContentsMargins(0, 0, 0, 0)
+    self.simple_actions_layout.setSpacing(btn_gap)
+
     self.simple_btn_f7 = SmoothButton(
-        "", parent=self.simple_widget, icon_name="play"
+        "", parent=self.simple_actions_widget, icon_name="play"
     )
-    self.simple_btn_f7.custom_icon_size = 18.0
-    self.simple_btn_f7.setFixedSize(20, 20)
+    self.simple_btn_f7.setFixedSize(btn_sz, btn_sz)
     self.simple_btn_f7.setToolTip("開始/暫停 [F7/Ctrl+7]")
     self.simple_btn_f7.clicked.connect(self.on_f7)
-    self.simple_btn_f7.hide()
 
     self.simple_btn_f8 = SmoothButton(
-        "", parent=self.simple_widget, icon_name="reset"
+        "", parent=self.simple_actions_widget, icon_name="reset"
     )
-    self.simple_btn_f8.custom_icon_size = 18.0
-    self.simple_btn_f8.setFixedSize(20, 20)
+    self.simple_btn_f8.setFixedSize(btn_sz, btn_sz)
     self.simple_btn_f8.setToolTip("重置 [F8/Ctrl+8]")
     self.simple_btn_f8.clicked.connect(self.on_f8)
-    self.simple_btn_f8.hide()
 
     self.simple_btn_auto_start = SmoothButton(
-        "", parent=self.simple_widget, icon_name="autostart"
+        "", parent=self.simple_actions_widget, icon_name="autostart"
     )
-    self.simple_btn_auto_start.custom_icon_size = 18.0
-    self.simple_btn_auto_start.setFixedSize(20, 20)
+    self.simple_btn_auto_start.setFixedSize(btn_sz, btn_sz)
     self.simple_btn_auto_start.setToolTip("自動開始 [F6/Ctrl+6]")
     self.simple_btn_auto_start.clicked.connect(self._toggle_auto_start)
-    self.simple_btn_auto_start.hide()
+
+    self.simple_actions_layout.addWidget(self.simple_btn_f7)
+    self.simple_actions_layout.addWidget(self.simple_btn_f8)
+    self.simple_actions_layout.addWidget(self.simple_btn_auto_start)
+    self.simple_actions_widget.hide()
 
     self.simple_right_spacer = QSpacerItem(
         0, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
@@ -615,8 +622,8 @@ class ArtaleExpOverlay(QWidget):
       )
       if hasattr(self, "simple_btn_auto_start"):
         self.simple_btn_auto_start.set_custom_style(
-            bg=QColor(0, 0, 0, 0),
-            border=QColor(0, 0, 0, 0),
+            bg=QColor(16, 185, 129, 45),
+            border=QColor(52, 211, 153, 100),
             text_color=QColor("#34d399"),
         )
     else:
@@ -627,11 +634,7 @@ class ArtaleExpOverlay(QWidget):
           text_color=QColor("#94a3b8"),
       )
       if hasattr(self, "simple_btn_auto_start"):
-        self.simple_btn_auto_start.set_custom_style(
-            bg=QColor(0, 0, 0, 0),
-            border=QColor(0, 0, 0, 0),
-            text_color=QColor("#64748b"),
-        )
+        self.simple_btn_auto_start.set_custom_style(None, None, None)
 
   def _toggle_auto_start(self):
     enabled = self.engine.toggle_auto_start()
@@ -995,9 +998,7 @@ class ArtaleExpOverlay(QWidget):
 
       # Action buttons on right round: [Start/Pause] [Reset] [Auto-Start]
       self.simple_layout.addSpacerItem(self.simple_right_spacer)
-      self.simple_layout.addWidget(self.simple_btn_f7)
-      self.simple_layout.addWidget(self.simple_btn_f8)
-      self.simple_layout.addWidget(self.simple_btn_auto_start)
+      self.simple_layout.addWidget(self.simple_actions_widget)
 
       self.simple_widget.show()
       self._update_simple_mode_focus_state(force=True)
@@ -1070,13 +1071,13 @@ class ArtaleExpOverlay(QWidget):
 
   def _update_simple_mode_focus_state(self, force: bool = False):
     """Shows/hides the action buttons on the right round in simple mode based on focus/hover."""
-    if self.current_mode != "simple" or not hasattr(self, "simple_btn_auto_start"):
+    if self.current_mode != "simple" or not hasattr(self, "simple_actions_widget"):
       return
     dot_space = max(4, int(8 * self.ui_scale))
     is_hovered = self.underMouse()
     is_active = self.isActiveWindow() or is_hovered
 
-    was_visible = self.simple_btn_auto_start.isVisible()
+    was_visible = self.simple_actions_widget.isVisible()
     if not force and was_visible == is_active:
       self.update()
       return
@@ -1085,16 +1086,12 @@ class ArtaleExpOverlay(QWidget):
       self.simple_right_spacer.changeSize(
           dot_space, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
       )
-      self.simple_btn_f7.show()
-      self.simple_btn_f8.show()
-      self.simple_btn_auto_start.show()
+      self.simple_actions_widget.show()
     else:
       self.simple_right_spacer.changeSize(
           0, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
       )
-      self.simple_btn_f7.hide()
-      self.simple_btn_f8.hide()
-      self.simple_btn_auto_start.hide()
+      self.simple_actions_widget.hide()
 
     h = max(34, int(38 * self.ui_scale))
     self.setMinimumSize(0, 0)
@@ -1437,10 +1434,16 @@ class ArtaleExpOverlay(QWidget):
           w.update_scale(s)
     if hasattr(self, "simple_status_dot"):
       self._update_status_indicator()
-    if hasattr(self, "simple_btn_auto_start"):
-      btn_sz = max(16, int(20 * s))
+    if hasattr(self, "simple_actions_widget"):
+      btn_sz = max(18, int(24 * s))
+      btn_gap = max(3, int(5 * s))
+      self.simple_actions_layout.setSpacing(btn_gap)
+      self.simple_btn_f7.setFixedSize(btn_sz, btn_sz)
+      self.simple_btn_f8.setFixedSize(btn_sz, btn_sz)
       self.simple_btn_auto_start.setFixedSize(btn_sz, btn_sz)
-      self.simple_btn_auto_start.custom_icon_size = max(14.0, 18.0 * s)
+      self.simple_btn_f7.custom_icon_size = None
+      self.simple_btn_f8.custom_icon_size = None
+      self.simple_btn_auto_start.custom_icon_size = None
 
     if self.current_mode == "simple":
       self._apply_game_mode()

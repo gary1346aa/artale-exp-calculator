@@ -319,14 +319,21 @@ class TestOverlayHud(unittest.TestCase):
     ]
     # Filter out None if any
     simple_widgets = [w for w in simple_widgets if w is not None]
-    self.assertEqual(len(simple_widgets), 7)  # dot + 3 metrics + f7 + f8 + auto-start
+    self.assertEqual(len(simple_widgets), 5)  # dot + 3 metrics + actions widget
     self.assertIs(simple_widgets[0], self.overlay.simple_status_dot)
     self.assertIs(simple_widgets[1], self.overlay.simple_metric_widgets["練功時長"])
     self.assertIs(simple_widgets[2], self.overlay.simple_metric_widgets["預估10分"])
     self.assertIs(simple_widgets[3], self.overlay.simple_metric_widgets["累計經驗"])
-    self.assertIs(simple_widgets[4], self.overlay.simple_btn_f7)
-    self.assertIs(simple_widgets[5], self.overlay.simple_btn_f8)
-    self.assertIs(simple_widgets[6], self.overlay.simple_btn_auto_start)
+    self.assertIs(simple_widgets[4], self.overlay.simple_actions_widget)
+
+    action_buttons = [
+        self.overlay.simple_actions_layout.itemAt(i).widget()
+        for i in range(self.overlay.simple_actions_layout.count())
+    ]
+    self.assertEqual(len(action_buttons), 3)
+    self.assertIs(action_buttons[0], self.overlay.simple_btn_f7)
+    self.assertIs(action_buttons[1], self.overlay.simple_btn_f8)
+    self.assertIs(action_buttons[2], self.overlay.simple_btn_auto_start)
 
     # Verify label texts: 練功時長 -> 時長, 預估10分 -> 10分, 累計經驗 -> 累積
     self.assertEqual(self.overlay.simple_metric_widgets["練功時長"].lbl_label.text(), "時長")
@@ -461,32 +468,30 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.engine.auto_start_enabled)
     self.assertIn("OFF", self.overlay.btn_auto_start.text())
 
-    # In Simple Mode: F6 toggles auto start; button hides when unfocused and reveals on focus
+    # In Simple Mode: F6 toggles auto start; actions widget hides when unfocused and reveals on focus
     self.overlay._set_mode("simple")
-    self.assertFalse(self.overlay.simple_btn_auto_start.isVisible())
+    self.assertFalse(self.overlay.simple_actions_widget.isVisible())
 
     # Toggling F6 while unfocused changes state without revealing button or moving window
     self.overlay.on_f6()
     self.assertTrue(self.overlay.engine.auto_start_enabled)
-    self.assertFalse(self.overlay.simple_btn_auto_start.isVisible())
+    self.assertFalse(self.overlay.simple_actions_widget.isVisible())
 
     # When focused/hovered, button reveals on right round with status color
-    self.overlay.simple_btn_auto_start.show()
-    self.assertTrue(self.overlay.simple_btn_auto_start.isVisible())
+    self.overlay.simple_actions_widget.show()
+    self.assertTrue(self.overlay.simple_actions_widget.isVisible())
     self.assertEqual(
         self.overlay.simple_btn_auto_start.custom_color.name(), "#34d399"
     )
 
     self.overlay.on_f6()
     self.assertFalse(self.overlay.engine.auto_start_enabled)
-    self.assertEqual(
-        self.overlay.simple_btn_auto_start.custom_color.name(), "#64748b"
-    )
+    self.assertIsNone(self.overlay.simple_btn_auto_start.custom_color)
 
     # When unfocused, button hides even when auto start is ON
     self.overlay.engine.auto_start_enabled = True
     self.overlay._update_simple_mode_focus_state()
-    self.assertFalse(self.overlay.simple_btn_auto_start.isVisible())
+    self.assertFalse(self.overlay.simple_actions_widget.isVisible())
 
     # Verify Auto Start icon scaling in full & game mode
     self.overlay._set_mode("full")
