@@ -280,7 +280,7 @@ class AboutDialog(QDialog):
     super().__init__(parent)
     self.setWindowTitle("關於 (About)")
     self.setModal(True)
-    self.setFixedWidth(400)
+    self.setFixedWidth(500)
     self.setStyleSheet(f"""
         QDialog {{
             background-color: #181d28;
@@ -389,8 +389,9 @@ class AboutDialog(QDialog):
 
     self.lbl_update_status = QLabel("")
     self.lbl_update_status.setStyleSheet("font-size: 11px;")
+    self.lbl_update_status.setWordWrap(True)
     self.lbl_update_status.setOpenExternalLinks(True)
-    btn_box.addWidget(self.lbl_update_status)
+    btn_box.addWidget(self.lbl_update_status, 1)
 
     btn_box.addStretch()
 
@@ -471,10 +472,21 @@ class AboutDialog(QDialog):
     if has_update and info:
       self.available_update = info
       self.btn_check_update.setText("立即下載更新")
-      self.btn_check_update.setStyleSheet(
-          "background-color: #0284c7; color: white; border: none; font-weight:"
-          " 600;"
-      )
+      self.btn_check_update.setStyleSheet(f"""
+          QPushButton {{
+              background-color: #0284c7;
+              color: #ffffff;
+              border: 1px solid #0369a1;
+              border-radius: 6px;
+              padding: 6px 14px;
+              font-size: 12px;
+              font-weight: 600;
+              font-family: {config.FONT_FAMILY};
+          }}
+          QPushButton:hover {{
+              background-color: #0369a1;
+          }}
+      """)
       self.lbl_update_status.setText(
           f'<a href="{info.download_url}" style="color: #38bdf8; text-decoration:'
           f' underline;">發現新版本 v{info.version}</a>'
@@ -493,6 +505,18 @@ class AboutDialog(QDialog):
     try:
       self.btn_check_update.setEnabled(False)
       self.btn_check_update.setText("下載中...")
+      self.btn_check_update.setStyleSheet(f"""
+          QPushButton {{
+              background-color: rgba(255, 255, 255, 0.1);
+              color: #94a3b8;
+              border: 1px solid rgba(255, 255, 255, 0.15);
+              border-radius: 6px;
+              padding: 6px 14px;
+              font-size: 12px;
+              font-weight: 600;
+              font-family: {config.FONT_FAMILY};
+          }}
+      """)
       self.lbl_update_status.setText("準備下載中...")
       self.lbl_update_status.setStyleSheet("color: #94a3b8; font-size: 11px;")
 
@@ -507,6 +531,21 @@ class AboutDialog(QDialog):
       logger.error("Failed to start download: %s", e)
       self.btn_check_update.setEnabled(True)
       self.btn_check_update.setText("重新下載")
+      self.btn_check_update.setStyleSheet(f"""
+          QPushButton {{
+              background-color: #0284c7;
+              color: #ffffff;
+              border: 1px solid #0369a1;
+              border-radius: 6px;
+              padding: 6px 14px;
+              font-size: 12px;
+              font-weight: 600;
+              font-family: {config.FONT_FAMILY};
+          }}
+          QPushButton:hover {{
+              background-color: #0369a1;
+          }}
+      """)
       self.lbl_update_status.setText(f"下載初始化失敗: {e}")
       self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
 
@@ -527,16 +566,42 @@ class AboutDialog(QDialog):
     if success:
       self.downloaded_archive_path = path_or_err
       self.btn_check_update.setText("套用並重啟")
-      self.btn_check_update.setStyleSheet(
-          "background-color: #10b981; color: white; border: none; font-weight:"
-          " 600;"
-      )
+      self.btn_check_update.setStyleSheet(f"""
+          QPushButton {{
+              background-color: #10b981;
+              color: #ffffff;
+              border: 1px solid #059669;
+              border-radius: 6px;
+              padding: 6px 14px;
+              font-size: 12px;
+              font-weight: 600;
+              font-family: {config.FONT_FAMILY};
+          }}
+          QPushButton:hover {{
+              background-color: #059669;
+          }}
+      """)
       self.lbl_update_status.setText("下載完成！點擊按鈕重啟套用")
       self.lbl_update_status.setStyleSheet("color: #34d399; font-size: 11px;")
     else:
       self.lbl_update_status.setText(path_or_err)
       self.lbl_update_status.setStyleSheet("color: #f87171; font-size: 11px;")
       self.btn_check_update.setText("重新下載")
+      self.btn_check_update.setStyleSheet(f"""
+          QPushButton {{
+              background-color: #0284c7;
+              color: #ffffff;
+              border: 1px solid #0369a1;
+              border-radius: 6px;
+              padding: 6px 14px;
+              font-size: 12px;
+              font-weight: 600;
+              font-family: {config.FONT_FAMILY};
+          }}
+          QPushButton:hover {{
+              background-color: #0369a1;
+          }}
+      """)
 
 
 
