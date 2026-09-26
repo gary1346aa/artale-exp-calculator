@@ -142,26 +142,17 @@ class MacOSCarbonHotkeys:
       event_type.eventKind = 5  # kEventHotKeyPressed
 
       self.handler_ref = ctypes.c_void_p()
-      if hasattr(self.carbon, "InstallApplicationEventHandler"):
-        res = self.carbon.InstallApplicationEventHandler(
-            self._handler_proc,
-            1,
-            ctypes.byref(event_type),
-            None,
-            ctypes.byref(self.handler_ref),
-        )
-      else:
-        res = self.carbon.InstallEventHandler(
-            target,
-            self._handler_proc,
-            1,
-            ctypes.byref(event_type),
-            None,
-            ctypes.byref(self.handler_ref),
-        )
+      res = self.carbon.InstallEventHandler(
+          target,
+          self._handler_proc,
+          1,
+          ctypes.byref(event_type),
+          None,
+          ctypes.byref(self.handler_ref),
+      )
 
       if res != 0:
-        logger.warning("Carbon InstallApplicationEventHandler returned status %d", res)
+        logger.warning("Carbon InstallEventHandler returned status %d", res)
         return
 
       # Keycodes: F6: 97, F7: 98, F8: 100, F9: 101

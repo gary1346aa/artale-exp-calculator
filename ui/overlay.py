@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 from PyQt6.QtCore import (
     QEvent,
+    QObject,
     QPoint,
     Qt,
     QTimer,
@@ -91,6 +92,31 @@ def init_application_fonts() -> None:
   _fonts_initialized = True
 
 
+class AppHotkeyFilter(QObject):
+  """Application-wide event filter to capture F6~F9 keys regardless of focused widget."""
+
+  def __init__(self, overlay):
+    super().__init__()
+    self.overlay = overlay
+
+  def eventFilter(self, watched, event):
+    if event.type() == QEvent.Type.KeyPress:
+      key = event.key()
+      if key == Qt.Key.Key_F6:
+        self.overlay.on_f6()
+        return True
+      elif key == Qt.Key.Key_F7:
+        self.overlay.on_f7()
+        return True
+      elif key == Qt.Key.Key_F8:
+        self.overlay.on_f8()
+        return True
+      elif key == Qt.Key.Key_F9:
+        self.overlay.on_f9()
+        return True
+    return super().eventFilter(watched, event)
+
+
 class ArtaleExpOverlay(QWidget):
   """Main floating HUD overlay widget supporting Full, Game, and Simple Modes."""
 
@@ -138,6 +164,8 @@ class ArtaleExpOverlay(QWidget):
 
     qapp = QApplication.instance()
     if qapp:
+      self._hotkey_filter = AppHotkeyFilter(self)
+      qapp.installEventFilter(self._hotkey_filter)
       qapp.setQuitOnLastWindowClosed(False)
 
     self.setWindowTitle("Artale EXP Calculator")

@@ -511,22 +511,49 @@ while kill -0 "$PID" 2>/dev/null; do
     sleep 1
 done
 
+sleep 1
+
 TMP_DIR=$(mktemp -d /tmp/artale_update_XXXXXX)
 unzip -q -o "$ARCHIVE" -d "$TMP_DIR"
 NEW_APP=$(find "$TMP_DIR" -maxdepth 2 -name "ArtaleExpCalculator.app" | head -n 1)
 
+UPDATE_SUCCESS=0
+
 if [ -n "$NEW_APP" ]; then
-    rm -rf "$TARGET"
-    if command -v ditto >/dev/null 2>&1; then
-        ditto "$NEW_APP" "$TARGET"
-    else
-        cp -a "$NEW_APP" "$TARGET"
+    # Try non-admin swap first (e.g. if TARGET is in user folder or writable)
+    BACKUP="${{TARGET}}.old.$$"
+    rm -rf "$BACKUP"
+    if mv "$TARGET" "$BACKUP" 2>/dev/null; then
+        if command -v ditto >/dev/null 2>&1; then
+            ditto "$NEW_APP" "$TARGET"
+        else
+            cp -a "$NEW_APP" "$TARGET"
+        fi
+        if [ -d "$TARGET" ]; then
+            UPDATE_SUCCESS=1
+            rm -rf "$BACKUP"
+            xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
+        else
+            # Rollback
+            mv "$BACKUP" "$TARGET" 2>/dev/null || true
+        fi
     fi
-    xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
+
+    # If non-admin swap failed (e.g. /Applications owned by root), request admin privileges
+    if [ "$UPDATE_SUCCESS" -ne 1 ]; then
+        ADMIN_SCRIPT="rm -rf '$TARGET' && ditto '$NEW_APP' '$TARGET' && xattr -dr com.apple.quarantine '$TARGET'"
+        if osascript -e "do shell script \"$ADMIN_SCRIPT\" with administrator privileges" 2>/dev/null; then
+            UPDATE_SUCCESS=1
+        fi
+    fi
 fi
 
 rm -rf "$TMP_DIR" "$ARCHIVE"
-open -n "$TARGET"
+
+if [ -d "$TARGET" ]; then
+    open -n "$TARGET"
+fi
+
 rm -- "$0"
 """
     script_path = os.path.join(tempfile.gettempdir(), f"artale_update_{current_pid}.sh")
