@@ -244,6 +244,7 @@ def check_for_update(
     current_version: str = config.APP_VERSION,
     timeout: int = 5,
     include_prereleases: Optional[bool] = None,
+    allow_same_version: bool = True,
 ) -> Tuple[bool, Optional[UpdateInfo], str]:
   """Checks GitHub Releases API for a newer version.
 
@@ -277,7 +278,9 @@ def check_for_update(
       latest_tuple = parse_version_tuple(remote_version)
       current_tuple = parse_version_tuple(current_version)
 
-      if latest_tuple <= current_tuple:
+      if latest_tuple < current_tuple or (
+          latest_tuple == current_tuple and not allow_same_version
+      ):
         return False, None, f"目前已是最新版本 ({config.get_full_version_string()}) ✓"
 
       platform_key = "win-x64" if sys.platform == "win32" else "mac-arm64"
@@ -298,7 +301,12 @@ def check_for_update(
           published_at=manifest.get("release_date", ""),
           sha256=sha256,
       )
-      return True, info, f"發現新版本 v{remote_version}"
+      status_msg = (
+          f"發現新版本 v{remote_version}"
+          if latest_tuple > current_tuple
+          else f"發現版本 v{remote_version} (已是最新，可重新安裝/更新)"
+      )
+      return True, info, status_msg
 
     if isinstance(e, urllib.error.URLError):
       return False, None, f"網路連線失敗: {e}"
@@ -332,7 +340,9 @@ def check_for_update(
   latest_tuple = parse_version_tuple(remote_version)
   current_tuple = parse_version_tuple(current_version)
 
-  if latest_tuple <= current_tuple:
+  if latest_tuple < current_tuple or (
+      latest_tuple == current_tuple and not allow_same_version
+  ):
     return False, None, f"目前已是最新版本 ({config.get_full_version_string()}) ✓"
 
   # Find matching platform asset
@@ -362,7 +372,12 @@ def check_for_update(
       asset_size=matched_asset.get("size", 0),
       published_at=data.get("published_at", ""),
   )
-  return True, info, f"發現新版本 v{remote_version}"
+  status_msg = (
+      f"發現新版本 v{remote_version}"
+      if latest_tuple > current_tuple
+      else f"發現版本 v{remote_version} (已是最新，可重新安裝/更新)"
+  )
+  return True, info, status_msg
 
 
 def download_file(

@@ -94,10 +94,22 @@ class TestUpdater(unittest.TestCase):
     mock_cm = MagicMock()
     mock_cm.__enter__.return_value = mock_resp
     with patch("urllib.request.urlopen", return_value=mock_cm):
-      has_update, info, msg = check_for_update(current_version="1.0.0")
+      has_update, info, msg = check_for_update(current_version="1.0.0", allow_same_version=False)
       self.assertFalse(has_update)
       self.assertIsNone(info)
       self.assertIn("最新版本", msg)
+
+  def test_check_for_update_allow_same_version(self):
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.read.return_value = b'{"tag_name": "v1.0.0", "body": "Initial", "assets": []}'
+    mock_cm = MagicMock()
+    mock_cm.__enter__.return_value = mock_resp
+    with patch("urllib.request.urlopen", return_value=mock_cm):
+      has_update, info, msg = check_for_update(current_version="1.0.0", allow_same_version=True)
+      self.assertTrue(has_update)
+      self.assertIsNotNone(info)
+      self.assertIn("1.0.0", msg)
 
   def test_check_for_update_fallback_manifest(self):
     mock_manifest = {
