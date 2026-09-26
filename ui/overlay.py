@@ -1487,21 +1487,18 @@ class ArtaleExpOverlay(QWidget):
   def keyPressEvent(self, event):
     key = event.key()
     modifiers = event.modifiers()
-    is_ctrl_or_cmd = bool(
-        modifiers
-        & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)
-    )
+    is_ctrl = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
 
-    if key == Qt.Key.Key_F6 or (is_ctrl_or_cmd and key in (Qt.Key.Key_6, Qt.Key.Key_1)):
+    if key == Qt.Key.Key_F6 or (is_ctrl and key == Qt.Key.Key_6):
       self.on_f6()
       event.accept()
-    elif key == Qt.Key.Key_F7 or (is_ctrl_or_cmd and key in (Qt.Key.Key_7, Qt.Key.Key_2)):
+    elif key == Qt.Key.Key_F7 or (is_ctrl and key == Qt.Key.Key_7):
       self.on_f7()
       event.accept()
-    elif key == Qt.Key.Key_F8 or (is_ctrl_or_cmd and key in (Qt.Key.Key_8, Qt.Key.Key_3)):
+    elif key == Qt.Key.Key_F8 or (is_ctrl and key == Qt.Key.Key_8):
       self.on_f8()
       event.accept()
-    elif key == Qt.Key.Key_F9 or (is_ctrl_or_cmd and key in (Qt.Key.Key_9, Qt.Key.Key_4)):
+    elif key == Qt.Key.Key_F9 or (is_ctrl and key == Qt.Key.Key_9):
       self.on_f9()
       event.accept()
     else:

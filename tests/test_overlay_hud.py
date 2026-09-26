@@ -655,7 +655,7 @@ class TestOverlayHud(unittest.TestCase):
     self.assertIn("關閉程式", actions_seen)
 
   def test_keypress_event_shortcuts(self):
-    """Verifies that keyPressEvent triggers correct handlers for F-keys and Ctrl/Cmd shortcuts."""
+    """Verifies that keyPressEvent triggers correct handlers for F-keys and Ctrl+6..9 shortcuts."""
     from unittest.mock import MagicMock
     from PyQt6.QtCore import QEvent, Qt
     from PyQt6.QtGui import QKeyEvent
@@ -665,7 +665,7 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.on_f8 = MagicMock()
     self.overlay.on_f9 = MagicMock()
 
-    # F6 and Ctrl+6, Cmd+1
+    # F6 and Ctrl+6
     ev_f6 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F6, Qt.KeyboardModifier.NoModifier)
     self.overlay.keyPressEvent(ev_f6)
     self.assertEqual(self.overlay.on_f6.call_count, 1)
@@ -674,11 +674,7 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.keyPressEvent(ev_ctrl6)
     self.assertEqual(self.overlay.on_f6.call_count, 2)
 
-    ev_cmd1 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_1, Qt.KeyboardModifier.MetaModifier)
-    self.overlay.keyPressEvent(ev_cmd1)
-    self.assertEqual(self.overlay.on_f6.call_count, 3)
-
-    # F7 and Ctrl+7, Cmd+2
+    # F7 and Ctrl+7
     ev_f7 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F7, Qt.KeyboardModifier.NoModifier)
     self.overlay.keyPressEvent(ev_f7)
     self.assertEqual(self.overlay.on_f7.call_count, 1)
@@ -687,7 +683,7 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.keyPressEvent(ev_ctrl7)
     self.assertEqual(self.overlay.on_f7.call_count, 2)
 
-    # F8 and Ctrl+8, Cmd+3
+    # F8 and Ctrl+8
     ev_f8 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F8, Qt.KeyboardModifier.NoModifier)
     self.overlay.keyPressEvent(ev_f8)
     self.assertEqual(self.overlay.on_f8.call_count, 1)
@@ -696,7 +692,7 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.keyPressEvent(ev_ctrl8)
     self.assertEqual(self.overlay.on_f8.call_count, 2)
 
-    # F9 and Ctrl+9, Cmd+4
+    # F9 and Ctrl+9
     ev_f9 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F9, Qt.KeyboardModifier.NoModifier)
     self.overlay.keyPressEvent(ev_f9)
     self.assertEqual(self.overlay.on_f9.call_count, 1)

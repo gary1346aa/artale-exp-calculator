@@ -165,78 +165,27 @@ class MacOSCarbonHotkeys:
         return
 
       # Carbon Modifiers:
-      cmd_key = 0x0100      # 256  (Command / ⌘)
       control_key = 0x1000  # 4096 (Control / ⌃)
-      option_key = 0x0800   # 2048 (Option / Alt / ⌥)
 
       # Keycodes:
       # F6: 97, F7: 98, F8: 100, F9: 101
       # 6: 22, 7: 26, 8: 28, 9: 25
-      # 1: 18, 2: 19, 3: 20, 4: 21
       HOTKEY_SPECS = [
-          # Action 1006: Auto-Start (F6 / Ctrl+6 / Cmd+6 / Ctrl+1 / Cmd+1)
-          (1006, 97, 0, "F6 bare"),
-          (1006, 97, control_key, "Ctrl+F6"),
-          (1006, 97, cmd_key, "Cmd+F6"),
-          (1006, 97, option_key, "Option+F6"),
-          (1006, 97, control_key | cmd_key, "Ctrl+Cmd+F6"),
-          (1006, 97, control_key | option_key, "Ctrl+Option+F6"),
+          # Action 1006: Auto-Start (F6 / Fn+F6, or fallback Ctrl+6)
+          (1006, 97, 0, "F6 / Fn+F6"),
           (1006, 22, control_key, "Ctrl+6"),
-          (1006, 22, cmd_key, "Cmd+6"),
-          (1006, 22, control_key | option_key, "Ctrl+Option+6"),
-          (1006, 22, cmd_key | option_key, "Cmd+Option+6"),
-          (1006, 18, control_key, "Ctrl+1"),
-          (1006, 18, cmd_key, "Cmd+1"),
-          (1006, 18, control_key | option_key, "Ctrl+Option+1"),
-          (1006, 18, cmd_key | option_key, "Cmd+Option+1"),
 
-          # Action 1007: Start/Pause (F7 / Ctrl+7 / Cmd+7 / Ctrl+2 / Cmd+2)
-          (1007, 98, 0, "F7 bare"),
-          (1007, 98, control_key, "Ctrl+F7"),
-          (1007, 98, cmd_key, "Cmd+F7"),
-          (1007, 98, option_key, "Option+F7"),
-          (1007, 98, control_key | cmd_key, "Ctrl+Cmd+F7"),
-          (1007, 98, control_key | option_key, "Ctrl+Option+F7"),
+          # Action 1007: Start/Pause (F7 / Fn+F7, or fallback Ctrl+7)
+          (1007, 98, 0, "F7 / Fn+F7"),
           (1007, 26, control_key, "Ctrl+7"),
-          (1007, 26, cmd_key, "Cmd+7"),
-          (1007, 26, control_key | option_key, "Ctrl+Option+7"),
-          (1007, 26, cmd_key | option_key, "Cmd+Option+7"),
-          (1007, 19, control_key, "Ctrl+2"),
-          (1007, 19, cmd_key, "Cmd+2"),
-          (1007, 19, control_key | option_key, "Ctrl+Option+2"),
-          (1007, 19, cmd_key | option_key, "Cmd+Option+2"),
 
-          # Action 1008: Reset (F8 / Ctrl+8 / Cmd+8 / Ctrl+3 / Cmd+3)
-          (1008, 100, 0, "F8 bare"),
-          (1008, 100, control_key, "Ctrl+F8"),
-          (1008, 100, cmd_key, "Cmd+F8"),
-          (1008, 100, option_key, "Option+F8"),
-          (1008, 100, control_key | cmd_key, "Ctrl+Cmd+F8"),
-          (1008, 100, control_key | option_key, "Ctrl+Option+F8"),
+          # Action 1008: Reset (F8 / Fn+F8, or fallback Ctrl+8)
+          (1008, 100, 0, "F8 / Fn+F8"),
           (1008, 28, control_key, "Ctrl+8"),
-          (1008, 28, cmd_key, "Cmd+8"),
-          (1008, 28, control_key | option_key, "Ctrl+Option+8"),
-          (1008, 28, cmd_key | option_key, "Cmd+Option+8"),
-          (1008, 20, control_key, "Ctrl+3"),
-          (1008, 20, cmd_key, "Cmd+3"),
-          (1008, 20, control_key | option_key, "Ctrl+Option+3"),
-          (1008, 20, cmd_key | option_key, "Cmd+Option+3"),
 
-          # Action 1009: Mode Switch (F9 / Ctrl+9 / Cmd+9 / Ctrl+4 / Cmd+4)
-          (1009, 101, 0, "F9 bare"),
-          (1009, 101, control_key, "Ctrl+F9"),
-          (1009, 101, cmd_key, "Cmd+F9"),
-          (1009, 101, option_key, "Option+F9"),
-          (1009, 101, control_key | cmd_key, "Ctrl+Cmd+F9"),
-          (1009, 101, control_key | option_key, "Ctrl+Option+F9"),
+          # Action 1009: Mode Switch (F9 / Fn+F9, or fallback Ctrl+9)
+          (1009, 101, 0, "F9 / Fn+F9"),
           (1009, 25, control_key, "Ctrl+9"),
-          (1009, 25, cmd_key, "Cmd+9"),
-          (1009, 25, control_key | option_key, "Ctrl+Option+9"),
-          (1009, 25, cmd_key | option_key, "Cmd+Option+9"),
-          (1009, 21, control_key, "Ctrl+4"),
-          (1009, 21, cmd_key, "Cmd+4"),
-          (1009, 21, control_key | option_key, "Ctrl+Option+4"),
-          (1009, 21, cmd_key | option_key, "Cmd+Option+4"),
       ]
 
       self.action_map.clear()
@@ -333,16 +282,9 @@ class HotkeyWorker(QThread):
     user32.RegisterHotKey(0, 2008, mod_control | mod_norepeat, 0x38)
     user32.RegisterHotKey(0, 2009, mod_control | mod_norepeat, 0x39)
 
-    # Non-Fn: Ctrl+1..Ctrl+4
-    user32.RegisterHotKey(0, 3001, mod_control | mod_norepeat, 0x31)
-    user32.RegisterHotKey(0, 3002, mod_control | mod_norepeat, 0x32)
-    user32.RegisterHotKey(0, 3003, mod_control | mod_norepeat, 0x33)
-    user32.RegisterHotKey(0, 3004, mod_control | mod_norepeat, 0x34)
-
     registered_ids = [
         1006, 1007, 1008, 1009,
         2006, 2007, 2008, 2009,
-        3001, 3002, 3003, 3004,
     ]
 
     msg = ctypes.wintypes.MSG()
@@ -350,13 +292,13 @@ class HotkeyWorker(QThread):
       if user32.PeekMessageW(ctypes.byref(msg), 0, 0, 0, 1):  # PM_REMOVE
         if msg.message == 0x0312:  # WM_HOTKEY
           hk_id = msg.wParam
-          if hk_id in (1006, 2006, 3001):
+          if hk_id in (1006, 2006):
             self.f6_pressed.emit()
-          elif hk_id in (1007, 2007, 3002):
+          elif hk_id in (1007, 2007):
             self.f7_pressed.emit()
-          elif hk_id in (1008, 2008, 3003):
+          elif hk_id in (1008, 2008):
             self.f8_pressed.emit()
-          elif hk_id in (1009, 2009, 3004):
+          elif hk_id in (1009, 2009):
             self.f9_pressed.emit()
         elif msg.message == 0x0012:  # WM_QUIT
           break
