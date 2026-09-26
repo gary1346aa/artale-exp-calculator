@@ -99,6 +99,28 @@ class TestCodeIntegrity(unittest.TestCase):
     self.assertEqual(proc.returncode, 0, f"main.py --help failed: {proc.stderr}")
     self.assertIn("Artale Desktop EXP Calculator", proc.stdout)
 
+  def test_macos_carbon_hotkeys_ctypes_signatures(self):
+    """Verifies that MacOSCarbonHotkeys sets explicit 64-bit ctypes signatures."""
+    import ctypes
+    from unittest.mock import MagicMock, patch
+    from ui.hotkeys import MacOSCarbonHotkeys
+
+    mock_lib = MagicMock()
+    mock_lib.GetApplicationEventTarget = MagicMock(return_value=0x100000000)
+    mock_lib.InstallEventHandler = MagicMock(return_value=0)
+    mock_lib.RegisterEventHotKey = MagicMock(return_value=0)
+
+    with patch("ctypes.cdll.LoadLibrary", return_value=mock_lib), patch(
+        "sys.platform", "darwin"
+    ):
+      hk = MacOSCarbonHotkeys(lambda x: None)
+      self.assertEqual(mock_lib.GetApplicationEventTarget.restype, ctypes.c_void_p)
+      self.assertEqual(mock_lib.InstallEventHandler.restype, ctypes.c_int32)
+      self.assertEqual(len(mock_lib.InstallEventHandler.argtypes), 6)
+      self.assertEqual(mock_lib.RegisterEventHotKey.restype, ctypes.c_int32)
+      self.assertEqual(len(mock_lib.RegisterEventHotKey.argtypes), 6)
+      hk.cleanup()
+
 
 if __name__ == "__main__":
   unittest.main()

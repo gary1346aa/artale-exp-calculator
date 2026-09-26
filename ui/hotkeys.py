@@ -38,97 +38,148 @@ class MacOSCarbonHotkeys:
       logger.warning("Could not load Carbon framework: %s", e)
       return
 
-    class EventHotKeyID(ctypes.Structure):
-      _fields_ = [("signature", ctypes.c_uint32), ("id", ctypes.c_uint32)]
+    try:
+      class EventHotKeyID(ctypes.Structure):
+        _fields_ = [("signature", ctypes.c_uint32), ("id", ctypes.c_uint32)]
 
-    class EventTypeSpec(ctypes.Structure):
-      _fields_ = [("eventClass", ctypes.c_uint32), ("eventKind", ctypes.c_uint32)]
+      class EventTypeSpec(ctypes.Structure):
+        _fields_ = [("eventClass", ctypes.c_uint32), ("eventKind", ctypes.c_uint32)]
 
-    EventHandlerProc = ctypes.CFUNCTYPE(
-        ctypes.c_int32, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p
-    )
-
-    def _event_handler(call_ref, event_ref, user_data):
-      hk_id = EventHotKeyID()
-      # kEventParamDirectObject = 'hkey' (0x686b6579), typeEventHotKeyID = 'hkey' (0x686b6579)
-      status = self.carbon.GetEventParameter(
-          event_ref,
-          0x686B6579,
-          0x686B6579,
-          None,
-          ctypes.sizeof(hk_id),
-          None,
-          ctypes.byref(hk_id),
+      EventHandlerProc = ctypes.CFUNCTYPE(
+          ctypes.c_int32, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p
       )
-      if status == 0 and self.callback:
-        self.callback(hk_id.id)
-      return 0
 
-    self._handler_proc = EventHandlerProc(_event_handler)
-    target = self.carbon.GetApplicationEventTarget()
+      # Explicit 64-bit signatures to prevent pointer truncation and SIGSEGV on Apple Silicon / macOS
+      self.carbon.GetApplicationEventTarget.restype = ctypes.c_void_p
+      self.carbon.GetApplicationEventTarget.argtypes = []
 
-    event_type = EventTypeSpec()
-    event_type.eventClass = 0x6B657962  # 'keyb' (kEventClassKeyboard)
-    event_type.eventKind = 5  # kEventHotKeyPressed
+      self.carbon.InstallEventHandler.restype = ctypes.c_int32
+      self.carbon.InstallEventHandler.argtypes = [
+          ctypes.c_void_p,
+          EventHandlerProc,
+          ctypes.c_uint32,
+          ctypes.POINTER(EventTypeSpec),
+          ctypes.c_void_p,
+          ctypes.POINTER(ctypes.c_void_p),
+      ]
 
-    self.handler_ref = ctypes.c_void_p()
-    res = self.carbon.InstallEventHandler(
-        target,
-        self._handler_proc,
-        1,
-        ctypes.byref(event_type),
-        None,
-        ctypes.byref(self.handler_ref),
-    )
-    if res != 0:
-      logger.warning("Carbon InstallEventHandler returned status %d", res)
-      return
+      self.carbon.GetEventParameter.restype = ctypes.c_int32
+      self.carbon.GetEventParameter.argtypes = [
+          ctypes.c_void_p,
+          ctypes.c_uint32,
+          ctypes.c_uint32,
+          ctypes.POINTER(ctypes.c_uint32),
+          ctypes.c_size_t,
+          ctypes.POINTER(ctypes.c_size_t),
+          ctypes.c_void_p,
+      ]
 
-    # Hotkey registrations: (action_id, keycode, modifiers)
-    # macOS Virtual Keycodes:
-    # F6: 97, F7: 98, F8: 100, F9: 101
-    # 6: 22, 7: 26, 8: 28, 9: 25
-    # 1: 18, 2: 19, 3: 20, 4: 21
-    # Modifiers: 0 = none, 0x1000 = controlKey
-    HOTKEY_REGISTRATIONS = [
-        # F6 / Auto Start
-        (1006, 97, 0),
-        (1006, 22, 0x1000),  # Ctrl + 6
-        (1006, 18, 0x1000),  # Ctrl + 1
-        # F7 / Start/Pause
-        (1007, 98, 0),
-        (1007, 26, 0x1000),  # Ctrl + 7
-        (1007, 19, 0x1000),  # Ctrl + 2
-        # F8 / Reset
-        (1008, 100, 0),
-        (1008, 28, 0x1000),  # Ctrl + 8
-        (1008, 20, 0x1000),  # Ctrl + 3
-        # F9 / Game Mode
-        (1009, 101, 0),
-        (1009, 25, 0x1000),  # Ctrl + 9
-        (1009, 21, 0x1000),  # Ctrl + 4
-    ]
+      self.carbon.RegisterEventHotKey.restype = ctypes.c_int32
+      self.carbon.RegisterEventHotKey.argtypes = [
+          ctypes.c_uint32,
+          ctypes.c_uint32,
+          EventHotKeyID,
+          ctypes.c_void_p,
+          ctypes.c_uint32,
+          ctypes.POINTER(ctypes.c_void_p),
+      ]
 
-    for hk_action_id, keycode, mods in HOTKEY_REGISTRATIONS:
-      hk_struct = EventHotKeyID(signature=0x4152544C, id=hk_action_id)
-      ref = ctypes.c_void_p()
-      res = self.carbon.RegisterEventHotKey(
-          keycode,
-          mods,
-          hk_struct,
+      self.carbon.UnregisterEventHotKey.restype = ctypes.c_int32
+      self.carbon.UnregisterEventHotKey.argtypes = [ctypes.c_void_p]
+
+      self.carbon.RemoveEventHandler.restype = ctypes.c_int32
+      self.carbon.RemoveEventHandler.argtypes = [ctypes.c_void_p]
+
+      def _event_handler(call_ref, event_ref, user_data):
+        try:
+          hk_id = EventHotKeyID()
+          # kEventParamDirectObject = 'hkey' (0x686b6579), typeEventHotKeyID = 'hkey' (0x686b6579)
+          status = self.carbon.GetEventParameter(
+              event_ref,
+              0x686B6579,
+              0x686B6579,
+              None,
+              ctypes.sizeof(hk_id),
+              None,
+              ctypes.byref(hk_id),
+          )
+          if status == 0 and self.callback:
+            self.callback(hk_id.id)
+        except Exception as e:
+          logger.debug("Error in Carbon event handler: %s", e)
+        return 0
+
+      self._handler_proc = EventHandlerProc(_event_handler)
+      target = self.carbon.GetApplicationEventTarget()
+      if not target:
+        logger.warning("Carbon GetApplicationEventTarget returned NULL")
+        return
+
+      event_type = EventTypeSpec()
+      event_type.eventClass = 0x6B657962  # 'keyb' (kEventClassKeyboard)
+      event_type.eventKind = 5  # kEventHotKeyPressed
+
+      self.handler_ref = ctypes.c_void_p()
+      res = self.carbon.InstallEventHandler(
           target,
-          0,
-          ctypes.byref(ref),
+          self._handler_proc,
+          1,
+          ctypes.byref(event_type),
+          None,
+          ctypes.byref(self.handler_ref),
       )
-      if res == 0 and ref.value:
-        self.hotkey_refs.append(ref)
+      if res != 0:
+        logger.warning("Carbon InstallEventHandler returned status %d", res)
+        return
+
+      # Hotkey registrations: (action_id, keycode, modifiers)
+      # macOS Virtual Keycodes:
+      # F6: 97, F7: 98, F8: 100, F9: 101
+      # 6: 22, 7: 26, 8: 28, 9: 25
+      # 1: 18, 2: 19, 3: 20, 4: 21
+      # Modifiers: 0 = none, 0x1000 = controlKey
+      HOTKEY_REGISTRATIONS = [
+          # F6 / Auto Start
+          (1006, 97, 0),
+          (1006, 22, 0x1000),  # Ctrl + 6
+          (1006, 18, 0x1000),  # Ctrl + 1
+          # F7 / Start/Pause
+          (1007, 98, 0),
+          (1007, 26, 0x1000),  # Ctrl + 7
+          (1007, 19, 0x1000),  # Ctrl + 2
+          # F8 / Reset
+          (1008, 100, 0),
+          (1008, 28, 0x1000),  # Ctrl + 8
+          (1008, 20, 0x1000),  # Ctrl + 3
+          # F9 / Game Mode
+          (1009, 101, 0),
+          (1009, 25, 0x1000),  # Ctrl + 9
+          (1009, 21, 0x1000),  # Ctrl + 4
+      ]
+
+      for hk_action_id, keycode, mods in HOTKEY_REGISTRATIONS:
+        hk_struct = EventHotKeyID(signature=0x4152544C, id=hk_action_id)
+        ref = ctypes.c_void_p()
+        res = self.carbon.RegisterEventHotKey(
+            keycode,
+            mods,
+            hk_struct,
+            target,
+            0,
+            ctypes.byref(ref),
+        )
+        if res == 0 and ref.value:
+          self.hotkey_refs.append(ref)
+    except Exception as e:
+      logger.warning("Error initializing Carbon hotkeys on macOS: %s", e)
 
   def cleanup(self):
     if not self.carbon:
       return
     for ref in self.hotkey_refs:
       try:
-        self.carbon.UnregisterEventHotKey(ref)
+        if ref and ref.value:
+          self.carbon.UnregisterEventHotKey(ref)
       except Exception:
         pass
     self.hotkey_refs.clear()
