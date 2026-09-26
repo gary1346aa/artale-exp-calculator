@@ -502,73 +502,113 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
       return False, f"啟動更新程序失敗: {e}"
 
   elif sys.platform == "darwin":
-    sh_content = f"""#!/bin/bash
-PID={current_pid}
-ARCHIVE="{archive_path}"
-TARGET="{target_dir}"
-
-while kill -0 "$PID" 2>/dev/null; do
-    sleep 1
-done
-
-sleep 1
-
-TMP_DIR=$(mktemp -d /tmp/artale_update_XXXXXX)
-unzip -q -o "$ARCHIVE" -d "$TMP_DIR"
-NEW_APP=$(find "$TMP_DIR" -maxdepth 2 -name "ArtaleExpCalculator.app" | head -n 1)
-
-UPDATE_SUCCESS=0
-
-if [ -n "$NEW_APP" ]; then
-    # Try non-admin swap first (e.g. if TARGET is in user folder or writable)
-    BACKUP="${{TARGET}}.old.$$"
-    rm -rf "$BACKUP"
-    if mv "$TARGET" "$BACKUP" 2>/dev/null; then
-        if command -v ditto >/dev/null 2>&1; then
-            ditto "$NEW_APP" "$TARGET"
-        else
-            cp -a "$NEW_APP" "$TARGET"
-        fi
-        if [ -d "$TARGET" ]; then
-            UPDATE_SUCCESS=1
-            rm -rf "$BACKUP"
-            xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
-        else
-            # Rollback
-            mv "$BACKUP" "$TARGET" 2>/dev/null || true
-        fi
-    fi
-
-    # If non-admin swap failed (e.g. /Applications owned by root), request admin privileges
-    if [ "$UPDATE_SUCCESS" -ne 1 ]; then
-        ADMIN_SCRIPT="rm -rf '$TARGET' && ditto '$NEW_APP' '$TARGET' && xattr -dr com.apple.quarantine '$TARGET'"
-        if osascript -e "do shell script \"$ADMIN_SCRIPT\" with administrator privileges" 2>/dev/null; then
-            UPDATE_SUCCESS=1
-        fi
-    fi
-fi
-
-rm -rf "$TMP_DIR" "$ARCHIVE"
-
-if [ -d "$TARGET" ]; then
-    open -n "$TARGET"
-fi
-
-rm -- "$0"
-"""
-    script_path = os.path.join(tempfile.gettempdir(), f"artale_update_{current_pid}.sh")
     try:
-      with open(script_path, "w", encoding="utf-8") as f:
-        f.write(sh_content)
-      os.chmod(script_path, 0o755)
+      import shutil
+      import zipfile
 
-      subprocess.Popen(
-          ["/bin/bash", script_path],
-          start_new_session=True,
-          close_fds=True,
+      logger.info(
+          "[UPDATER] Initiating macOS update swap. Target: %s, Archive: %s",
+          target_dir,
+          archive_path,
       )
-      return True, "更新程序已啟動，正在重啟軟體..."
+
+      # 1. Unpack archive into temp directory
+      tmp_dir = tempfile.mkdtemp(prefix="artale_update_")
+      logger.info("[UPDATER] Unpacking update archive to temp dir: %s", tmp_dir)
+      with zipfile.ZipFile(archive_path, "r") as zf:
+        zf.extractall(tmp_dir)
+
+      # 2. Find new ArtaleExpCalculator.app
+      new_app = None
+      for root, dirs, _ in os.walk(tmp_dir):
+        for d in dirs:
+          if d == "ArtaleExpCalculator.app":
+            new_app = os.path.join(root, d)
+            break
+        if new_app:
+          break
+
+      if not new_app:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        logger.error("[UPDATER] Extracted files did not contain ArtaleExpCalculator.app")
+        return False, "更新檔案損毀：未找到 ArtaleExpCalculator.app"
+
+      logger.info("[UPDATER] Discovered new app bundle at: %s", new_app)
+
+      # 3. Check if target_dir is directly writable by user
+      target_parent = os.path.dirname(target_dir)
+      is_writable = os.access(target_parent, os.W_OK) and (
+          not os.path.exists(target_dir) or os.access(target_dir, os.W_OK)
+      )
+      logger.info(
+          "[UPDATER] Permission check: target=%s, parent=%s, writable=%s",
+          target_dir,
+          target_parent,
+          is_writable,
+      )
+
+      if is_writable:
+        logger.info("[UPDATER] Target is writable by user; executing non-privileged swap...")
+        backup_dir = f"{target_dir}.old.{os.getpid()}"
+        if os.path.exists(backup_dir):
+          shutil.rmtree(backup_dir, ignore_errors=True)
+        if os.path.exists(target_dir):
+          os.rename(target_dir, backup_dir)
+        subprocess.run(["ditto", new_app, target_dir], check=True)
+        subprocess.run(
+            ["xattr", "-dr", "com.apple.quarantine", target_dir],
+            check=False,
+            stderr=subprocess.DEVNULL,
+        )
+        if os.path.exists(backup_dir):
+          shutil.rmtree(backup_dir, ignore_errors=True)
+        logger.info("[UPDATER] Non-privileged swap finished successfully.")
+      else:
+        logger.info(
+            "[UPDATER] Target requires root permissions. Presenting native macOS authorization prompt..."
+        )
+        admin_script = (
+            f'ditto "{new_app}" "{target_dir}" && '
+            f'xattr -dr com.apple.quarantine "{target_dir}"'
+        )
+        res = subprocess.run(
+            [
+                "osascript",
+                "-e",
+                f'do shell script "{admin_script}" with administrator privileges',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        logger.info(
+            "[UPDATER] osascript finished: returncode=%d, stdout='%s', stderr='%s'",
+            res.returncode,
+            res.stdout.strip(),
+            res.stderr.strip(),
+        )
+        if res.returncode != 0:
+          shutil.rmtree(tmp_dir, ignore_errors=True)
+          err_msg = res.stderr.strip()
+          if "User canceled" in err_msg or "-128" in err_msg:
+            logger.warning("[UPDATER] User canceled administrative authorization.")
+            return False, "已取消管理員授權，更新未套用"
+          logger.error("[UPDATER] Elevated swap failed with error: %s", err_msg)
+          return False, f"管理員權限套用失敗: {err_msg}"
+
+      # 4. Clean up
+      shutil.rmtree(tmp_dir, ignore_errors=True)
+      try:
+        os.remove(archive_path)
+      except OSError:
+        pass
+
+      # 5. Launch the newly installed application
+      logger.info("[UPDATER] Launching updated application via 'open -n %s'...", target_dir)
+      subprocess.Popen(["open", "-n", target_dir])
+      return True, "更新成功！正在重啟軟體..."
+
     except Exception as e:
-      return False, f"啟動更新程序失敗: {e}"
+      logger.exception("[UPDATER] Unexpected exception during update swap: %s", e)
+      return False, f"更新套用失敗: {e}"
 
   return False, f"不支援的作業系統: {sys.platform}"

@@ -12,9 +12,35 @@ Usage:
 
 import argparse
 import os
+import logging
 import sys
 
 import config
+
+
+def setup_logging() -> None:
+  """Configures dual console and file logging to user config directory."""
+  log_file = os.path.join(config.USER_CONFIG_DIR, "artale_app.log")
+  handlers = [logging.StreamHandler(sys.stdout)]
+  try:
+    os.makedirs(config.USER_CONFIG_DIR, exist_ok=True)
+    handlers.append(logging.FileHandler(log_file, encoding="utf-8", mode="w"))
+  except Exception:
+    pass
+
+  logging.basicConfig(
+      level=logging.INFO,
+      format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
+      handlers=handlers,
+  )
+  logging.info(
+      "Starting %s %s on %s (%s)",
+      config.APP_NAME,
+      config.get_full_version_string(),
+      sys.platform,
+      config.get_isa_display_name(),
+  )
+  logging.info("Log file location: %s", log_file)
 
 
 def init_windows_stdio() -> None:
@@ -37,6 +63,7 @@ def init_windows_stdio() -> None:
 def main() -> None:
   """Parses command line arguments and launches the application."""
   init_windows_stdio()
+  setup_logging()
   parser = argparse.ArgumentParser(
       description="Artale Desktop EXP Calculator - Real-time Gaming Overlay"
   )

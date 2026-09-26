@@ -381,6 +381,10 @@ class AboutDialog(QDialog):
     self.btn_check_update.clicked.connect(self._on_action_clicked)
     btn_box.addWidget(self.btn_check_update)
 
+    self.btn_view_logs = QPushButton("查看日誌")
+    self.btn_view_logs.clicked.connect(self._open_logs)
+    btn_box.addWidget(self.btn_view_logs)
+
     self.lbl_update_status = QLabel("")
     self.lbl_update_status.setStyleSheet("font-size: 11px;")
     self.lbl_update_status.setOpenExternalLinks(True)
@@ -428,6 +432,24 @@ class AboutDialog(QDialog):
 
     # Check for updates
     self._check_for_updates()
+
+  def _open_logs(self):
+    """Opens the local log file in the system default text viewer."""
+    log_file = os.path.join(config.USER_CONFIG_DIR, "artale_app.log")
+    try:
+      if not os.path.exists(log_file):
+        os.makedirs(config.USER_CONFIG_DIR, exist_ok=True)
+        with open(log_file, "w", encoding="utf-8") as f:
+          f.write(f"--- Artale EXP Calculator Log ---\nVersion: {config.get_full_version_string()}\n")
+      if sys.platform == "darwin":
+        subprocess.Popen(["open", log_file])
+      elif sys.platform == "win32":
+        os.startfile(log_file)
+      else:
+        subprocess.Popen(["xdg-open", log_file])
+    except Exception as e:
+      logger.error("Failed to open log file %s: %s", log_file, e)
+      self.lbl_update_status.setText(f"無法開啟日誌: {e}")
 
   def _check_for_updates(self):
     """Initiates an asynchronous check for updates against GitHub Releases."""

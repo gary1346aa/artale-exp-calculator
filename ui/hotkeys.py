@@ -216,8 +216,35 @@ class HotkeyWorker(QThread):
     self.running: bool = True
     self.tid: int = 0
     self.macos_hotkeys: Optional[MacOSCarbonHotkeys] = None
+    self.pynput_listener = None
     if sys.platform == "darwin":
       self.macos_hotkeys = MacOSCarbonHotkeys(self._on_macos_hotkey)
+      self._setup_pynput()
+
+  def _setup_pynput(self) -> None:
+    """Sets up cross-application global key listener on macOS via pynput."""
+    try:
+      from pynput import keyboard
+
+      def on_press(key):
+        try:
+          if key == keyboard.Key.f6:
+            self.f6_pressed.emit()
+          elif key == keyboard.Key.f7:
+            self.f7_pressed.emit()
+          elif key == keyboard.Key.f8:
+            self.f8_pressed.emit()
+          elif key == keyboard.Key.f9:
+            self.f9_pressed.emit()
+        except Exception as e:
+          logger.debug("Error in pynput hotkey handler: %s", e)
+
+      self.pynput_listener = keyboard.Listener(on_press=on_press)
+      self.pynput_listener.daemon = True
+      self.pynput_listener.start()
+      logger.info("macOS global keyboard listener (pynput) started")
+    except Exception as e:
+      logger.warning("Could not initialize pynput keyboard listener on macOS: %s", e)
 
   def _on_macos_hotkey(self, action_id: int) -> None:
     if action_id == 1006:
@@ -279,6 +306,12 @@ class HotkeyWorker(QThread):
   def stop(self) -> None:
     """Stops the hotkey message loop and notifies thread."""
     self.running = False
+    if self.pynput_listener:
+      try:
+        self.pynput_listener.stop()
+      except Exception:
+        pass
+      self.pynput_listener = None
     if self.macos_hotkeys:
       self.macos_hotkeys.cleanup()
       self.macos_hotkeys = None
