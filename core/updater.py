@@ -437,7 +437,7 @@ try {{
 # 3. Restart main application
 $exe = Join-Path $target 'ArtaleExpCalculator.exe'
 if (Test-Path $exe) {{
-    Start-Process -FilePath $exe
+    Start-Process -FilePath $exe -WorkingDirectory $target
 }}
 
 # 4. Clean up update archive and script
