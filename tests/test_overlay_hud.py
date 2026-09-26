@@ -654,6 +654,57 @@ class TestOverlayHud(unittest.TestCase):
     self.assertIn("關於...", actions_seen)
     self.assertIn("關閉程式", actions_seen)
 
+  def test_keypress_event_shortcuts(self):
+    """Verifies that keyPressEvent triggers correct handlers for F-keys and Ctrl/Cmd shortcuts."""
+    from unittest.mock import MagicMock
+    from PyQt6.QtCore import QEvent, Qt
+    from PyQt6.QtGui import QKeyEvent
+
+    self.overlay.on_f6 = MagicMock()
+    self.overlay.on_f7 = MagicMock()
+    self.overlay.on_f8 = MagicMock()
+    self.overlay.on_f9 = MagicMock()
+
+    # F6 and Ctrl+6, Cmd+1
+    ev_f6 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F6, Qt.KeyboardModifier.NoModifier)
+    self.overlay.keyPressEvent(ev_f6)
+    self.assertEqual(self.overlay.on_f6.call_count, 1)
+
+    ev_ctrl6 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_6, Qt.KeyboardModifier.ControlModifier)
+    self.overlay.keyPressEvent(ev_ctrl6)
+    self.assertEqual(self.overlay.on_f6.call_count, 2)
+
+    ev_cmd1 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_1, Qt.KeyboardModifier.MetaModifier)
+    self.overlay.keyPressEvent(ev_cmd1)
+    self.assertEqual(self.overlay.on_f6.call_count, 3)
+
+    # F7 and Ctrl+7, Cmd+2
+    ev_f7 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F7, Qt.KeyboardModifier.NoModifier)
+    self.overlay.keyPressEvent(ev_f7)
+    self.assertEqual(self.overlay.on_f7.call_count, 1)
+
+    ev_ctrl7 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_7, Qt.KeyboardModifier.ControlModifier)
+    self.overlay.keyPressEvent(ev_ctrl7)
+    self.assertEqual(self.overlay.on_f7.call_count, 2)
+
+    # F8 and Ctrl+8, Cmd+3
+    ev_f8 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F8, Qt.KeyboardModifier.NoModifier)
+    self.overlay.keyPressEvent(ev_f8)
+    self.assertEqual(self.overlay.on_f8.call_count, 1)
+
+    ev_ctrl8 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_8, Qt.KeyboardModifier.ControlModifier)
+    self.overlay.keyPressEvent(ev_ctrl8)
+    self.assertEqual(self.overlay.on_f8.call_count, 2)
+
+    # F9 and Ctrl+9, Cmd+4
+    ev_f9 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F9, Qt.KeyboardModifier.NoModifier)
+    self.overlay.keyPressEvent(ev_f9)
+    self.assertEqual(self.overlay.on_f9.call_count, 1)
+
+    ev_ctrl9 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_9, Qt.KeyboardModifier.ControlModifier)
+    self.overlay.keyPressEvent(ev_ctrl9)
+    self.assertEqual(self.overlay.on_f9.call_count, 2)
+
 
 class TestSettingsPersistence(unittest.TestCase):
   """Validates that settings (size, transparency, order, game mode items, position) persist across sessions."""

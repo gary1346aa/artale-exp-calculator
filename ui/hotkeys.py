@@ -25,6 +25,7 @@ class MacOSCarbonHotkeys:
     self._handler_proc = None
     self.handler_ref = None
     self.hotkey_refs = []
+    self.action_map = {}
     self._setup()
 
   def _setup(self):
@@ -53,6 +54,16 @@ class MacOSCarbonHotkeys:
       self.carbon.GetApplicationEventTarget.restype = ctypes.c_void_p
       self.carbon.GetApplicationEventTarget.argtypes = []
 
+      if hasattr(self.carbon, "InstallApplicationEventHandler"):
+        self.carbon.InstallApplicationEventHandler.restype = ctypes.c_int32
+        self.carbon.InstallApplicationEventHandler.argtypes = [
+            EventHandlerProc,
+            ctypes.c_uint32,
+            ctypes.POINTER(EventTypeSpec),
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+
       self.carbon.InstallEventHandler.restype = ctypes.c_int32
       self.carbon.InstallEventHandler.argtypes = [
           ctypes.c_void_p,
@@ -68,9 +79,9 @@ class MacOSCarbonHotkeys:
           ctypes.c_void_p,
           ctypes.c_uint32,
           ctypes.c_uint32,
-          ctypes.POINTER(ctypes.c_uint32),
+          ctypes.c_void_p,
           ctypes.c_size_t,
-          ctypes.POINTER(ctypes.c_size_t),
+          ctypes.c_void_p,
           ctypes.c_void_p,
       ]
 
@@ -93,20 +104,31 @@ class MacOSCarbonHotkeys:
       def _event_handler(call_ref, event_ref, user_data):
         try:
           hk_id = EventHotKeyID()
-          # kEventParamDirectObject = 'hkey' (0x686b6579), typeEventHotKeyID = 'hkey' (0x686b6579)
+          # Carbon Event Manager:
+          # kEventParamDirectObject = '----' (0x2D2D2D2D)
+          # typeEventHotKeyID = 'hkey' (0x686B6579)
           status = self.carbon.GetEventParameter(
               event_ref,
-              0x686B6579,
-              0x686B6579,
+              0x2D2D2D2D,  # kEventParamDirectObject
+              0x686B6579,  # typeEventHotKeyID
               None,
               ctypes.sizeof(hk_id),
               None,
               ctypes.byref(hk_id),
           )
-          if status == 0 and self.callback:
-            self.callback(hk_id.id)
+          if status == 0:
+            action_id = self.action_map.get(hk_id.id, hk_id.id)
+            logger.info(
+                "Carbon global hotkey triggered: reg_id=%d -> action=%d",
+                hk_id.id,
+                action_id,
+            )
+            if self.callback:
+              self.callback(action_id)
+          else:
+            logger.debug("Carbon GetEventParameter status=%d", status)
         except Exception as e:
-          logger.debug("Error in Carbon event handler: %s", e)
+          logger.exception("Error in Carbon event handler: %s", e)
         return 0
 
       self._handler_proc = EventHandlerProc(_event_handler)
@@ -120,45 +142,108 @@ class MacOSCarbonHotkeys:
       event_type.eventKind = 5  # kEventHotKeyPressed
 
       self.handler_ref = ctypes.c_void_p()
-      res = self.carbon.InstallEventHandler(
-          target,
-          self._handler_proc,
-          1,
-          ctypes.byref(event_type),
-          None,
-          ctypes.byref(self.handler_ref),
-      )
+      if hasattr(self.carbon, "InstallApplicationEventHandler"):
+        res = self.carbon.InstallApplicationEventHandler(
+            self._handler_proc,
+            1,
+            ctypes.byref(event_type),
+            None,
+            ctypes.byref(self.handler_ref),
+        )
+      else:
+        res = self.carbon.InstallEventHandler(
+            target,
+            self._handler_proc,
+            1,
+            ctypes.byref(event_type),
+            None,
+            ctypes.byref(self.handler_ref),
+        )
+
       if res != 0:
-        logger.warning("Carbon InstallEventHandler returned status %d", res)
+        logger.warning("Carbon InstallApplicationEventHandler returned status %d", res)
         return
 
-      # Hotkey registrations: (action_id, keycode, modifiers)
-      # macOS Virtual Keycodes:
+      # Carbon Modifiers:
+      cmd_key = 0x0100      # 256  (Command / ⌘)
+      control_key = 0x1000  # 4096 (Control / ⌃)
+      option_key = 0x0800   # 2048 (Option / Alt / ⌥)
+
+      # Keycodes:
       # F6: 97, F7: 98, F8: 100, F9: 101
       # 6: 22, 7: 26, 8: 28, 9: 25
       # 1: 18, 2: 19, 3: 20, 4: 21
-      # Modifiers: 0 = none, 0x1000 = controlKey
-      HOTKEY_REGISTRATIONS = [
-          # F6 / Auto Start
-          (1006, 97, 0),
-          (1006, 22, 0x1000),  # Ctrl + 6
-          (1006, 18, 0x1000),  # Ctrl + 1
-          # F7 / Start/Pause
-          (1007, 98, 0),
-          (1007, 26, 0x1000),  # Ctrl + 7
-          (1007, 19, 0x1000),  # Ctrl + 2
-          # F8 / Reset
-          (1008, 100, 0),
-          (1008, 28, 0x1000),  # Ctrl + 8
-          (1008, 20, 0x1000),  # Ctrl + 3
-          # F9 / Game Mode
-          (1009, 101, 0),
-          (1009, 25, 0x1000),  # Ctrl + 9
-          (1009, 21, 0x1000),  # Ctrl + 4
+      HOTKEY_SPECS = [
+          # Action 1006: Auto-Start (F6 / Ctrl+6 / Cmd+6 / Ctrl+1 / Cmd+1)
+          (1006, 97, 0, "F6 bare"),
+          (1006, 97, control_key, "Ctrl+F6"),
+          (1006, 97, cmd_key, "Cmd+F6"),
+          (1006, 97, option_key, "Option+F6"),
+          (1006, 97, control_key | cmd_key, "Ctrl+Cmd+F6"),
+          (1006, 97, control_key | option_key, "Ctrl+Option+F6"),
+          (1006, 22, control_key, "Ctrl+6"),
+          (1006, 22, cmd_key, "Cmd+6"),
+          (1006, 22, control_key | option_key, "Ctrl+Option+6"),
+          (1006, 22, cmd_key | option_key, "Cmd+Option+6"),
+          (1006, 18, control_key, "Ctrl+1"),
+          (1006, 18, cmd_key, "Cmd+1"),
+          (1006, 18, control_key | option_key, "Ctrl+Option+1"),
+          (1006, 18, cmd_key | option_key, "Cmd+Option+1"),
+
+          # Action 1007: Start/Pause (F7 / Ctrl+7 / Cmd+7 / Ctrl+2 / Cmd+2)
+          (1007, 98, 0, "F7 bare"),
+          (1007, 98, control_key, "Ctrl+F7"),
+          (1007, 98, cmd_key, "Cmd+F7"),
+          (1007, 98, option_key, "Option+F7"),
+          (1007, 98, control_key | cmd_key, "Ctrl+Cmd+F7"),
+          (1007, 98, control_key | option_key, "Ctrl+Option+F7"),
+          (1007, 26, control_key, "Ctrl+7"),
+          (1007, 26, cmd_key, "Cmd+7"),
+          (1007, 26, control_key | option_key, "Ctrl+Option+7"),
+          (1007, 26, cmd_key | option_key, "Cmd+Option+7"),
+          (1007, 19, control_key, "Ctrl+2"),
+          (1007, 19, cmd_key, "Cmd+2"),
+          (1007, 19, control_key | option_key, "Ctrl+Option+2"),
+          (1007, 19, cmd_key | option_key, "Cmd+Option+2"),
+
+          # Action 1008: Reset (F8 / Ctrl+8 / Cmd+8 / Ctrl+3 / Cmd+3)
+          (1008, 100, 0, "F8 bare"),
+          (1008, 100, control_key, "Ctrl+F8"),
+          (1008, 100, cmd_key, "Cmd+F8"),
+          (1008, 100, option_key, "Option+F8"),
+          (1008, 100, control_key | cmd_key, "Ctrl+Cmd+F8"),
+          (1008, 100, control_key | option_key, "Ctrl+Option+F8"),
+          (1008, 28, control_key, "Ctrl+8"),
+          (1008, 28, cmd_key, "Cmd+8"),
+          (1008, 28, control_key | option_key, "Ctrl+Option+8"),
+          (1008, 28, cmd_key | option_key, "Cmd+Option+8"),
+          (1008, 20, control_key, "Ctrl+3"),
+          (1008, 20, cmd_key, "Cmd+3"),
+          (1008, 20, control_key | option_key, "Ctrl+Option+3"),
+          (1008, 20, cmd_key | option_key, "Cmd+Option+3"),
+
+          # Action 1009: Mode Switch (F9 / Ctrl+9 / Cmd+9 / Ctrl+4 / Cmd+4)
+          (1009, 101, 0, "F9 bare"),
+          (1009, 101, control_key, "Ctrl+F9"),
+          (1009, 101, cmd_key, "Cmd+F9"),
+          (1009, 101, option_key, "Option+F9"),
+          (1009, 101, control_key | cmd_key, "Ctrl+Cmd+F9"),
+          (1009, 101, control_key | option_key, "Ctrl+Option+F9"),
+          (1009, 25, control_key, "Ctrl+9"),
+          (1009, 25, cmd_key, "Cmd+9"),
+          (1009, 25, control_key | option_key, "Ctrl+Option+9"),
+          (1009, 25, cmd_key | option_key, "Cmd+Option+9"),
+          (1009, 21, control_key, "Ctrl+4"),
+          (1009, 21, cmd_key, "Cmd+4"),
+          (1009, 21, control_key | option_key, "Ctrl+Option+4"),
+          (1009, 21, cmd_key | option_key, "Cmd+Option+4"),
       ]
 
-      for hk_action_id, keycode, mods in HOTKEY_REGISTRATIONS:
-        hk_struct = EventHotKeyID(signature=0x4152544C, id=hk_action_id)
+      self.action_map.clear()
+      reg_id = 1
+      for action_id, keycode, mods, desc in HOTKEY_SPECS:
+        self.action_map[reg_id] = action_id
+        hk_struct = EventHotKeyID(signature=0x4152544C, id=reg_id)
         ref = ctypes.c_void_p()
         res = self.carbon.RegisterEventHotKey(
             keycode,
@@ -170,6 +255,10 @@ class MacOSCarbonHotkeys:
         )
         if res == 0 and ref.value:
           self.hotkey_refs.append(ref)
+          logger.info("Registered macOS global hotkey: %s (id=%d)", desc, reg_id)
+        else:
+          logger.debug("Carbon RegisterEventHotKey %s returned status %d", desc, res)
+        reg_id += 1
     except Exception as e:
       logger.warning("Error initializing Carbon hotkeys on macOS: %s", e)
 

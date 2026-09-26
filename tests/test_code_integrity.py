@@ -100,25 +100,35 @@ class TestCodeIntegrity(unittest.TestCase):
     self.assertIn("Artale Desktop EXP Calculator", proc.stdout)
 
   def test_macos_carbon_hotkeys_ctypes_signatures(self):
-    """Verifies that MacOSCarbonHotkeys sets explicit 64-bit ctypes signatures."""
+    """Verifies that MacOSCarbonHotkeys sets explicit 64-bit ctypes signatures and registers hotkeys."""
     import ctypes
     from unittest.mock import MagicMock, patch
     from ui.hotkeys import MacOSCarbonHotkeys
 
     mock_lib = MagicMock()
     mock_lib.GetApplicationEventTarget = MagicMock(return_value=0x100000000)
+    mock_lib.InstallApplicationEventHandler = MagicMock(return_value=0)
     mock_lib.InstallEventHandler = MagicMock(return_value=0)
     mock_lib.RegisterEventHotKey = MagicMock(return_value=0)
+    mock_lib.UnregisterEventHotKey = MagicMock(return_value=0)
+    mock_lib.RemoveEventHandler = MagicMock(return_value=0)
+
+    callbacks_received = []
 
     with patch("ctypes.cdll.LoadLibrary", return_value=mock_lib), patch(
         "sys.platform", "darwin"
     ):
-      hk = MacOSCarbonHotkeys(lambda x: None)
+      hk = MacOSCarbonHotkeys(lambda action: callbacks_received.append(action))
       self.assertEqual(mock_lib.GetApplicationEventTarget.restype, ctypes.c_void_p)
-      self.assertEqual(mock_lib.InstallEventHandler.restype, ctypes.c_int32)
-      self.assertEqual(len(mock_lib.InstallEventHandler.argtypes), 6)
+      self.assertEqual(mock_lib.InstallApplicationEventHandler.restype, ctypes.c_int32)
+      self.assertEqual(len(mock_lib.InstallApplicationEventHandler.argtypes), 5)
       self.assertEqual(mock_lib.RegisterEventHotKey.restype, ctypes.c_int32)
       self.assertEqual(len(mock_lib.RegisterEventHotKey.argtypes), 6)
+      self.assertGreater(len(hk.action_map), 20)
+
+      # Verify that action 1006, 1007, 1008, 1009 are all mapped
+      action_values = set(hk.action_map.values())
+      self.assertEqual(action_values, {1006, 1007, 1008, 1009})
       hk.cleanup()
 
 
