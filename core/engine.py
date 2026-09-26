@@ -264,7 +264,7 @@ def _parse_frame_python(bgr_img: np.ndarray) -> Optional[ParsedFrame]:
 
   crop_x = best_lx + best_tw
   crop_y = strip_y + best_ly
-  crop_w = int(best_th * 9.5)
+  crop_w = int(best_th * 11.5)
   crop_h = best_th
 
   if crop_x + crop_w > w:

@@ -47,6 +47,7 @@ hiddenimports = [
     "PyQt6.QtWidgets",
     "core",
     "core.engine",
+    "core.exp_table",
     "core.metrics",
     "core.capture",
     "core.capture_macos",

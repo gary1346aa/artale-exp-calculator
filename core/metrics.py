@@ -10,6 +10,12 @@ import enum
 import time
 from typing import Any, Dict, Optional, Tuple
 
+from core.exp_table import (
+    EXP_TO_NEXT_LEVEL,
+    find_level_from_exp_and_pct,
+    validate_sample,
+)
+
 
 class MeasurementState(enum.Enum):
   """Lifecycle states for active EXP hunting measurement."""
@@ -64,6 +70,11 @@ class ExpMetricsEngine:
     self.total_gained_exp: int = 0
     self.total_gained_pct: float = 0.0
 
+    # Level tracking and carryover across level-ups
+    self.current_level: Optional[int] = None
+    self.level_up_carry_exp: int = 0
+    self.level_up_carry_pct: float = 0.0
+
     # Samples buffer for rolling window rate calculations (1m, 10m, 60m)
     self.samples: deque[ExpSample] = deque()
     self.latest_sample: Optional[ExpSample] = None
@@ -109,6 +120,8 @@ class ExpMetricsEngine:
     self.pause_start_time = None
     self.total_gained_exp = 0
     self.total_gained_pct = 0.0
+    self.level_up_carry_exp = 0
+    self.level_up_carry_pct = 0.0
     self.samples.clear()
 
     if self.latest_sample is not None:
@@ -153,6 +166,8 @@ class ExpMetricsEngine:
     self.total_paused_duration = 0.0
     self.total_gained_exp = 0
     self.total_gained_pct = 0.0
+    self.level_up_carry_exp = 0
+    self.level_up_carry_pct = 0.0
     self.samples.clear()
 
     if self.latest_sample is not None:
@@ -181,7 +196,8 @@ class ExpMetricsEngine:
     """Ingests a newly recognized EXP sample from OCR.
 
     Handles initial EXP capture, baseline tracking, auto-start triggering,
-    and cumulative rate calculation.
+    mathematical cross-validation against the EXP table, and self-healing
+    cumulative rate calculations.
 
     Args:
       exp_value: Total EXP points.
@@ -191,7 +207,19 @@ class ExpMetricsEngine:
     Returns:
       True if sample was ingested.
     """
+    if exp_value < 0:
+      return False
+
     now = timestamp if timestamp is not None else time.time()
+
+    # Mathematical cross-validation against EXP table
+    is_valid, matched_level = validate_sample(
+        exp_value, exp_percent, self.current_level
+    )
+    if not is_valid:
+      # Mathematical mismatch between exp_value and exp_percent -> discard outlier
+      return False
+
     sample = ExpSample(now, exp_value, exp_percent)
 
     # 1. Capture session initial EXP once on launch
@@ -219,15 +247,20 @@ class ExpMetricsEngine:
         is_increasing = True
 
       if self.auto_start_enabled and is_increasing:
-        self.start_measurement()
+        self.start_measurement(timestamp=now)
       elif self.state == MeasurementState.IDLE and not self.auto_start_enabled:
         self.baseline_exp = exp_value
         self.baseline_exp_percent = exp_percent
         self.baseline_timestamp = now
 
+      if matched_level is not None:
+        self.current_level = matched_level
+
     # 4. Ingest sample if measurement is actively running
     if self.state == MeasurementState.RUNNING:
       if not self.samples:
+        if matched_level is not None:
+          self.current_level = matched_level
         self.samples.append(sample)
       else:
         prev = self.latest_sample if self.latest_sample else self.samples[-1]
@@ -237,21 +270,80 @@ class ExpMetricsEngine:
             if (sample.exp_percent is not None and prev.exp_percent is not None)
             else 0.0
         )
+        dt = sample.timestamp - prev.timestamp
 
-        # Level up detection: percent wrapped from near 100% to near 0%
+        # Level up detection:
+        is_level_up = False
+        prev_level = None
+        if prev.exp_percent is not None and prev.exp_value > 0:
+          prev_level = find_level_from_exp_and_pct(
+              prev.exp_value, prev.exp_percent
+          )
+
         if (
+            matched_level is not None
+            and prev_level is not None
+            and matched_level > prev_level
+        ):
+          is_level_up = True
+        elif (
             prev.exp_percent is not None
             and sample.exp_percent is not None
             and prev.exp_percent > 85.0
             and sample.exp_percent < 15.0
         ):
-          wrap_pct = (100.0 - prev.exp_percent) + sample.exp_percent
-          self.total_gained_pct += wrap_pct
-          self.total_gained_exp += max(0, sample.exp_value)
-        elif delta_exp >= 0:
-          self.total_gained_exp += delta_exp
-          if delta_pct > 0:
-            self.total_gained_pct += delta_pct
+          is_level_up = True
+
+        if is_level_up:
+          ref_lvl = prev_level if prev_level is not None else self.current_level
+          req_exp = (
+              EXP_TO_NEXT_LEVEL.get(ref_lvl) if ref_lvl is not None else None
+          )
+          if req_exp is not None and self.baseline_exp is not None:
+            level_gain = max(0, req_exp - self.baseline_exp)
+          else:
+            level_gain = max(0, prev.exp_value)
+
+          self.level_up_carry_exp += level_gain
+
+          if prev.exp_percent is not None:
+            self.level_up_carry_pct += max(
+                0.0, 100.0 - (self.baseline_exp_percent or 0.0)
+            )
+
+          # Reset baseline for the new level
+          self.baseline_exp = 0
+          self.baseline_exp_percent = 0.0
+          if self.current_level is not None:
+            self.current_level += 1
+          elif matched_level is not None:
+            self.current_level = matched_level
+
+        else:
+          # Normal hunting within same level
+          if delta_exp < 0:
+            # Negative drop without level up is an OCR outlier! Discard.
+            return False
+
+          if dt > 0 and (delta_exp / dt) > 2_000_000 and delta_pct < 0.05:
+            # Absurd single-second spike (> 2M/s without pct increase): Discard.
+            return False
+
+          if matched_level is not None:
+            self.current_level = matched_level
+
+        # Self-healing absolute difference formula:
+        if self.baseline_exp is not None:
+          self.total_gained_exp = self.level_up_carry_exp + max(
+              0, sample.exp_value - self.baseline_exp
+          )
+        if (
+            self.baseline_exp_percent is not None
+            and sample.exp_percent is not None
+        ):
+          self.total_gained_pct = self.level_up_carry_pct + max(
+              0.0, sample.exp_percent - self.baseline_exp_percent
+          )
 
         self.samples.append(sample)
 
@@ -285,13 +377,33 @@ class ExpMetricsEngine:
     if dt <= 0:
       return 0, 0.0, 0.0
 
-    d_exp = max(0, latest.exp_value - oldest.exp_value)
-    d_pct = 0.0
-    if latest.exp_percent is not None and oldest.exp_percent is not None:
-      if latest.exp_percent >= oldest.exp_percent:
-        d_pct = latest.exp_percent - oldest.exp_percent
+    # Level-up aware calculation across window boundaries:
+    if (
+        oldest.exp_percent is not None
+        and latest.exp_percent is not None
+        and latest.exp_percent < oldest.exp_percent
+        and oldest.exp_percent > 85.0
+        and latest.exp_percent < 15.0
+    ):
+      oldest_lvl = find_level_from_exp_and_pct(
+          oldest.exp_value, oldest.exp_percent
+      )
+      req_exp = (
+          EXP_TO_NEXT_LEVEL.get(oldest_lvl) if oldest_lvl is not None else None
+      )
+      if req_exp is not None:
+        d_exp = max(0, req_exp - oldest.exp_value) + latest.exp_value
       else:
-        d_pct = (100.0 - oldest.exp_percent) + latest.exp_percent
+        d_exp = max(0, latest.exp_value)
+      d_pct = (100.0 - oldest.exp_percent) + latest.exp_percent
+    else:
+      d_exp = max(0, latest.exp_value - oldest.exp_value)
+      d_pct = 0.0
+      if latest.exp_percent is not None and oldest.exp_percent is not None:
+        if latest.exp_percent >= oldest.exp_percent:
+          d_pct = latest.exp_percent - oldest.exp_percent
+        else:
+          d_pct = (100.0 - oldest.exp_percent) + latest.exp_percent
 
     return d_exp, d_pct, dt
 
@@ -481,4 +593,28 @@ class ExpMetricsEngine:
         "rate_1m_exp": rate_1m_exp,
         "accum_10m_exp": accum_10m_exp,
         "accum_60m_exp": accum_60m_exp,
+        "current_level": self.current_level,
+        "current_level_str": (
+            f"Lv. {self.current_level}"
+            if self.current_level is not None
+            else "--"
+        ),
+        "remaining_exp": (
+            max(0, EXP_TO_NEXT_LEVEL[self.current_level] - cur_val)
+            if (
+                self.current_level is not None
+                and self.current_level in EXP_TO_NEXT_LEVEL
+                and cur_val > 0
+            )
+            else None
+        ),
+        "remaining_exp_str": (
+            f"{max(0, EXP_TO_NEXT_LEVEL[self.current_level] - cur_val):,d}"
+            if (
+                self.current_level is not None
+                and self.current_level in EXP_TO_NEXT_LEVEL
+                and cur_val > 0
+            )
+            else "--"
+        ),
     }

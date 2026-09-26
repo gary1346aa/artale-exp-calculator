@@ -323,11 +323,11 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width, int height
   // Derive text bounding box exactly as in exp_core.py:
   // crop_x = best_lx + best_tw
   // crop_y = strip_y + best_ly (stored in logo_box.y)
-  // crop_w = int(best_th * 9.5)
+  // crop_w = int(best_th * 11.5)
   // crop_h = best_th
   text_box.x = logo_box.x + logo_box.w;
   text_box.y = logo_box.y;
-  text_box.w = static_cast<int>(logo_box.h * 9.5f);
+  text_box.w = static_cast<int>(logo_box.h * 11.5f);
   text_box.h = logo_box.h;
 
   if (text_box.x + text_box.w > width) text_box.w = width - text_box.x;

@@ -181,6 +181,68 @@ class TestExpMetricsEngine(unittest.TestCase):
     self.assertEqual(m_60m["累積60分"], "6,000,000")
     self.assertEqual(m_60m["預估60分"], m_60m["累積60分"])
 
+  def test_level_estimation_from_real_screenshot(self):
+    engine = ExpMetricsEngine()
+    # Real sample from screenshot: 686,615,140 (44.57%)
+    accepted = engine.add_sample(686615140, 44.57, timestamp=100.0)
+    self.assertTrue(accepted)
+    self.assertEqual(engine.current_level, 194)
+
+    m = engine.get_metrics(now=100.0)
+    self.assertEqual(m["current_level"], 194)
+    self.assertEqual(m["current_level_str"], "Lv. 194")
+    # Level 194 required EXP is 1,540,197,871
+    expected_remaining = 1540197871 - 686615140
+    self.assertEqual(m["remaining_exp"], expected_remaining)
+
+  def test_outlier_rejection_for_digit_drop_glitch(self):
+    """Simulates friend's exact glitch: OCR dropping a digit (60M vs 686M)."""
+    engine = ExpMetricsEngine()
+    engine.add_sample(686615140, 44.57, timestamp=100.0)
+    engine.start_measurement(timestamp=100.0)
+
+    # Glitched frame: OCR drops a digit and reads 8 digits instead of 9
+    corrupted_accepted = engine.add_sample(60010233, 44.57, timestamp=101.0)
+    # MUST BE REJECTED by mathematical table validation!
+    self.assertFalse(corrupted_accepted)
+    # latest_sample must NOT be corrupted
+    self.assertEqual(engine.latest_sample.exp_value, 686615140)
+    self.assertEqual(engine.total_gained_exp, 0)
+
+    # Next frame recovers to normal 9-digit hunting
+    recovery_accepted = engine.add_sample(686620000, 44.57, timestamp=102.0)
+    self.assertTrue(recovery_accepted)
+    self.assertEqual(engine.latest_sample.exp_value, 686620000)
+    # Accumulated gain must be exactly 4,860 - NOT a 626M spike!
+    self.assertEqual(engine.total_gained_exp, 4860)
+
+    m = engine.get_metrics(now=102.0)
+    self.assertEqual(m["累計經驗"], "4,860")
+    self.assertNotIn("626", m["累計經驗"])
+
+  def test_exact_level_up_carryover(self):
+    """Verifies that leveling up uses exact EXP table values across boundaries."""
+    engine = ExpMetricsEngine()
+    # Start near end of Level 194: 1,540,100,000 (99.99%)
+    engine.add_sample(1540100000, 99.99, timestamp=100.0)
+    engine.start_measurement(timestamp=100.0)
+    self.assertEqual(engine.current_level, 194)
+
+    # Level up to 195! EXP wraps to 5,000 (0.00%)
+    accepted = engine.add_sample(5000, 0.00, timestamp=110.0)
+    self.assertTrue(accepted)
+    self.assertEqual(engine.current_level, 195)
+
+    # Level 194 total cap is 1,540,197,871
+    # Gained in Lv 194: 1,540,197,871 - 1,540,100,000 = 97,871
+    # Gained in Lv 195: 5,000
+    # Total gained across level up: 97,871 + 5,000 = 102,871
+    self.assertEqual(engine.total_gained_exp, 102871)
+
+    # Gain more EXP in Level 195
+    engine.add_sample(15000, 0.00, timestamp=120.0)
+    self.assertEqual(engine.total_gained_exp, 112871)
+
 
 if __name__ == "__main__":
   unittest.main()
