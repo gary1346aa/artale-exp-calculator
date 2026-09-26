@@ -254,21 +254,13 @@ class ArtaleExpOverlay(QWidget):
     self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     self.setFixedWidth(int(340 * self.ui_scale))
 
-    # In-window keyboard shortcuts (F6~F9, Ctrl+6~9, Ctrl+1~4)
+    # In-window keyboard shortcuts (F6~F9)
     self.shortcuts = []
     for seq, handler in [
         (QKeySequence(Qt.Key.Key_F6), self.on_f6),
-        (QKeySequence("Ctrl+6"), self.on_f6),
-        (QKeySequence("Ctrl+1"), self.on_f6),
         (QKeySequence(Qt.Key.Key_F7), self.on_f7),
-        (QKeySequence("Ctrl+7"), self.on_f7),
-        (QKeySequence("Ctrl+2"), self.on_f7),
         (QKeySequence(Qt.Key.Key_F8), self.on_f8),
-        (QKeySequence("Ctrl+8"), self.on_f8),
-        (QKeySequence("Ctrl+3"), self.on_f8),
         (QKeySequence(Qt.Key.Key_F9), self.on_f9),
-        (QKeySequence("Ctrl+9"), self.on_f9),
-        (QKeySequence("Ctrl+4"), self.on_f9),
     ]:
       sc = QShortcut(seq, self)
       sc.activated.connect(handler)
@@ -585,25 +577,29 @@ class ArtaleExpOverlay(QWidget):
     self.simple_actions_layout.setContentsMargins(0, 0, 0, 0)
     self.simple_actions_layout.setSpacing(btn_gap)
 
+    f6_key = "Fn+F6" if sys.platform == "darwin" else "F6"
+    f7_key = "Fn+F7" if sys.platform == "darwin" else "F7"
+    f8_key = "Fn+F8" if sys.platform == "darwin" else "F8"
+
     self.simple_btn_f7 = SmoothButton(
         "", parent=self.simple_actions_widget, icon_name="play"
     )
     self.simple_btn_f7.setFixedSize(btn_sz, btn_sz)
-    self.simple_btn_f7.setToolTip("開始/暫停 [F7/Ctrl+7]")
+    self.simple_btn_f7.setToolTip(f"開始/暫停 [{f7_key}]")
     self.simple_btn_f7.clicked.connect(self.on_f7)
 
     self.simple_btn_f8 = SmoothButton(
         "", parent=self.simple_actions_widget, icon_name="reset"
     )
     self.simple_btn_f8.setFixedSize(btn_sz, btn_sz)
-    self.simple_btn_f8.setToolTip("重置 [F8/Ctrl+8]")
+    self.simple_btn_f8.setToolTip(f"重置 [{f8_key}]")
     self.simple_btn_f8.clicked.connect(self.on_f8)
 
     self.simple_btn_auto_start = SmoothButton(
         "", parent=self.simple_actions_widget, icon_name="autostart"
     )
     self.simple_btn_auto_start.setFixedSize(btn_sz, btn_sz)
-    self.simple_btn_auto_start.setToolTip("自動開始 [F6/Ctrl+6]")
+    self.simple_btn_auto_start.setToolTip(f"自動開始 [{f6_key}]")
     self.simple_btn_auto_start.clicked.connect(self._toggle_auto_start)
 
     self.simple_actions_layout.addWidget(self.simple_btn_f7)
@@ -765,9 +761,6 @@ class ArtaleExpOverlay(QWidget):
       act_f8.triggered.connect(self.on_f8)
       act_f9 = hk_menu.addAction("切換模式\tFn+F9")
       act_f9.triggered.connect(self.on_f9)
-      hk_menu.addSeparator()
-      act_alt = hk_menu.addAction("備用快捷鍵: Ctrl+6 ~ Ctrl+9")
-      act_alt.setEnabled(False)
     else:
       act_f6 = hk_menu.addAction("自動開始\tF6")
       act_f6.triggered.connect(self.on_f6)
@@ -777,9 +770,6 @@ class ArtaleExpOverlay(QWidget):
       act_f8.triggered.connect(self.on_f8)
       act_f9 = hk_menu.addAction("切換模式\tF9")
       act_f9.triggered.connect(self.on_f9)
-      hk_menu.addSeparator()
-      act_alt = hk_menu.addAction("備用快捷鍵: Ctrl+6 ~ Ctrl+9")
-      act_alt.setEnabled(False)
 
     menu.addSeparator()
 
@@ -1477,19 +1467,16 @@ class ArtaleExpOverlay(QWidget):
 
   def keyPressEvent(self, event):
     key = event.key()
-    modifiers = event.modifiers()
-    is_ctrl = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
-
-    if key == Qt.Key.Key_F6 or (is_ctrl and key == Qt.Key.Key_6):
+    if key == Qt.Key.Key_F6:
       self.on_f6()
       event.accept()
-    elif key == Qt.Key.Key_F7 or (is_ctrl and key == Qt.Key.Key_7):
+    elif key == Qt.Key.Key_F7:
       self.on_f7()
       event.accept()
-    elif key == Qt.Key.Key_F8 or (is_ctrl and key == Qt.Key.Key_8):
+    elif key == Qt.Key.Key_F8:
       self.on_f8()
       event.accept()
-    elif key == Qt.Key.Key_F9 or (is_ctrl and key == Qt.Key.Key_9):
+    elif key == Qt.Key.Key_F9:
       self.on_f9()
       event.accept()
     else:
@@ -1593,9 +1580,10 @@ class ArtaleExpOverlay(QWidget):
       self.btn_f7.set_custom_style(None, None, None)
 
     if hasattr(self, "simple_btn_f7"):
+      f7_key = "Fn+F7" if sys.platform == "darwin" else "F7"
       if self.engine.is_running:
         self.simple_btn_f7.set_icon_name("pause")
-        self.simple_btn_f7.setToolTip("暫停測速 [F7/Ctrl+7]")
+        self.simple_btn_f7.setToolTip(f"暫停測速 [{f7_key}]")
         self.simple_btn_f7.set_custom_style(
             bg=QColor(239, 68, 68, 38),
             border=QColor(239, 68, 68, 80),
@@ -1603,7 +1591,7 @@ class ArtaleExpOverlay(QWidget):
         )
       elif self.engine.is_paused:
         self.simple_btn_f7.set_icon_name("play")
-        self.simple_btn_f7.setToolTip("繼續測速 [F7/Ctrl+7]")
+        self.simple_btn_f7.setToolTip(f"繼續測速 [{f7_key}]")
         self.simple_btn_f7.set_custom_style(
             bg=QColor(16, 185, 129, 38),
             border=QColor(52, 211, 153, 80),
@@ -1611,7 +1599,7 @@ class ArtaleExpOverlay(QWidget):
         )
       else:
         self.simple_btn_f7.set_icon_name("play")
-        self.simple_btn_f7.setToolTip("開始測速 [F7/Ctrl+7]")
+        self.simple_btn_f7.setToolTip(f"開始測速 [{f7_key}]")
         self.simple_btn_f7.set_custom_style(None, None, None)
 
     # Values in detailed mode (same rows are reused in game mode!)

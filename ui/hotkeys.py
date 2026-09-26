@@ -3,7 +3,7 @@
 Complies with the Google Python Style Guide.
 On Windows: Uses Win32 RegisterHotKey to listen globally without polling.
 On macOS: Uses native Carbon RegisterEventHotKey to listen system-wide without requiring accessibility permissions.
-Supports both standard function keys (F6~F9) and non-Fn keys (Ctrl+6~9, Ctrl+1~4).
+Supports standard function keys (F6~F9 on Windows, Fn+F6~F9 on macOS).
 """
 
 import ctypes
@@ -164,28 +164,12 @@ class MacOSCarbonHotkeys:
         logger.warning("Carbon InstallApplicationEventHandler returned status %d", res)
         return
 
-      # Carbon Modifiers:
-      control_key = 0x1000  # 4096 (Control / ⌃)
-
-      # Keycodes:
-      # F6: 97, F7: 98, F8: 100, F9: 101
-      # 6: 22, 7: 26, 8: 28, 9: 25
+      # Keycodes: F6: 97, F7: 98, F8: 100, F9: 101
       HOTKEY_SPECS = [
-          # Action 1006: Auto-Start (F6 / Fn+F6, or fallback Ctrl+6)
           (1006, 97, 0, "F6 / Fn+F6"),
-          (1006, 22, control_key, "Ctrl+6"),
-
-          # Action 1007: Start/Pause (F7 / Fn+F7, or fallback Ctrl+7)
           (1007, 98, 0, "F7 / Fn+F7"),
-          (1007, 26, control_key, "Ctrl+7"),
-
-          # Action 1008: Reset (F8 / Fn+F8, or fallback Ctrl+8)
           (1008, 100, 0, "F8 / Fn+F8"),
-          (1008, 28, control_key, "Ctrl+8"),
-
-          # Action 1009: Mode Switch (F9 / Fn+F9, or fallback Ctrl+9)
           (1009, 101, 0, "F9 / Fn+F9"),
-          (1009, 25, control_key, "Ctrl+9"),
       ]
 
       self.action_map.clear()
@@ -276,29 +260,20 @@ class HotkeyWorker(QThread):
     user32.RegisterHotKey(0, 1008, mod_norepeat, 0x77)
     user32.RegisterHotKey(0, 1009, mod_norepeat, 0x78)
 
-    # Non-Fn: Ctrl+6..Ctrl+9
-    user32.RegisterHotKey(0, 2006, mod_control | mod_norepeat, 0x36)
-    user32.RegisterHotKey(0, 2007, mod_control | mod_norepeat, 0x37)
-    user32.RegisterHotKey(0, 2008, mod_control | mod_norepeat, 0x38)
-    user32.RegisterHotKey(0, 2009, mod_control | mod_norepeat, 0x39)
-
-    registered_ids = [
-        1006, 1007, 1008, 1009,
-        2006, 2007, 2008, 2009,
-    ]
+    registered_ids = [1006, 1007, 1008, 1009]
 
     msg = ctypes.wintypes.MSG()
     while self.running:
       if user32.PeekMessageW(ctypes.byref(msg), 0, 0, 0, 1):  # PM_REMOVE
         if msg.message == 0x0312:  # WM_HOTKEY
           hk_id = msg.wParam
-          if hk_id in (1006, 2006):
+          if hk_id == 1006:
             self.f6_pressed.emit()
-          elif hk_id in (1007, 2007):
+          elif hk_id == 1007:
             self.f7_pressed.emit()
-          elif hk_id in (1008, 2008):
+          elif hk_id == 1008:
             self.f8_pressed.emit()
-          elif hk_id in (1009, 2009):
+          elif hk_id == 1009:
             self.f9_pressed.emit()
         elif msg.message == 0x0012:  # WM_QUIT
           break

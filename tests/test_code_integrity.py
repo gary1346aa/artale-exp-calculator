@@ -122,8 +122,7 @@ class TestCodeIntegrity(unittest.TestCase):
       self.assertEqual(mock_lib.GetApplicationEventTarget.restype, ctypes.c_void_p)
       self.assertEqual(mock_lib.InstallApplicationEventHandler.restype, ctypes.c_int32)
       self.assertEqual(len(mock_lib.InstallApplicationEventHandler.argtypes), 5)
-      self.assertEqual(mock_lib.RegisterEventHotKey.restype, ctypes.c_int32)
-      self.assertEqual(len(hk.action_map), 8)
+      self.assertEqual(len(hk.action_map), 4)
 
       # Verify that action 1006, 1007, 1008, 1009 are all mapped
       action_values = set(hk.action_map.values())
