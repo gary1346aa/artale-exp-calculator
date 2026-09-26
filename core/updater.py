@@ -79,14 +79,26 @@ def select_best_asset(
 
   is_arm = "arm" in machine or "aarch64" in machine
 
+  # Filter out non-archive assets (checksums, manifests, text files, signatures)
+  archive_assets = [
+      a for a in assets
+      if not a.get("name", "").lower().endswith(
+          (".sha256", ".sha512", ".sha1", ".md5", ".txt", ".json", ".sig")
+      )
+  ]
+  if not archive_assets:
+    archive_assets = assets
+
   if sys_platform == "win32":
-    # Prefer Windows x64 zip
-    for a in assets:
+    # Prefer Windows x64 zip / exe
+    for a in archive_assets:
       name = a.get("name", "").lower()
-      if ("win" in name or "windows" in name) and name.endswith(".zip"):
+      if ("win" in name or "windows" in name) and (
+          name.endswith(".zip") or name.endswith(".exe")
+      ):
         return a
     # Fallback to any .zip
-    for a in assets:
+    for a in archive_assets:
       name = a.get("name", "").lower()
       if name.endswith(".zip"):
         return a
@@ -94,27 +106,43 @@ def select_best_asset(
   elif sys_platform == "darwin":
     # Prefer macOS Apple Silicon or Intel based on current ISA
     if is_arm:
-      for a in assets:
+      for a in archive_assets:
         name = a.get("name", "").lower()
-        if ("mac" in name or "darwin" in name) and (
-            "arm64" in name or "apple" in name or "silicon" in name
+        if (
+            ("mac" in name or "darwin" in name)
+            and ("arm64" in name or "apple" in name or "silicon" in name)
+            and (name.endswith(".zip") or name.endswith(".dmg"))
         ):
           return a
     else:
-      for a in assets:
+      for a in archive_assets:
         name = a.get("name", "").lower()
-        if ("mac" in name or "darwin" in name) and (
-            "x86_64" in name or "intel" in name or "x64" in name
+        if (
+            ("mac" in name or "darwin" in name)
+            and ("x86_64" in name or "intel" in name or "x64" in name)
+            and (name.endswith(".zip") or name.endswith(".dmg"))
         ):
           return a
-    # Fallback to any mac asset or zip
-    for a in assets:
+    # Fallback to any mac asset ending with .zip or .dmg
+    for a in archive_assets:
       name = a.get("name", "").lower()
-      if "mac" in name and (name.endswith(".zip") or name.endswith(".dmg")):
+      if ("mac" in name or "darwin" in name) and (
+          name.endswith(".zip") or name.endswith(".dmg")
+      ):
+        return a
+    # Fallback to any .zip
+    for a in archive_assets:
+      name = a.get("name", "").lower()
+      if name.endswith(".zip"):
         return a
 
-  # Generic fallback to first asset
-  return assets[0]
+  # Generic fallback: only return an archive asset
+  for a in archive_assets:
+    name = a.get("name", "").lower()
+    if name.endswith((".zip", ".dmg", ".tar.gz", ".exe")):
+      return a
+
+  return archive_assets[0] if archive_assets else None
 
 
 def get_ssl_context() -> ssl.SSLContext:
@@ -403,11 +431,14 @@ def apply_update_and_restart(
   if target_dir is None:
     if sys.platform == "darwin" and getattr(sys, "frozen", False):
       exe_path = os.path.abspath(sys.executable)
-      parts = exe_path.split(".app")
-      if len(parts) > 1:
-        target_dir = parts[0] + ".app"
-      else:
-        target_dir = config.APP_DIR
+      curr = exe_path
+      found_app = None
+      while curr and curr != os.path.dirname(curr):
+        if curr.endswith(".app"):
+          found_app = curr
+          break
+        curr = os.path.dirname(curr)
+      target_dir = found_app if found_app else config.APP_DIR
     else:
       target_dir = config.APP_DIR
 
@@ -486,7 +517,11 @@ NEW_APP=$(find "$TMP_DIR" -maxdepth 2 -name "ArtaleExpCalculator.app" | head -n 
 
 if [ -n "$NEW_APP" ]; then
     rm -rf "$TARGET"
-    cp -R "$NEW_APP" "$TARGET"
+    if command -v ditto >/dev/null 2>&1; then
+        ditto "$NEW_APP" "$TARGET"
+    else
+        cp -a "$NEW_APP" "$TARGET"
+    fi
     xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
 fi
 

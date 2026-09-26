@@ -36,8 +36,10 @@ class TestUpdater(unittest.TestCase):
 
   def test_select_best_asset_windows(self):
     assets = [
+        {"name": "ArtaleExpCalculator-win-x64.sha256", "browser_download_url": "http://win-sha"},
         {"name": "ArtaleExpCalculator-mac-arm64.zip", "browser_download_url": "http://mac"},
         {"name": "ArtaleExpCalculator-win-x64.zip", "browser_download_url": "http://win"},
+        {"name": "latest.json", "browser_download_url": "http://json"},
     ]
     selected = select_best_asset(assets, sys_platform="win32", machine="AMD64")
     self.assertIsNotNone(selected)
@@ -45,9 +47,11 @@ class TestUpdater(unittest.TestCase):
 
   def test_select_best_asset_macos_arm64(self):
     assets = [
+        {"name": "ArtaleExpCalculator-mac-arm64.sha256", "browser_download_url": "http://mac-sha"},
         {"name": "ArtaleExpCalculator-mac-x86_64.zip", "browser_download_url": "http://mac-intel"},
         {"name": "ArtaleExpCalculator-mac-arm64.zip", "browser_download_url": "http://mac-arm"},
         {"name": "ArtaleExpCalculator-win-x64.zip", "browser_download_url": "http://win"},
+        {"name": "latest.json", "browser_download_url": "http://json"},
     ]
     selected = select_best_asset(assets, sys_platform="darwin", machine="arm64")
     self.assertIsNotNone(selected)
@@ -55,6 +59,7 @@ class TestUpdater(unittest.TestCase):
 
   def test_select_best_asset_macos_intel(self):
     assets = [
+        {"name": "ArtaleExpCalculator-mac-x86_64.sha256", "browser_download_url": "http://mac-sha"},
         {"name": "ArtaleExpCalculator-mac-x86_64.zip", "browser_download_url": "http://mac-intel"},
         {"name": "ArtaleExpCalculator-mac-arm64.zip", "browser_download_url": "http://mac-arm"},
     ]

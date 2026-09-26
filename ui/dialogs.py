@@ -251,10 +251,21 @@ class UpdateDownloadWorker(QThread):
           self.dest_path,
           progress_callback=lambda d, t: self.progress.emit(d, t),
       )
-      if success:
-        self.finished.emit(True, self.dest_path)
-      else:
+      if not success:
         self.finished.emit(False, "下載失敗，請檢查網路連線")
+        return
+
+      if self.dest_path.endswith(".zip"):
+        import zipfile
+        if not zipfile.is_zipfile(self.dest_path):
+          try:
+            os.remove(self.dest_path)
+          except OSError:
+            pass
+          self.finished.emit(False, "下載的更新檔案損毀或不是有效的壓縮檔 (ZIP corrupt)")
+          return
+
+      self.finished.emit(True, self.dest_path)
     except Exception as e:
       logger.error("Download worker exception: %s", e)
       self.finished.emit(False, f"下載發生錯誤: {e}")
