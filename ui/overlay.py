@@ -154,10 +154,26 @@ class ArtaleExpOverlay(QWidget):
 
   def _init_window_flags(self):
     flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
-    if sys.platform != "darwin":
-      flags |= Qt.WindowType.Tool
     self.setWindowFlags(flags)
     self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+  def _setup_windows_overlay_behavior(self) -> None:
+    """Configures Windows HWND styles to ensure presence in taskbar and OBS capture."""
+    if sys.platform != "win32":
+      return
+    try:
+      import ctypes
+      hwnd = int(self.winId())
+      GWL_EXSTYLE = -20
+      WS_EX_TOOLWINDOW = 0x00000080
+      WS_EX_APPWINDOW = 0x00040000
+      user32 = ctypes.windll.user32
+      style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+      style = (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
+      user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+      user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0020)
+    except Exception as e:
+      logger.debug("Failed to set Windows app window style: %s", e)
 
   def _setup_macos_overlay_behavior(self) -> None:
     """Configures macOS Cocoa NSWindow to stay floating and never hide on deactivate."""
@@ -217,6 +233,7 @@ class ArtaleExpOverlay(QWidget):
   def showEvent(self, event) -> None:
     super().showEvent(event)
     self._setup_macos_overlay_behavior()
+    self._setup_windows_overlay_behavior()
 
   def _init_ui(self):
     self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
