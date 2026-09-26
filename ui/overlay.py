@@ -521,23 +521,7 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.addWidget(self.slider_panel)
     self.slider_panel.hide()
 
-    # 6. Hotkey Guidance Footer
-    self.lbl_hotkey_hint = QLabel(
-        "[F6] 自動開始  [F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
-    )
-    self.lbl_hotkey_hint.setStyleSheet(f"""
-            QLabel {{
-                color: #64748b;
-                font-size: 11px;
-                font-family: {FONT_FAMILY};
-                padding-top: 4px;
-                background: transparent;
-            }}
-        """)
-    self.lbl_hotkey_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    self.card_layout.addWidget(self.lbl_hotkey_hint)
-
-    # 7. Copyright Footer (strictly visible in Full Mode at bottom-right)
+    # 6. Copyright Footer (strictly visible in Full Mode at bottom-right)
     self.lbl_copyright = QLabel(self.outer_card)
     self.lbl_copyright.setText(
         '<span style="color: #94a3b8;">© 2026 By </span><b style="color:'
@@ -747,18 +731,19 @@ class ArtaleExpOverlay(QWidget):
                 background-color: rgba(255, 255, 255, 0.12);
             }}
         """)
+    f9_key = "Fn+F9" if sys.platform == "darwin" else "F9"
     if self.current_mode == "simple":
-      act_mode = menu.addAction("切換至完整模式 [F9]")
+      act_mode = menu.addAction(f"切換至完整模式 [{f9_key}]")
       act_mode.triggered.connect(self.on_f9)
       act_game = menu.addAction("切換至遊戲模式")
       act_game.triggered.connect(lambda: self._set_mode("game"))
     elif self.current_mode == "game":
-      act_mode = menu.addAction("切換至極簡模式 [F9]")
+      act_mode = menu.addAction(f"切換至極簡模式 [{f9_key}]")
       act_mode.triggered.connect(self.on_f9)
       act_full = menu.addAction("切換至完整模式")
       act_full.triggered.connect(lambda: self._set_mode("full"))
     else:
-      act_mode = menu.addAction("切換至遊戲模式 [F9]")
+      act_mode = menu.addAction(f"切換至遊戲模式 [{f9_key}]")
       act_mode.triggered.connect(self.on_f9)
       act_simple = menu.addAction("切換至極簡模式")
       act_simple.triggered.connect(lambda: self._set_mode("simple"))
@@ -767,6 +752,35 @@ class ArtaleExpOverlay(QWidget):
     action_settings.triggered.connect(
         lambda: QTimer.singleShot(0, self._open_game_mode_settings)
     )
+    menu.addSeparator()
+
+    # Hotkey Submenu ("快捷鍵")
+    hk_menu = menu.addMenu("快捷鍵")
+    if sys.platform == "darwin":
+      act_f6 = hk_menu.addAction("自動開始\tFn+F6")
+      act_f6.triggered.connect(self.on_f6)
+      act_f7 = hk_menu.addAction("開始 / 暫停\tFn+F7")
+      act_f7.triggered.connect(self.on_f7)
+      act_f8 = hk_menu.addAction("重置測速\tFn+F8")
+      act_f8.triggered.connect(self.on_f8)
+      act_f9 = hk_menu.addAction("切換模式\tFn+F9")
+      act_f9.triggered.connect(self.on_f9)
+      hk_menu.addSeparator()
+      act_alt = hk_menu.addAction("備用快捷鍵: Ctrl+6 ~ Ctrl+9")
+      act_alt.setEnabled(False)
+    else:
+      act_f6 = hk_menu.addAction("自動開始\tF6")
+      act_f6.triggered.connect(self.on_f6)
+      act_f7 = hk_menu.addAction("開始 / 暫停\tF7")
+      act_f7.triggered.connect(self.on_f7)
+      act_f8 = hk_menu.addAction("重置測速\tF8")
+      act_f8.triggered.connect(self.on_f8)
+      act_f9 = hk_menu.addAction("切換模式\tF9")
+      act_f9.triggered.connect(self.on_f9)
+      hk_menu.addSeparator()
+      act_alt = hk_menu.addAction("備用快捷鍵: Ctrl+6 ~ Ctrl+9")
+      act_alt.setEnabled(False)
+
     menu.addSeparator()
 
     # UI Scale submenu
@@ -986,7 +1000,6 @@ class ArtaleExpOverlay(QWidget):
       self.sep1.hide()
       self.details_container.hide()
       self.slider_panel.hide()
-      self.lbl_hotkey_hint.hide()
       self.lbl_copyright.hide()
 
       # Set pill card padding: comfortable padding so the dot and content sit nicely inside the capsule curve
@@ -1066,10 +1079,7 @@ class ArtaleExpOverlay(QWidget):
         self.lbl_title.hide()
         self.btn_f9.setText("")
         self.btn_f9.set_icon_name("simple_mode")
-        self.btn_f9.setToolTip("切換至極簡模式 [F9]")
-        self.lbl_hotkey_hint.setText(
-            "[F6] 自動開始  [F7] 暫停  [F8] 重置  [F9] 極簡模式"
-        )
+        self.btn_f9.setToolTip(f"切換至極簡模式 [{'Fn+F9' if sys.platform == 'darwin' else 'F9'}]")
         self.lbl_copyright.hide()
 
         for key in self.game_mode_items:
@@ -1084,10 +1094,7 @@ class ArtaleExpOverlay(QWidget):
         self.lbl_title.show()
         self.btn_f9.setText("")
         self.btn_f9.set_icon_name("game_mode")
-        self.btn_f9.setToolTip("切換遊戲模式 [F9]")
-        self.lbl_hotkey_hint.setText(
-            "[F6] 自動開始  [F7] 開始/暫停  [F8] 重置  [F9] 遊戲模式"
-        )
+        self.btn_f9.setToolTip(f"切換遊戲模式 [{'Fn+F9' if sys.platform == 'darwin' else 'F9'}]")
         self.lbl_copyright.show()
 
         for key in self.game_mode_order:
@@ -1136,11 +1143,10 @@ class ArtaleExpOverlay(QWidget):
     self.update()
 
   def _update_focus_visibility(self):
-    """Updates visibility of focus-dependent components (sliders, and in game mode: header & hotkey footer)."""
+    """Updates visibility of focus-dependent components (sliders, and in game mode: header)."""
     if self.current_mode == "simple":
       self.slider_panel.hide()
       self.header_widget.hide()
-      self.lbl_hotkey_hint.hide()
       self.lbl_copyright.hide()
       self._update_simple_mode_focus_state()
       return
@@ -1154,8 +1160,8 @@ class ArtaleExpOverlay(QWidget):
       if not (self.slider_scale.isSliderDown() or self.slider_opacity.isSliderDown()):
         self.slider_panel.hide()
 
-    # 2. In Game Mode: Header bar (badge + buttons) and Footer hotkey hint
-    # are hidden when window loses focus, and shown when window has focus.
+    # 2. In Game Mode: Header bar (badge + buttons)
+    # is hidden when window loses focus, and shown when window has focus.
     # When expanding/collapsing at top, anchor window position so Auto Start and metrics never jump on screen.
     h_delta = self.header_widget.sizeHint().height() + self.card_layout.spacing()
     if self.current_mode == "game":
@@ -1163,14 +1169,12 @@ class ArtaleExpOverlay(QWidget):
       if is_active:
         was_hidden = not self.header_widget.isVisible()
         self.header_widget.show()
-        self.lbl_hotkey_hint.show()
         if was_hidden and not getattr(self, "_is_shifted_up", False):
           self.move(self.x(), self.y() - h_delta)
           self._is_shifted_up = True
       else:
         was_visible = self.header_widget.isVisible()
         self.header_widget.hide()
-        self.lbl_hotkey_hint.hide()
         if was_visible and getattr(self, "_is_shifted_up", False):
           self.move(self.x(), self.y() + h_delta)
           self._is_shifted_up = False
@@ -1179,7 +1183,6 @@ class ArtaleExpOverlay(QWidget):
         self.move(self.x(), self.y() + h_delta)
         self._is_shifted_up = False
       self.header_widget.show()
-      self.lbl_hotkey_hint.show()
       if is_active:
         self.lbl_copyright.show()
       else:
@@ -1396,19 +1399,7 @@ class ArtaleExpOverlay(QWidget):
     auto_font.setPixelSize(auto_start_font_size)
     self.btn_auto_start.setFont(auto_font)
 
-    # 7. Hotkey guidance footer
-    hint_size = max(9, int(11 * s))
-    self.lbl_hotkey_hint.setStyleSheet(f"""
-        QLabel {{
-            color: #64748b;
-            font-size: {hint_size}px;
-            font-family: {FONT_CHINESE};
-            padding-top: {max(2, int(4 * s))}px;
-            background-color: #0e121c;
-        }}
-    """)
-
-    # 8. Copyright footer
+    # 7. Copyright footer
     cr_size = max(9, int(11 * s))
     self.lbl_copyright.setStyleSheet(f"""
         QLabel {{

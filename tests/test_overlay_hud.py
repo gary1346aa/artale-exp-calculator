@@ -227,25 +227,23 @@ class TestOverlayHud(unittest.TestCase):
     self.assertEqual(self.overlay.lbl_opacity_val.text(), "0%")
     self.assertAlmostEqual(self.overlay.windowOpacity(), 1.0)
 
-  def test_game_mode_focus_header_footer_hidden(self):
-    """Verify that in game mode, header bar and footer hotkey hint hide when not focused."""
+  def test_game_mode_focus_header_hidden(self):
+    """Verify that in game mode, header bar hides when not focused."""
     self.overlay.on_f9()  # Enter Game Mode
     self.assertTrue(self.overlay.is_game_mode)
 
-    # When unfocused: header, footer, and sliders must be hidden
+    # When unfocused: header and sliders must be hidden
     self.overlay._update_focus_visibility()
     if not self.overlay.isActiveWindow():
       self.assertFalse(self.overlay.header_widget.isVisible())
-      self.assertFalse(self.overlay.lbl_hotkey_hint.isVisible())
       self.assertFalse(self.overlay.slider_panel.isVisible())
 
-    # In Full Mode, header and footer are always visible even when unfocused
+    # In Full Mode, header is always visible even when unfocused
     self.overlay.on_f9()  # To Simple Mode
     self.overlay.on_f9()  # To Full Mode
     self.assertEqual(self.overlay.current_mode, "full")
     self.assertFalse(self.overlay.is_game_mode)
     self.assertTrue(self.overlay.header_widget.isVisible())
-    self.assertTrue(self.overlay.lbl_hotkey_hint.isVisible())
 
   def test_accum_exp_color_tiers_and_other_metrics_uncolored(self):
     """Verify that only 累計經驗 has dynamic colors across 7 tiers, and other metrics are uncolored."""
@@ -309,7 +307,6 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.sub_widget.isVisible())
     self.assertFalse(self.overlay.details_container.isVisible())
     self.assertFalse(self.overlay.slider_panel.isVisible())
-    self.assertFalse(self.overlay.lbl_hotkey_hint.isVisible())
     self.assertTrue(self.overlay.outer_card.is_pill)
 
     # Verify Simple Mode shows the three requested items, status dot, and auto-start button
@@ -651,8 +648,53 @@ class TestOverlayHud(unittest.TestCase):
       event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10))
       self.overlay.contextMenuEvent(event)
 
+    self.assertIn("快捷鍵", actions_seen)
     self.assertIn("關於...", actions_seen)
     self.assertIn("關閉程式", actions_seen)
+
+  def test_context_menu_shortcuts_section(self):
+    """Verifies that 快捷鍵 submenu displays platform-specific keys and triggers callbacks."""
+    from unittest.mock import patch
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtGui import QContextMenuEvent
+
+    # Test macOS submenu structure
+    sub_actions_mac = []
+    def fake_exec_mac(menu_self, pos=None):
+      for act in menu_self.actions():
+        if act.text() == "快捷鍵" and act.menu():
+          for sub_act in act.menu().actions():
+            sub_actions_mac.append(sub_act.text())
+      return None
+
+    with patch("PyQt6.QtWidgets.QMenu.exec", new=fake_exec_mac), patch("sys.platform", "darwin"):
+      event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10))
+      self.overlay.contextMenuEvent(event)
+
+    self.assertTrue(any("Fn+F6" in text for text in sub_actions_mac))
+    self.assertTrue(any("Fn+F7" in text for text in sub_actions_mac))
+    self.assertTrue(any("Fn+F8" in text for text in sub_actions_mac))
+    self.assertTrue(any("Fn+F9" in text for text in sub_actions_mac))
+    self.assertTrue(any("Ctrl+6" in text for text in sub_actions_mac))
+
+    # Test Windows submenu structure
+    sub_actions_win = []
+    def fake_exec_win(menu_self, pos=None):
+      for act in menu_self.actions():
+        if act.text() == "快捷鍵" and act.menu():
+          for sub_act in act.menu().actions():
+            sub_actions_win.append(sub_act.text())
+      return None
+
+    with patch("PyQt6.QtWidgets.QMenu.exec", new=fake_exec_win), patch("sys.platform", "win32"):
+      event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10))
+      self.overlay.contextMenuEvent(event)
+
+    self.assertTrue(any("F6" in text and "Fn" not in text for text in sub_actions_win))
+    self.assertTrue(any("F7" in text and "Fn" not in text for text in sub_actions_win))
+    self.assertTrue(any("F8" in text and "Fn" not in text for text in sub_actions_win))
+    self.assertTrue(any("F9" in text and "Fn" not in text for text in sub_actions_win))
+    self.assertTrue(any("Ctrl+6" in text for text in sub_actions_win))
 
   def test_keypress_event_shortcuts(self):
     """Verifies that keyPressEvent triggers correct handlers for F-keys and Ctrl+6..9 shortcuts."""
