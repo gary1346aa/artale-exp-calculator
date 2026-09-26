@@ -5,10 +5,13 @@ Modularized UI layer interfacing with core.metrics and core.capture.
 """
 
 import json
+import logging
 import os
 import sys
 import time
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from PyQt6.QtCore import (
     QEvent,
@@ -99,9 +102,10 @@ class ArtaleExpOverlay(QWidget):
   def is_game_mode(self, val: bool):
     self.current_mode = "game" if val else "full"
 
-  def __init__(self):
+  def __init__(self, load_config: bool = True):
     super().__init__()
     init_application_fonts()
+    self._is_initializing = True
     self.engine = ExpMetricsEngine()
     self.current_mode = "full"  # "full", "game", "simple"
     self.game_mode_order = list(ALL_METRIC_KEYS)
@@ -116,10 +120,21 @@ class ArtaleExpOverlay(QWidget):
     self.sim_speed: float = 1.0
     self.sim_video_path: Optional[str] = None
     self._is_locked: bool = False
+    self.saved_x: int = 120
+    self.saved_y: int = 120
+
+    if load_config:
+      self._load_config()
 
     self._init_window_flags()
     self._init_ui()
-    self._load_config()
+
+    self.setWindowOpacity(self.opacity_val)
+    self.move(self.saved_x, self.saved_y)
+    self._apply_scaling()
+    self._apply_game_mode()
+    self._update_auto_start_button_style(self.engine.auto_start_enabled)
+    self._is_initializing = False
 
     qapp = QApplication.instance()
     if qapp:
@@ -619,8 +634,6 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.addWidget(self.simple_widget)
     self.simple_widget.hide()
 
-    self._apply_game_mode()
-
   def _create_separator(self) -> QFrame:
     sep = QFrame()
     sep.setFrameShape(QFrame.Shape.HLine)
@@ -659,6 +672,7 @@ class ArtaleExpOverlay(QWidget):
     if self.current_mode == "simple":
       self._update_simple_mode_focus_state()
     self._refresh_ui()
+    self._save_config()
 
   def on_f6(self):
     """F6 Hotkey handler: Toggle auto start."""
@@ -1689,27 +1703,58 @@ class ArtaleExpOverlay(QWidget):
       if config_path:
         with open(config_path, "r", encoding="utf-8") as f:
           cfg = json.load(f)
-          x, y = cfg.get("x", 120), cfg.get("y", 120)
-          self.move(x, y)
+          self.saved_x = int(cfg.get("x", 120))
+          self.saved_y = int(cfg.get("y", 120))
+
+          # Screen visibility check
+          screens = QApplication.screens()
+          is_visible_on_screen = False
+          for sc in screens:
+            geom = sc.availableGeometry()
+            if geom.adjusted(-200, -100, 100, 100).contains(self.saved_x, self.saved_y):
+              is_visible_on_screen = True
+              break
+          if not is_visible_on_screen and screens:
+            primary = QApplication.primaryScreen()
+            if primary:
+              avail = primary.availableGeometry()
+              self.saved_x = avail.x() + 120
+              self.saved_y = avail.y() + 120
+            else:
+              self.saved_x, self.saved_y = 120, 120
+
           if "ui_mode" in cfg:
-            self.current_mode = cfg["ui_mode"]
+            self.current_mode = str(cfg["ui_mode"])
           elif cfg.get("is_game_mode", False):
             self.current_mode = "game"
           else:
             self.current_mode = "full"
-          self.game_mode_order = cfg.get(
-              "game_mode_order", list(ALL_METRIC_KEYS)
-          )
+          if self.current_mode not in ("full", "game", "simple"):
+            self.current_mode = "full"
+
+          raw_order = cfg.get("game_mode_order", list(ALL_METRIC_KEYS))
+          if isinstance(raw_order, list):
+            self.game_mode_order = [k for k in raw_order if k in ALL_METRIC_KEYS]
+          else:
+            self.game_mode_order = list(ALL_METRIC_KEYS)
           for k in ALL_METRIC_KEYS:
             if k not in self.game_mode_order:
               self.game_mode_order.append(k)
-          self.game_mode_items = cfg.get(
-              "game_mode_items", list(DEFAULT_GAME_MODE_KEYS)
-          )
-          self.ui_scale = cfg.get("ui_scale", 1.0)
-          self.opacity_val = cfg.get("opacity", 0.95)
+
+          raw_items = cfg.get("game_mode_items", list(DEFAULT_GAME_MODE_KEYS))
+          if isinstance(raw_items, list):
+            self.game_mode_items = [k for k in raw_items if k in ALL_METRIC_KEYS]
+          else:
+            self.game_mode_items = list(DEFAULT_GAME_MODE_KEYS)
+          if not self.game_mode_items:
+            self.game_mode_items = list(DEFAULT_GAME_MODE_KEYS)
+
+          self.ui_scale = max(0.50, min(2.00, round(float(cfg.get("ui_scale", 1.0)), 2)))
+          self.opacity_val = max(0.20, min(1.00, round(float(cfg.get("opacity", 0.95)), 2)))
+
           if "auto_start" in cfg:
             self.engine.auto_start_enabled = bool(cfg["auto_start"])
+
           self.target_window_name = cfg.get(
               "target_window_name", config.DEFAULT_TARGET_WINDOW
           )
@@ -1717,24 +1762,37 @@ class ArtaleExpOverlay(QWidget):
             self.target_window_name = "MapleStory Worlds"
           self.target_hwnd = cfg.get("target_hwnd", None)
           self.sim_video_path = cfg.get("sim_video_path", None)
-          self.sim_speed = cfg.get("sim_speed", 1.0)
-          self.setWindowOpacity(self.opacity_val)
-          self.slider_scale.setValue(int(round(self.ui_scale * 100)))
-          transparency_pct = int(round((1.0 - self.opacity_val) * 100))
-          self.slider_opacity.setValue(transparency_pct)
-          self.lbl_scale_val.setText(f"{int(round(self.ui_scale * 100))}%")
-          self.lbl_opacity_val.setText(f"{transparency_pct}%")
-          self._apply_scaling()
-          self._apply_game_mode()
+          self.sim_speed = float(cfg.get("sim_speed", 1.0))
       else:
-        self.move(120, 120)
-        self._apply_game_mode()
+        self.saved_x = 120
+        self.saved_y = 120
     except Exception as e:
       logger.warning("Error loading config: %s", e)
-      self.move(120, 120)
+      self.saved_x = 120
+      self.saved_y = 120
+
+    if hasattr(self, "slider_scale"):
+      self.slider_scale.blockSignals(True)
+      self.slider_scale.setValue(int(round(self.ui_scale * 100)))
+      self.slider_scale.blockSignals(False)
+    if hasattr(self, "lbl_scale_val"):
+      self.lbl_scale_val.setText(f"{int(round(self.ui_scale * 100))}%")
+    if hasattr(self, "slider_opacity"):
+      self.slider_opacity.blockSignals(True)
+      self.slider_opacity.setValue(int(round((1.0 - self.opacity_val) * 100)))
+      self.slider_opacity.blockSignals(False)
+    if hasattr(self, "lbl_opacity_val"):
+      self.lbl_opacity_val.setText(f"{int(round((1.0 - self.opacity_val) * 100))}%")
+    if not getattr(self, "_is_initializing", False):
+      self.setWindowOpacity(self.opacity_val)
+      self.move(self.saved_x, self.saved_y)
+      self._apply_scaling()
       self._apply_game_mode()
+      self._update_auto_start_button_style(self.engine.auto_start_enabled)
 
   def _save_config(self):
+    if getattr(self, "_is_initializing", False):
+      return
     try:
       pos_y = self.pos().y()
       if getattr(self, "_is_shifted_up", False):

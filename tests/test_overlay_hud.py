@@ -29,7 +29,7 @@ if app is None:
 class TestOverlayHud(unittest.TestCase):
 
   def setUp(self):
-    self.overlay = ArtaleExpOverlay()
+    self.overlay = ArtaleExpOverlay(load_config=False)
     self.overlay.show()
 
   def tearDown(self):
@@ -653,6 +653,113 @@ class TestOverlayHud(unittest.TestCase):
 
     self.assertIn("關於...", actions_seen)
     self.assertIn("關閉程式", actions_seen)
+
+
+class TestSettingsPersistence(unittest.TestCase):
+  """Validates that settings (size, transparency, order, game mode items, position) persist across sessions."""
+
+  def setUp(self):
+    import tempfile
+    self.test_dir = tempfile.TemporaryDirectory()
+    self.config_path = os.path.join(self.test_dir.name, "hud_config.json")
+
+  def tearDown(self):
+    self.test_dir.cleanup()
+
+  def test_settings_loaded_on_startup(self):
+    """Verify settings are preserved and not wiped out when overlay initializes."""
+    import json
+    from unittest.mock import patch
+
+    custom_cfg = {
+        "x": 240,
+        "y": 160,
+        "ui_mode": "game",
+        "is_game_mode": True,
+        "game_mode_order": [
+            "當前經驗",
+            "EXP 進度條",
+            "練功時長",
+            "1分鐘經驗",
+            "預估10分",
+            "累積10分",
+            "預估60分",
+            "累積60分",
+            "累計經驗",
+            "升級預估時間",
+        ],
+        "game_mode_items": ["當前經驗", "EXP 進度條"],
+        "ui_scale": 1.25,
+        "opacity": 0.70,
+        "auto_start": False,
+        "target_window_name": "MapleStory Worlds-Artale",
+    }
+    with open(self.config_path, "w", encoding="utf-8") as f:
+      json.dump(custom_cfg, f, indent=2)
+
+    with patch("ui.overlay.CONFIG_FILE", self.config_path):
+      overlay = ArtaleExpOverlay(load_config=True)
+      overlay.show()
+
+      # Verify restored state
+      self.assertEqual(overlay.current_mode, "game")
+      self.assertTrue(overlay.is_game_mode)
+      self.assertAlmostEqual(overlay.ui_scale, 1.25, places=2)
+      self.assertAlmostEqual(overlay.opacity_val, 0.70, places=2)
+      self.assertEqual(overlay.game_mode_items, ["當前經驗", "EXP 進度條"])
+      self.assertEqual(overlay.game_mode_order[0], "當前經驗")
+      self.assertFalse(overlay.engine.auto_start_enabled)
+      self.assertEqual(overlay.slider_scale.value(), 125)
+      self.assertEqual(overlay.slider_opacity.value(), 30)
+
+      # Verify config file was NOT overwritten with default values during init
+      with open(self.config_path, "r", encoding="utf-8") as f:
+        saved_after_init = json.load(f)
+      self.assertEqual(saved_after_init["ui_mode"], "game")
+      self.assertAlmostEqual(saved_after_init["ui_scale"], 1.25, places=2)
+      self.assertAlmostEqual(saved_after_init["opacity"], 0.70, places=2)
+      self.assertEqual(saved_after_init["game_mode_items"], ["當前經驗", "EXP 進度條"])
+
+      overlay.close()
+
+  def test_settings_saved_when_modified(self):
+    """Verify modifying scale, opacity, order, and items updates config file."""
+    import json
+    from unittest.mock import patch
+
+    with patch("ui.overlay.CONFIG_FILE", self.config_path):
+      overlay = ArtaleExpOverlay(load_config=False)
+      overlay.show()
+
+      # Modify scale and opacity
+      overlay.set_ui_scale(1.50)
+      overlay.set_ui_opacity(0.80)
+      overlay.game_mode_items = ["練功時長", "預估60分"]
+      overlay.game_mode_order = [
+          "升級預估時間",
+          "當前經驗",
+          "練功時長",
+          "1分鐘經驗",
+          "預估10分",
+          "累積10分",
+          "預估60分",
+          "累積60分",
+          "累計經驗",
+          "EXP 進度條",
+      ]
+      overlay.on_f9()  # Switch to game mode
+      overlay._save_config()
+
+      with open(self.config_path, "r", encoding="utf-8") as f:
+        saved = json.load(f)
+
+      self.assertAlmostEqual(saved["ui_scale"], 1.50, places=2)
+      self.assertAlmostEqual(saved["opacity"], 0.80, places=2)
+      self.assertEqual(saved["ui_mode"], "game")
+      self.assertEqual(saved["game_mode_items"], ["練功時長", "預估60分"])
+      self.assertEqual(saved["game_mode_order"][0], "升級預估時間")
+
+      overlay.close()
 
 
 if __name__ == "__main__":
