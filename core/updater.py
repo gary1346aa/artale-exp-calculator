@@ -414,38 +414,54 @@ def apply_update_and_restart(
   current_pid = os.getpid()
 
   if sys.platform == "win32":
-    bat_content = f"""@echo off
-chcp 65001 >nul
-set PID={current_pid}
-set ARCHIVE="{archive_path}"
-set TARGET="{target_dir}"
+    ps1_content = f"""$ErrorActionPreference = 'SilentlyContinue'
+$pidToWait = {current_pid}
+$archive = '{archive_path}'
+$target = '{target_dir}'
 
-:WAIT_PROCESS
-tasklist /fi "PID eq %PID%" 2>nul | find "%PID%" >nul
-if "%ERRORLEVEL%"=="0" (
-    timeout /t 1 /nobreak >nul
-    goto WAIT_PROCESS
-)
+# 1. Wait up to 10 seconds for current process to exit
+try {{
+    $proc = Get-Process -Id $pidToWait -ErrorAction SilentlyContinue
+    if ($proc) {{
+        $proc.WaitForExit(10000)
+    }}
+}} catch {{}}
 
-rem Extract new archive into target directory
-powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%ARCHIVE%' -DestinationPath '%TARGET%' -Force"
+Start-Sleep -Milliseconds 600
 
-rem Restart main application
-cd /d "%TARGET%"
-start "" "%TARGET%\\ArtaleExpCalculator.exe"
+# 2. Extract update archive into target directory
+try {{
+    Expand-Archive -LiteralPath $archive -DestinationPath $target -Force
+}} catch {{}}
 
-rem Clean up update archive and script
-del "%ARCHIVE%" >nul 2>&1
-(goto) 2>nul & del "%~f0"
+# 3. Restart main application
+$exe = Join-Path $target 'ArtaleExpCalculator.exe'
+if (Test-Path $exe) {{
+    Start-Process -FilePath $exe
+}}
+
+# 4. Clean up update archive and script
+Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 """
-    script_path = os.path.join(tempfile.gettempdir(), f"artale_update_{current_pid}.bat")
+    script_path = os.path.join(tempfile.gettempdir(), f"artale_update_{current_pid}.ps1")
     try:
       with open(script_path, "w", encoding="utf-8") as f:
-        f.write(bat_content)
+        f.write(ps1_content)
 
-      # Launch detached process on Windows
+      # Launch detached hidden PowerShell process on Windows
       subprocess.Popen(
-          ["cmd.exe", "/c", script_path],
+          [
+              "powershell.exe",
+              "-NoProfile",
+              "-NonInteractive",
+              "-WindowStyle",
+              "Hidden",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              script_path,
+          ],
           creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
           close_fds=True,
       )
