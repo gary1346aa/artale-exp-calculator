@@ -401,6 +401,7 @@ class AboutDialog(QDialog):
         QDialog.accept(self)
         qapp = QApplication.instance()
         if qapp:
+          qapp.closeAllWindows()
           qapp.quit()
         else:
           sys.exit(0)

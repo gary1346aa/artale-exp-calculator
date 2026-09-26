@@ -449,7 +449,8 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
       with open(script_path, "w", encoding="utf-8") as f:
         f.write(ps1_content)
 
-      # Launch detached hidden PowerShell process on Windows
+      # Launch hidden background PowerShell process on Windows (CREATE_NO_WINDOW + NEW_PROCESS_GROUP)
+      CREATE_NO_WINDOW = 0x08000000
       subprocess.Popen(
           [
               "powershell.exe",
@@ -462,7 +463,7 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
               "-File",
               script_path,
           ],
-          creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+          creationflags=CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP,
           close_fds=True,
       )
       return True, "更新程序已啟動，正在重啟軟體..."
