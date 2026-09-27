@@ -13,6 +13,7 @@ from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QAbstractSpinBox,
     QApplication,
     QCheckBox,
     QDialog,
@@ -45,7 +46,7 @@ class GameModeSettingsDialog(QDialog):
     super().__init__(parent)
     self.setWindowTitle("遊戲模式設定")
     self.setModal(True)
-    self.setFixedWidth(340)
+    self.setFixedWidth(360)
     self.setStyleSheet(f"""
         QDialog {{
             background-color: #181d28;
@@ -199,21 +200,25 @@ class GameModeSettingsDialog(QDialog):
     layout.addWidget(lbl_ap_title)
 
     ap_row = QHBoxLayout()
-    ap_row.setSpacing(8)
+    ap_row.setSpacing(6)
 
     self.chk_auto_pause = QCheckBox("無經驗獲得時自動暫停", self)
     self.chk_auto_pause.setChecked(bool(auto_pause_enabled))
+    self.chk_auto_pause.setMinimumWidth(170)
 
     lbl_ap_sec = QLabel("閒置秒數：", self)
     self.spin_auto_pause_sec = QSpinBox(self)
     self.spin_auto_pause_sec.setRange(1, 300)
-    self.spin_auto_pause_sec.setSuffix(" 秒")
+    self.spin_auto_pause_sec.setButtonSymbols(
+        QAbstractSpinBox.ButtonSymbols.NoButtons
+    )
+    self.spin_auto_pause_sec.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    self.spin_auto_pause_sec.setFixedWidth(54)
     self.spin_auto_pause_sec.setValue(max(1, min(300, int(auto_pause_seconds))))
     self.spin_auto_pause_sec.setEnabled(bool(auto_pause_enabled))
     self.chk_auto_pause.toggled.connect(self.spin_auto_pause_sec.setEnabled)
 
-    ap_row.addWidget(self.chk_auto_pause)
-    ap_row.addStretch()
+    ap_row.addWidget(self.chk_auto_pause, 1)
     ap_row.addWidget(lbl_ap_sec)
     ap_row.addWidget(self.spin_auto_pause_sec)
     layout.addLayout(ap_row)
