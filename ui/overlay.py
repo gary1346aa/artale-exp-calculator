@@ -726,11 +726,19 @@ class ArtaleExpOverlay(QWidget):
   def _open_game_mode_settings(self):
     """Opens dialog to configure which metric items to show and their order in Game Mode."""
     dialog = GameModeSettingsDialog(
-        self.game_mode_order, self.game_mode_items, self
+        self.game_mode_order,
+        self.game_mode_items,
+        self,
+        auto_pause_enabled=self.engine.auto_pause_enabled,
+        auto_pause_seconds=self.engine.auto_pause_seconds,
     )
     if dialog.exec() == QDialog.DialogCode.Accepted:
       self.game_mode_order = dialog.get_full_order()
       self.game_mode_items = dialog.get_ordered_items()
+      self.engine.set_auto_pause(
+          dialog.get_auto_pause_enabled(),
+          dialog.get_auto_pause_seconds(),
+      )
       self._save_config()
       self._apply_game_mode()
 
@@ -1772,6 +1780,14 @@ class ArtaleExpOverlay(QWidget):
           if "auto_start" in cfg:
             self.engine.auto_start_enabled = bool(cfg["auto_start"])
 
+          auto_pause_en = cfg.get(
+              "auto_pause_enabled", config.DEFAULT_AUTO_PAUSE_ENABLED
+          )
+          auto_pause_sec = cfg.get(
+              "auto_pause_seconds", config.DEFAULT_AUTO_PAUSE_SECONDS
+          )
+          self.engine.set_auto_pause(bool(auto_pause_en), int(auto_pause_sec))
+
           self.target_window_name = cfg.get(
               "target_window_name", config.DEFAULT_TARGET_WINDOW
           )
@@ -1825,6 +1841,12 @@ class ArtaleExpOverlay(QWidget):
           "ui_scale": getattr(self, "ui_scale", 1.0),
           "opacity": getattr(self, "opacity_val", 0.95),
           "auto_start": getattr(self.engine, "auto_start_enabled", True),
+          "auto_pause_enabled": getattr(
+              self.engine, "auto_pause_enabled", config.DEFAULT_AUTO_PAUSE_ENABLED
+          ),
+          "auto_pause_seconds": getattr(
+              self.engine, "auto_pause_seconds", config.DEFAULT_AUTO_PAUSE_SECONDS
+          ),
           "target_window_name": getattr(
               self, "target_window_name", config.DEFAULT_TARGET_WINDOW
           ),

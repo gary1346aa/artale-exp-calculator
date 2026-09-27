@@ -120,9 +120,17 @@ class TestOverlayHud(unittest.TestCase):
         k for k in ALL_METRIC_KEYS if k not in custom_order
     ]
 
-    dlg = GameModeSettingsDialog(full_order, custom_order)
+    dlg = GameModeSettingsDialog(
+        full_order,
+        custom_order,
+        auto_pause_enabled=False,
+        auto_pause_seconds=25,
+    )
     self.assertEqual(dlg.get_full_order(), full_order)
     self.assertEqual(dlg.get_ordered_items(), custom_order)
+    self.assertFalse(dlg.get_auto_pause_enabled())
+    self.assertEqual(dlg.get_auto_pause_seconds(), 25)
+    self.assertFalse(dlg.spin_auto_pause_sec.isEnabled())
 
     # Move item 1 (EXP 進度條) up by 1 position
     dlg.list_widget.setCurrentRow(1)
@@ -141,6 +149,9 @@ class TestOverlayHud(unittest.TestCase):
     dlg._reset_defaults()
     self.assertEqual(dlg.get_full_order(), ALL_METRIC_KEYS)
     self.assertEqual(dlg.get_ordered_items(), DEFAULT_GAME_MODE_KEYS)
+    self.assertTrue(dlg.get_auto_pause_enabled())
+    self.assertEqual(dlg.get_auto_pause_seconds(), 10)
+    self.assertTrue(dlg.spin_auto_pause_sec.isEnabled())
 
   def test_eta_displays_dash_when_not_measuring(self):
     """Verify that 升級預估時間 shows '-' instead of '待機中' when not measuring."""
@@ -794,6 +805,8 @@ class TestSettingsPersistence(unittest.TestCase):
         "ui_scale": 1.25,
         "opacity": 0.70,
         "auto_start": False,
+        "auto_pause_enabled": False,
+        "auto_pause_seconds": 30,
         "target_window_name": "MapleStory Worlds-Artale",
     }
     with open(self.config_path, "w", encoding="utf-8") as f:
@@ -811,6 +824,8 @@ class TestSettingsPersistence(unittest.TestCase):
       self.assertEqual(overlay.game_mode_items, ["當前經驗", "EXP 進度條"])
       self.assertEqual(overlay.game_mode_order[0], "當前經驗")
       self.assertFalse(overlay.engine.auto_start_enabled)
+      self.assertFalse(overlay.engine.auto_pause_enabled)
+      self.assertEqual(overlay.engine.auto_pause_seconds, 30)
       self.assertEqual(overlay.slider_scale.value(), 125)
       self.assertEqual(overlay.slider_opacity.value(), 30)
 
@@ -821,6 +836,8 @@ class TestSettingsPersistence(unittest.TestCase):
       self.assertAlmostEqual(saved_after_init["ui_scale"], 1.25, places=2)
       self.assertAlmostEqual(saved_after_init["opacity"], 0.70, places=2)
       self.assertEqual(saved_after_init["game_mode_items"], ["當前經驗", "EXP 進度條"])
+      self.assertFalse(saved_after_init["auto_pause_enabled"])
+      self.assertEqual(saved_after_init["auto_pause_seconds"], 30)
 
       overlay.close()
 
@@ -836,6 +853,7 @@ class TestSettingsPersistence(unittest.TestCase):
       # Modify scale and opacity
       overlay.set_ui_scale(1.50)
       overlay.set_ui_opacity(0.80)
+      overlay.engine.set_auto_pause(True, 45)
       overlay.game_mode_items = ["練功時長", "預估60分"]
       overlay.game_mode_order = [
           "升級預估時間",
@@ -860,6 +878,8 @@ class TestSettingsPersistence(unittest.TestCase):
       self.assertEqual(saved["ui_mode"], "game")
       self.assertEqual(saved["game_mode_items"], ["練功時長", "預估60分"])
       self.assertEqual(saved["game_mode_order"][0], "升級預估時間")
+      self.assertTrue(saved["auto_pause_enabled"])
+      self.assertEqual(saved["auto_pause_seconds"], 45)
 
       overlay.close()
 

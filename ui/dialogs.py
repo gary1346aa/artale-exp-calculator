@@ -14,6 +14,7 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QDialog,
     QFrame,
     QHBoxLayout,
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
 )
 
@@ -30,10 +32,15 @@ logger = logging.getLogger(__name__)
 
 
 class GameModeSettingsDialog(QDialog):
-  """Dialog allowing the user to select and reorder metrics for Game and Full Mode."""
+  """Dialog allowing the user to select and reorder metrics and configure auto-pause."""
 
   def __init__(
-      self, current_order: List[str], current_items: List[str], parent=None
+      self,
+      current_order: List[str],
+      current_items: List[str],
+      parent=None,
+      auto_pause_enabled: bool = config.DEFAULT_AUTO_PAUSE_ENABLED,
+      auto_pause_seconds: int = config.DEFAULT_AUTO_PAUSE_SECONDS,
   ):
     super().__init__(parent)
     self.setWindowTitle("遊戲模式設定")
@@ -80,6 +87,36 @@ class GameModeSettingsDialog(QDialog):
         QListWidget::indicator:checked {{
             background-color: #10b981;
             border-color: #34d399;
+        }}
+        QCheckBox {{
+            color: #f1f5f9;
+            font-size: 12px;
+            spacing: 6px;
+        }}
+        QCheckBox::indicator {{
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background-color: rgba(255, 255, 255, 0.05);
+        }}
+        QCheckBox::indicator:checked {{
+            background-color: #10b981;
+            border-color: #34d399;
+        }}
+        QSpinBox {{
+            background-color: #111827;
+            color: #f1f5f9;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 12px;
+            font-family: {config.FONT_FAMILY};
+        }}
+        QSpinBox:disabled {{
+            color: #64748b;
+            background-color: rgba(17, 24, 39, 0.5);
+            border-color: rgba(255, 255, 255, 0.08);
         }}
         QPushButton {{
             background-color: rgba(255, 255, 255, 0.1);
@@ -151,6 +188,36 @@ class GameModeSettingsDialog(QDialog):
 
     layout.addLayout(body_layout)
 
+    # Auto-Pause configuration section
+    sep = QFrame(self)
+    sep.setFrameShape(QFrame.Shape.HLine)
+    sep.setStyleSheet("background-color: rgba(255, 255, 255, 0.1); max-height: 1px;")
+    layout.addWidget(sep)
+
+    lbl_ap_title = QLabel("自動暫停設定")
+    lbl_ap_title.setStyleSheet("color: #f1f5f9; font-weight: 700; font-size: 13px;")
+    layout.addWidget(lbl_ap_title)
+
+    ap_row = QHBoxLayout()
+    ap_row.setSpacing(8)
+
+    self.chk_auto_pause = QCheckBox("無經驗獲得時自動暫停", self)
+    self.chk_auto_pause.setChecked(bool(auto_pause_enabled))
+
+    lbl_ap_sec = QLabel("閒置秒數：", self)
+    self.spin_auto_pause_sec = QSpinBox(self)
+    self.spin_auto_pause_sec.setRange(1, 300)
+    self.spin_auto_pause_sec.setSuffix(" 秒")
+    self.spin_auto_pause_sec.setValue(max(1, min(300, int(auto_pause_seconds))))
+    self.spin_auto_pause_sec.setEnabled(bool(auto_pause_enabled))
+    self.chk_auto_pause.toggled.connect(self.spin_auto_pause_sec.setEnabled)
+
+    ap_row.addWidget(self.chk_auto_pause)
+    ap_row.addStretch()
+    ap_row.addWidget(lbl_ap_sec)
+    ap_row.addWidget(self.spin_auto_pause_sec)
+    layout.addLayout(ap_row)
+
     btn_bar = QHBoxLayout()
     btn_bar.setSpacing(8)
 
@@ -198,6 +265,8 @@ class GameModeSettingsDialog(QDialog):
           if name in config.DEFAULT_GAME_MODE_KEYS
           else Qt.CheckState.Unchecked
       )
+    self.chk_auto_pause.setChecked(config.DEFAULT_AUTO_PAUSE_ENABLED)
+    self.spin_auto_pause_sec.setValue(config.DEFAULT_AUTO_PAUSE_SECONDS)
 
   def get_ordered_items(self) -> List[str]:
     selected = [
@@ -212,6 +281,12 @@ class GameModeSettingsDialog(QDialog):
         self.list_widget.item(i).text()
         for i in range(self.list_widget.count())
     ]
+
+  def get_auto_pause_enabled(self) -> bool:
+    return self.chk_auto_pause.isChecked()
+
+  def get_auto_pause_seconds(self) -> int:
+    return int(self.spin_auto_pause_sec.value())
 
 
 from core.updater import (

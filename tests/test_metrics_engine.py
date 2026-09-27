@@ -243,6 +243,91 @@ class TestExpMetricsEngine(unittest.TestCase):
     engine.add_sample(15000, 0.00, timestamp=120.0)
     self.assertEqual(engine.total_gained_exp, 112871)
 
+  def test_auto_pause_triggers_after_timeout_and_auto_resumes(self):
+    """Verifies that Auto-Pause triggers after N seconds of no EXP gain, preserves auto_start_enabled, and resumes on EXP gain."""
+    engine = ExpMetricsEngine()
+    engine.set_auto_start(True)
+    self.assertTrue(engine.auto_pause_enabled)
+    self.assertEqual(engine.auto_pause_seconds, 10)
+
+    # First sample at t=100s
+    engine.add_sample(1000000, 10.0, timestamp=100.0)
+    # EXP gain at t=102s triggers auto-start
+    engine.add_sample(1005000, 10.05, timestamp=102.0)
+    self.assertEqual(engine.state, MeasurementState.RUNNING)
+    self.assertEqual(len(engine.samples), 2)
+
+    # Flat EXP samples at t=105s, 110s (< 10s since t=102s): still RUNNING, no duplicate samples appended
+    engine.add_sample(1005000, 10.05, timestamp=105.0)
+    engine.add_sample(1005000, 10.05, timestamp=111.9)
+    self.assertEqual(engine.state, MeasurementState.RUNNING)
+    self.assertEqual(len(engine.samples), 2)
+    self.assertEqual(engine.latest_sample.timestamp, 102.0)
+
+    # At t=112.0s (exactly 10s since last EXP gain at t=102s): Auto-Pause triggers!
+    engine.add_sample(1005000, 10.05, timestamp=112.0)
+    self.assertEqual(engine.state, MeasurementState.PAUSED)
+    # Auto-start MUST remain enabled so hunting resumes automatically
+    self.assertTrue(engine.auto_start_enabled)
+    # Elapsed time is frozen at t=112.0s (10.0s total elapsed since t=102.0s)
+    self.assertEqual(engine.get_metrics(now=120.0)["練功時長"], "00:00:10")
+
+    # Flat EXP while paused at t=115s must NOT falsely resume measurement
+    engine.add_sample(1005000, 10.05, timestamp=115.0)
+    self.assertEqual(engine.state, MeasurementState.PAUSED)
+
+    # EXP increases at t=120s -> Auto-Start resumes measurement!
+    engine.add_sample(1010000, 10.10, timestamp=120.0)
+    self.assertEqual(engine.state, MeasurementState.RUNNING)
+    self.assertEqual(engine.total_gained_exp, 10000)
+    self.assertEqual(engine.latest_sample.timestamp, 120.0)
+
+  def test_auto_pause_via_get_metrics_and_custom_settings(self):
+    """Verifies that get_metrics(now) also triggers Auto-Pause when no new samples arrive, and respects custom settings."""
+    engine = ExpMetricsEngine()
+    engine.set_auto_pause(True, 15)
+    self.assertTrue(engine.auto_pause_enabled)
+    self.assertEqual(engine.auto_pause_seconds, 15)
+
+    engine.add_sample(1000000, 10.0, timestamp=100.0)
+    engine.start_measurement(timestamp=105.0)
+    # start_measurement refreshes latest_sample.timestamp to 105.0
+    self.assertEqual(engine.latest_sample.timestamp, 105.0)
+
+    # At t=119s (14s without gain): still RUNNING
+    m1 = engine.get_metrics(now=119.0)
+    self.assertEqual(engine.state, MeasurementState.RUNNING)
+    self.assertEqual(m1["state"], MeasurementState.RUNNING.value)
+
+    # At t=120s (15s without gain): get_metrics triggers Auto-Pause
+    m2 = engine.get_metrics(now=120.0)
+    self.assertEqual(engine.state, MeasurementState.PAUSED)
+    self.assertEqual(m2["state"], MeasurementState.PAUSED.value)
+    self.assertEqual(m2["練功時長"], "00:00:15")
+
+    # When auto_pause_enabled is False, it never auto-pauses
+    engine.set_auto_pause(False, 15)
+    engine.start_measurement(timestamp=200.0)
+    engine.get_metrics(now=300.0)
+    self.assertEqual(engine.state, MeasurementState.RUNNING)
+
+  def test_samples_eviction_retains_at_least_one_sample(self):
+    """Verifies sliding window eviction removes samples > 1hr old while retaining at least 1 sample."""
+    engine = ExpMetricsEngine()
+    engine.set_auto_pause(False, 10)
+    engine.add_sample(1000000, 10.0, timestamp=0.0)
+    engine.start_measurement(timestamp=0.0)
+
+    for t in range(60, 4000, 60):
+      exp_val = 1000000 + t * 100
+      exp_pct = exp_val / 100000.0
+      engine.add_sample(exp_val, exp_pct, timestamp=float(t))
+
+    # Samples older than 3960 - 3660 = 300s should be evicted
+    self.assertGreaterEqual(engine.samples[0].timestamp, 3960.0 - 3660.0)
+    self.assertLessEqual(len(engine.samples), 62)
+
 
 if __name__ == "__main__":
   unittest.main()
+

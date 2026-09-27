@@ -64,7 +64,7 @@ FONT_FALLBACK: str = "'Google Sans', 'PingFang TC', sans-serif"
 
 # Application metadata & About info
 APP_NAME: str = "Artale EXP Calculator"
-APP_VERSION: str = "1.0.0-rc.26"
+APP_VERSION: str = "1.0.0-rc.27"
 APP_AUTHOR: str = "G8G"
 APP_COPYRIGHT: str = "© 2026 By G8G"
 APP_DISCORD_ID: str = "garyhuang"
@@ -148,6 +148,10 @@ HOTKEY_LABEL_AUTO_START: str = "⌘6" if sys.platform == "darwin" else "F6"
 HOTKEY_LABEL_START_PAUSE: str = "⌘7" if sys.platform == "darwin" else "F7"
 HOTKEY_LABEL_RESET: str = "⌘8" if sys.platform == "darwin" else "F8"
 HOTKEY_LABEL_SWITCH_MODE: str = "⌘9" if sys.platform == "darwin" else "F9"
+
+# Default auto-pause configuration
+DEFAULT_AUTO_PAUSE_ENABLED: bool = True
+DEFAULT_AUTO_PAUSE_SECONDS: int = 10
 
 
 def format_chinese_exp(val: Optional[Union[int, float]]) -> str:

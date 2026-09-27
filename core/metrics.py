@@ -60,6 +60,8 @@ class ExpMetricsEngine:
     # Measurement state
     self.state: MeasurementState = MeasurementState.IDLE
     self.auto_start_enabled: bool = False
+    self.auto_pause_enabled: bool = True
+    self.auto_pause_seconds: int = 10
 
     # Timing
     self.measurement_start_time: Optional[float] = None
@@ -100,6 +102,40 @@ class ExpMetricsEngine:
     self.auto_start_enabled = not self.auto_start_enabled
     return self.auto_start_enabled
 
+  def set_auto_pause(self, enabled: bool, seconds: Optional[int] = None) -> None:
+    """Configures auto-pause enabled status and inactivity threshold in seconds."""
+    self.auto_pause_enabled = bool(enabled)
+    if seconds is not None:
+      self.auto_pause_seconds = max(1, int(seconds))
+
+  def check_auto_pause(self, now: Optional[float] = None) -> bool:
+    """Checks if measurement should auto-pause due to inactivity.
+
+    Uses latest_sample.timestamp (or measurement_start_time if no sample yet)
+    and freezes the timer at `now` while keeping auto_start_enabled intact.
+
+    Args:
+      now: Current epoch timestamp (defaults to time.time()).
+
+    Returns:
+      True if measurement transitioned from RUNNING to PAUSED.
+    """
+    if self.state != MeasurementState.RUNNING or not self.auto_pause_enabled:
+      return False
+    if self.auto_pause_seconds <= 0:
+      return False
+
+    now = now if now is not None else time.time()
+    ref_time = (
+        self.latest_sample.timestamp
+        if self.latest_sample is not None
+        else self.measurement_start_time
+    )
+    if ref_time is not None and (now - ref_time) >= self.auto_pause_seconds:
+      self.pause_measurement(disable_auto_start=False, timestamp=now)
+      return True
+    return False
+
   def start_measurement(self, timestamp: Optional[float] = None) -> bool:
     """Starts or resumes measurement manually (F7) or automatically."""
     now = timestamp if timestamp is not None else time.time()
@@ -111,6 +147,10 @@ class ExpMetricsEngine:
         self.total_paused_duration += now - self.pause_start_time
         self.pause_start_time = None
       self.state = MeasurementState.RUNNING
+      if self.latest_sample is not None:
+        self.latest_sample = ExpSample(
+            now, self.latest_sample.exp_value, self.latest_sample.exp_percent
+        )
       return True
 
     # Starting from IDLE: set new baseline and start timer
@@ -127,7 +167,10 @@ class ExpMetricsEngine:
     if self.latest_sample is not None:
       self.baseline_exp = self.latest_sample.exp_value
       self.baseline_exp_percent = self.latest_sample.exp_percent
-      self.baseline_timestamp = self.latest_sample.timestamp
+      self.baseline_timestamp = now
+      self.latest_sample = ExpSample(
+          now, self.latest_sample.exp_value, self.latest_sample.exp_percent
+      )
       self.samples.append(self.latest_sample)
 
     return True
@@ -135,7 +178,7 @@ class ExpMetricsEngine:
   def pause_measurement(
       self, disable_auto_start: bool = True, timestamp: Optional[float] = None
   ) -> bool:
-    """Pauses the measurement (F7) without clearing current gains."""
+    """Pauses the measurement (F7 or Auto-Pause) without clearing current gains."""
     if self.state == MeasurementState.RUNNING:
       self.state = MeasurementState.PAUSED
       self.pause_start_time = (
@@ -196,8 +239,8 @@ class ExpMetricsEngine:
     """Ingests a newly recognized EXP sample from OCR.
 
     Handles initial EXP capture, baseline tracking, auto-start triggering,
-    mathematical cross-validation against the EXP table, and self-healing
-    cumulative rate calculations.
+    auto-pause inactivity detection, mathematical cross-validation against
+    the EXP table, and self-healing cumulative rate calculations.
 
     Args:
       exp_value: Total EXP points.
@@ -234,24 +277,58 @@ class ExpMetricsEngine:
       self.baseline_exp_percent = exp_percent
       self.baseline_timestamp = now
 
-    # 3. Check Auto-Start trigger when not running
+    # 3. Check Auto-Start trigger when not running (IDLE or PAUSED)
     if self.state != MeasurementState.RUNNING:
+      ref_exp = (
+          self.latest_sample.exp_value
+          if (
+              self.state == MeasurementState.PAUSED
+              and self.latest_sample is not None
+          )
+          else self.baseline_exp
+      )
+      ref_pct = (
+          self.latest_sample.exp_percent
+          if (
+              self.state == MeasurementState.PAUSED
+              and self.latest_sample is not None
+          )
+          else self.baseline_exp_percent
+      )
+
       is_increasing = False
-      if self.baseline_exp is not None and exp_value > self.baseline_exp:
+      if ref_exp is not None and exp_value > ref_exp:
         is_increasing = True
       elif (
-          self.baseline_exp_percent is not None
+          ref_pct is not None
           and exp_percent is not None
-          and exp_percent > self.baseline_exp_percent
+          and exp_percent > ref_pct
+      ):
+        is_increasing = True
+      elif (
+          ref_pct is not None
+          and exp_percent is not None
+          and ref_pct > 85.0
+          and exp_percent < 15.0
       ):
         is_increasing = True
 
       if self.auto_start_enabled and is_increasing:
         self.start_measurement(timestamp=now)
-      elif self.state == MeasurementState.IDLE and not self.auto_start_enabled:
-        self.baseline_exp = exp_value
-        self.baseline_exp_percent = exp_percent
-        self.baseline_timestamp = now
+      else:
+        if self.state == MeasurementState.IDLE and not self.auto_start_enabled:
+          self.baseline_exp = exp_value
+          self.baseline_exp_percent = exp_percent
+          self.baseline_timestamp = now
+        if matched_level is not None:
+          self.current_level = matched_level
+        if (
+            self.latest_sample is None
+            or not self.auto_start_enabled
+            or self.state == MeasurementState.IDLE
+        ):
+          self.latest_sample = sample
+        return True
 
       if matched_level is not None:
         self.current_level = matched_level
@@ -262,6 +339,7 @@ class ExpMetricsEngine:
         if matched_level is not None:
           self.current_level = matched_level
         self.samples.append(sample)
+        self.latest_sample = sample
       else:
         prev = self.latest_sample if self.latest_sample else self.samples[-1]
         delta_exp = sample.exp_value - prev.exp_value
@@ -345,23 +423,39 @@ class ExpMetricsEngine:
               0.0, sample.exp_percent - self.baseline_exp_percent
           )
 
-        self.samples.append(sample)
+        has_gained = is_level_up or delta_exp > 0 or delta_pct > 0.0
+        if has_gained:
+          self.samples.append(sample)
+          self.latest_sample = sample
+        else:
+          self.check_auto_pause(now=now)
 
-      # Evict samples older than rolling window buffer
+      # Evict samples older than rolling window buffer while keeping at least 1 sample
       cutoff = now - self.window_seconds - 60
-      while self.samples and self.samples[0].timestamp < cutoff:
+      while len(self.samples) > 1 and self.samples[0].timestamp < cutoff:
         self.samples.popleft()
 
-    self.latest_sample = sample
     return True
 
-  def _get_window_gain(self, window_sec: float) -> Tuple[int, float, float]:
+  def _get_window_gain(
+      self, window_sec: float, now: Optional[float] = None
+  ) -> Tuple[int, float, float]:
     """Calculates (gained_exp, gained_pct, effective_seconds) within the last window_sec."""
-    if not self.samples or len(self.samples) < 2:
+    if not self.samples:
       return 0, 0.0, 0.0
 
-    now = self.samples[-1].timestamp
-    cutoff = now - window_sec
+    latest = self.latest_sample if self.latest_sample else self.samples[-1]
+    if now is None:
+      ref_now = latest.timestamp
+    elif (
+        self.state == MeasurementState.PAUSED
+        and self.pause_start_time is not None
+    ):
+      ref_now = self.pause_start_time
+    else:
+      ref_now = max(latest.timestamp, now)
+
+    cutoff = ref_now - window_sec
 
     oldest = None
     for s in self.samples:
@@ -369,11 +463,10 @@ class ExpMetricsEngine:
         oldest = s
         break
 
-    if oldest is None or oldest == self.samples[-1]:
-      oldest = self.samples[0]
+    if oldest is None:
+      return 0, 0.0, 0.0
 
-    latest = self.samples[-1]
-    dt = latest.timestamp - oldest.timestamp
+    dt = ref_now - oldest.timestamp
     if dt <= 0:
       return 0, 0.0, 0.0
 
@@ -410,6 +503,9 @@ class ExpMetricsEngine:
   def get_metrics(self, now: Optional[float] = None) -> Dict[str, Any]:
     """Generates all user-facing metrics formatted in Traditional Chinese."""
     now = now if now is not None else time.time()
+
+    # Check if inactivity threshold has been reached
+    self.check_auto_pause(now=now)
 
     # Active measurement duration
     if (
@@ -469,7 +565,7 @@ class ExpMetricsEngine:
     total_gained_str = accum_exp_str
 
     # 1. 1-minute rate metrics (Instantaneous tachometer)
-    exp_1m, pct_1m, dt_1m = self._get_window_gain(60.0)
+    exp_1m, pct_1m, dt_1m = self._get_window_gain(60.0, now=now)
     if self.state == MeasurementState.IDLE or elapsed <= 0.0:
       rate_1m_exp = 0
       rate_1m_str = "0"
@@ -483,7 +579,7 @@ class ExpMetricsEngine:
     # 2. 10-minute metrics: 累積10分 & 預估10分
     # Cumulative actual gained within 10-min horizon:
     if elapsed >= 600.0:
-      exp_10m_actual, _, _ = self._get_window_gain(600.0)
+      exp_10m_actual, _, _ = self._get_window_gain(600.0, now=now)
       accum_10m_exp = exp_10m_actual
     else:
       accum_10m_exp = self.total_gained_exp
@@ -507,7 +603,7 @@ class ExpMetricsEngine:
     # 3. 60-minute metrics: 累積60分 & 預估60分 (時薪)
     # Cumulative actual gained within 60-min horizon:
     if elapsed >= 3600.0:
-      exp_60m_actual, _, _ = self._get_window_gain(3600.0)
+      exp_60m_actual, _, _ = self._get_window_gain(3600.0, now=now)
       accum_60m_exp = exp_60m_actual
     else:
       accum_60m_exp = self.total_gained_exp
@@ -536,7 +632,7 @@ class ExpMetricsEngine:
           eta_str = "已滿級"
         else:
           if elapsed >= 600.0:
-            _, pct_10m, dt_10m = self._get_window_gain(600.0)
+            _, pct_10m, dt_10m = self._get_window_gain(600.0, now=now)
             rate_pct_sec = (
                 pct_10m / dt_10m
                 if dt_10m > 30.0
@@ -568,6 +664,8 @@ class ExpMetricsEngine:
         "is_paused": self.is_paused,
         "is_idle": self.is_idle,
         "auto_start_enabled": self.auto_start_enabled,
+        "auto_pause_enabled": self.auto_pause_enabled,
+        "auto_pause_seconds": self.auto_pause_seconds,
         "練功時長": duration_str,
         "當前經驗": current_exp_str,
         "啟動初始": initial_exp_str,
