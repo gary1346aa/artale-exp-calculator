@@ -184,11 +184,11 @@ class CaptureWorker(QThread):
           self.frame_parsed.emit(
               exp_val, pct if pct is not None else -1.0, dt_ms
           )
-          self.status_changed.emit("即時辨識鎖定中", True)
+          self.status_changed.emit("已準備就緒", True)
         else:
           self.status_changed.emit("搜尋經驗條中...", False)
       except Exception as e:
-        self.status_changed.emit(f"捕捉異常: {e}", False)
+        self.status_changed.emit(f"辨識異常: {e}", False)
 
   def run(self) -> None:
     """Executes the capture event loop."""
@@ -233,11 +233,11 @@ class CaptureWorker(QThread):
           self.frame_parsed.emit(
               exp_val, pct if pct is not None else -1.0, dt_ms
           )
-          self.status_changed.emit("即時辨識鎖定中", True)
+          self.status_changed.emit("已準備就緒", True)
         else:
           self.status_changed.emit("搜尋經驗條中...", False)
       except Exception as e:
-        self.status_changed.emit(f"捕捉異常: {e}", False)
+        self.status_changed.emit(f"辨識異常: {e}", False)
 
     def on_closed():
       pass
@@ -245,19 +245,13 @@ class CaptureWorker(QThread):
     user32 = ctypes.windll.user32 if sys.platform == "win32" else None
 
     while self.running:
-      win_desc = (
-          self.target_window
-          if self.target_window
-          else f"HWND {self.target_hwnd}"
-      )
-
       # 1. Resolve target HWND
       target_h = self.target_hwnd
       if not target_h and self.target_window:
         target_h = find_window_by_title_safe(self.target_window)
 
       if not target_h or (user32 and not user32.IsWindow(target_h)):
-        self.status_changed.emit(f"尋找視窗 [{win_desc}]...", False)
+        self.status_changed.emit("尋找遊戲視窗...", False)
         for _ in range(10):
           if not self.running:
             break
@@ -266,12 +260,12 @@ class CaptureWorker(QThread):
 
       # If windows_capture is not available, jump directly to GDI fallback
       if not has_windows_capture:
-        self.status_changed.emit(f"連線至視窗 [{win_desc}]...", False)
+        self.status_changed.emit("連線至遊戲視窗...", False)
         self._run_win32_gdi_capture(target_h)
         continue
 
       # 2. Window verified: attach via Windows Graphics Capture
-      self.status_changed.emit(f"連線至視窗 [{win_desc}]...", False)
+      self.status_changed.emit("連線至遊戲視窗...", False)
       try:
         # Tier 1: Optimal settings (no border, no cursor)
         try:
@@ -314,7 +308,7 @@ class CaptureWorker(QThread):
         if self.running and user32 and user32.IsWindow(target_h):
           self._run_win32_gdi_capture(target_h)
         else:
-          self.status_changed.emit(f"捕捉異常: {e}", False)
+          self.status_changed.emit(f"辨識異常: {e}", False)
           for _ in range(10):
             if not self.running:
               break
@@ -329,7 +323,7 @@ class CaptureWorker(QThread):
           find_macos_window_by_title,
       )
     except Exception as e:
-      self.status_changed.emit(f"macOS 捕獲模組初始化失敗: {e}", False)
+      self.status_changed.emit(f"macOS 辨識模組初始化失敗: {e}", False)
       while self.running:
         time.sleep(0.5)
       return
@@ -345,11 +339,6 @@ class CaptureWorker(QThread):
           if self.target_window
           else config.DEFAULT_TARGET_WINDOW
       )
-      win_desc = (
-          win_to_find
-          if not self.target_hwnd
-          else f"Window ID {self.target_hwnd}"
-      )
 
       target_id = self.target_hwnd
       if not target_id:
@@ -358,16 +347,14 @@ class CaptureWorker(QThread):
           target_id = find_macos_window_by_title("MapleStory Worlds")
 
       if not target_id:
-        self.status_changed.emit(
-            f"尋找視窗 [{win_desc}]... (或使用 -v 模擬)", False
-        )
+        self.status_changed.emit("尋找遊戲視窗... (或使用 -v 模擬)", False)
         for _ in range(10):
           if not self.running:
             break
           time.sleep(0.1)
         continue
 
-      self.status_changed.emit(f"連線至視窗 [{win_desc}]...", False)
+      self.status_changed.emit("連線至遊戲視窗...", False)
       while self.running:
         now = time.time()
         if now - last_sample_time >= self.sample_interval:
@@ -391,7 +378,7 @@ class CaptureWorker(QThread):
             self.frame_parsed.emit(
                 exp_val, pct if pct is not None else -1.0, dt_ms
             )
-            self.status_changed.emit("即時辨識鎖定中", True)
+            self.status_changed.emit("已準備就緒", True)
           else:
             self.status_changed.emit("搜尋經驗條中...", False)
 

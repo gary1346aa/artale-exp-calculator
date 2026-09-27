@@ -142,6 +142,9 @@ class ArtaleExpOverlay(QWidget):
     self.game_mode_items = list(DEFAULT_GAME_MODE_KEYS)
     self.ui_scale = 1.0
     self.opacity_val = 0.95
+    self.font_weight = config.DEFAULT_FONT_WEIGHT
+    self.base_width = config.DEFAULT_BASE_WIDTH
+    self.row_spacing = config.DEFAULT_ROW_SPACING
     self.drag_position = QPoint()
     self.target_window_name: str = config.DEFAULT_TARGET_WINDOW
     self.target_hwnd: Optional[int] = None
@@ -322,23 +325,11 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.setContentsMargins(14, 12, 14, 12)
     self.card_layout.setSpacing(6)
 
-    # 1. Top Header Bar: Title, State Badge, Window Controls
+    # 1. Top Header Bar: State Badge on left, Window Controls on right
     self.header_widget = QWidget(self.outer_card)
     header_layout = QHBoxLayout(self.header_widget)
     header_layout.setContentsMargins(0, 0, 0, 2)
     header_layout.setSpacing(5)
-
-    self.lbl_title = QLabel("ARTALE EXP")
-    self.lbl_title.setStyleSheet(f"""
-            QLabel {{
-                color: #e2e8f0;
-                font-size: 14px;
-                font-weight: 700;
-                letter-spacing: 0.5px;
-                font-family: {FONT_LATIN};
-                background-color: #0e121c;
-            }}
-        """)
 
     # State Badge: [計時中] / [已暫停] / [待機中]
     self.lbl_state_badge = QLabel("待機中")
@@ -371,7 +362,7 @@ class ArtaleExpOverlay(QWidget):
     self.btn_f9.clicked.connect(self.on_f9)
 
     self.btn_settings = SmoothButton(parent=self, icon_name="settings")
-    self.btn_settings.setToolTip("指標顯示與排列設定")
+    self.btn_settings.setToolTip("設定")
     self.btn_settings.setFixedSize(24, 24)
     self.btn_settings.clicked.connect(self._open_game_mode_settings)
 
@@ -380,7 +371,6 @@ class ArtaleExpOverlay(QWidget):
     self.btn_close.setFixedSize(24, 24)
     self.btn_close.clicked.connect(self.close)
 
-    header_layout.addWidget(self.lbl_title)
     header_layout.addWidget(self.lbl_state_badge)
     header_layout.addStretch()
     header_layout.addWidget(self.btn_f7)
@@ -399,7 +389,7 @@ class ArtaleExpOverlay(QWidget):
     self.status_dot = StatusDotWidget(size=13, parent=self.outer_card)
     self.status_dot.setToolTip("遊戲視窗與經驗條鎖定狀態指示燈")
 
-    self.lbl_status = QLabel("正在連線至遊戲視窗...")
+    self.lbl_status = QLabel("正在初始化")
     self.lbl_status.setStyleSheet(f"""
             QLabel {{
                 color: #64748b;
@@ -432,7 +422,7 @@ class ArtaleExpOverlay(QWidget):
     self.details_container = QWidget(self)
     self.details_layout = QVBoxLayout(self.details_container)
     self.details_layout.setContentsMargins(0, 0, 0, 0)
-    self.details_layout.setSpacing(3)
+    self.details_layout.setSpacing(1)
 
     self.row_duration = MetricRow("練功時長", "00:00:00", self)
     self.row_1m = MetricRow("1分鐘經驗", "0", self)
@@ -470,7 +460,7 @@ class ArtaleExpOverlay(QWidget):
 
     self.card_layout.addWidget(self.details_container)
 
-    # 5. Sliders Panel (Size & Opacity, only shown on mouse hover)
+    # 5. Sliders Panel (Size, Opacity & Thickness, only shown on focus)
     self.slider_panel = QFrame(self.outer_card)
     self.slider_panel.setStyleSheet(f"""
         QFrame {{
@@ -553,24 +543,47 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.addWidget(self.slider_panel)
     self.slider_panel.hide()
 
-    # 6. Copyright Footer (strictly visible in Full Mode at bottom-right)
-    self.lbl_copyright = QLabel(self.outer_card)
+    # 6. Footer Bar (strictly visible in Full Mode: ARTALE EXP on left, Copyright on right)
+    self.footer_widget = QWidget(self.outer_card)
+    footer_layout = QHBoxLayout(self.footer_widget)
+    footer_layout.setContentsMargins(4, 1, 4, 0)
+    footer_layout.setSpacing(6)
+
+    self.lbl_title = QLabel("ARTALE EXP", self.footer_widget)
+    self.lbl_title.setAlignment(
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    )
+    self.lbl_title.setStyleSheet(f"""
+            QLabel {{
+                color: #94a3b8;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.4px;
+                font-family: {FONT_LATIN};
+                background-color: #0e121c;
+            }}
+        """)
+
+    self.lbl_copyright = QLabel(self.footer_widget)
     self.lbl_copyright.setText(
         '<span style="color: #94a3b8;">© 2026 By </span><b style="color:'
         ' #f1f5f9; font-weight: 700;">G8G</b>'
     )
     self.lbl_copyright.setAlignment(
-        Qt.AlignmentFlag.AlignCenter
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
     )
     self.lbl_copyright.setStyleSheet(f"""
             QLabel {{
                 font-size: 11px;
                 font-family: {FONT_FAMILY};
-                background: transparent;
-                padding-top: 1px;
+                background-color: #0e121c;
             }}
         """)
-    self.card_layout.addWidget(self.lbl_copyright)
+
+    footer_layout.addWidget(self.lbl_title)
+    footer_layout.addStretch()
+    footer_layout.addWidget(self.lbl_copyright)
+    self.card_layout.addWidget(self.footer_widget)
 
     # Metric key to widget mapping for Game Mode customization
     self.metric_widgets = {
@@ -731,6 +744,11 @@ class ArtaleExpOverlay(QWidget):
         self,
         auto_pause_enabled=self.engine.auto_pause_enabled,
         auto_pause_seconds=self.engine.auto_pause_seconds,
+        ui_scale=self.ui_scale,
+        opacity_val=self.opacity_val,
+        base_width=self.base_width,
+        row_spacing=self.row_spacing,
+        font_weight=self.font_weight,
     )
     if dialog.exec() == QDialog.DialogCode.Accepted:
       self.game_mode_order = dialog.get_full_order()
@@ -739,6 +757,12 @@ class ArtaleExpOverlay(QWidget):
           dialog.get_auto_pause_enabled(),
           dialog.get_auto_pause_seconds(),
       )
+      self.base_width = dialog.get_base_width()
+      self.row_spacing = dialog.get_row_spacing()
+      self.font_weight = dialog.get_font_weight()
+      self.set_ui_scale(dialog.get_ui_scale())
+      self.set_ui_opacity(dialog.get_opacity_val())
+      self._apply_scaling()
       self._save_config()
       self._apply_game_mode()
 
@@ -792,7 +816,7 @@ class ArtaleExpOverlay(QWidget):
       act_simple = menu.addAction("切換至極簡模式")
       act_simple.triggered.connect(lambda: self._set_mode("simple"))
 
-    action_settings = menu.addAction("指標顯示與排列設定...")
+    action_settings = menu.addAction("設定")
     action_settings.triggered.connect(
         lambda: QTimer.singleShot(0, self._open_game_mode_settings)
     )
@@ -1028,6 +1052,8 @@ class ArtaleExpOverlay(QWidget):
       self.sep1.hide()
       self.details_container.hide()
       self.slider_panel.hide()
+      self.footer_widget.hide()
+      self.lbl_title.hide()
       self.lbl_copyright.hide()
 
       # Set pill card padding: comfortable padding so the dot and content sit nicely inside the capsule curve
@@ -1103,7 +1129,8 @@ class ArtaleExpOverlay(QWidget):
       if self.current_mode == "game":
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
-        self.setFixedWidth(int(290 * self.ui_scale))
+        self.setFixedWidth(int(self.base_width * self.ui_scale))
+        self.footer_widget.hide()
         self.lbl_title.hide()
         self.btn_f9.setText("")
         self.btn_f9.set_icon_name("simple_mode")
@@ -1118,7 +1145,8 @@ class ArtaleExpOverlay(QWidget):
       else:
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
-        self.setFixedWidth(int(340 * self.ui_scale))
+        self.setFixedWidth(int(self.base_width * self.ui_scale))
+        self.footer_widget.show()
         self.lbl_title.show()
         self.btn_f9.setText("")
         self.btn_f9.set_icon_name("game_mode")
@@ -1175,6 +1203,8 @@ class ArtaleExpOverlay(QWidget):
     if self.current_mode == "simple":
       self.slider_panel.hide()
       self.header_widget.hide()
+      self.footer_widget.hide()
+      self.lbl_title.hide()
       self.lbl_copyright.hide()
       self._update_simple_mode_focus_state()
       return
@@ -1185,7 +1215,10 @@ class ArtaleExpOverlay(QWidget):
     if is_active:
       self.slider_panel.show()
     else:
-      if not (self.slider_scale.isSliderDown() or self.slider_opacity.isSliderDown()):
+      if not (
+          self.slider_scale.isSliderDown()
+          or self.slider_opacity.isSliderDown()
+      ):
         self.slider_panel.hide()
 
     # 2. In Game Mode: Header bar (badge + buttons)
@@ -1193,6 +1226,8 @@ class ArtaleExpOverlay(QWidget):
     # When expanding/collapsing at top, anchor window position so Auto Start and metrics never jump on screen.
     h_delta = self.header_widget.sizeHint().height() + self.card_layout.spacing()
     if self.current_mode == "game":
+      self.footer_widget.hide()
+      self.lbl_title.hide()
       self.lbl_copyright.hide()
       if is_active:
         was_hidden = not self.header_widget.isVisible()
@@ -1212,8 +1247,12 @@ class ArtaleExpOverlay(QWidget):
         self._is_shifted_up = False
       self.header_widget.show()
       if is_active:
+        self.footer_widget.show()
+        self.lbl_title.show()
         self.lbl_copyright.show()
       else:
+        self.footer_widget.hide()
+        self.lbl_title.hide()
         self.lbl_copyright.hide()
 
     self.card_layout.activate()
@@ -1264,6 +1303,25 @@ class ArtaleExpOverlay(QWidget):
       self.slider_opacity.blockSignals(False)
     if hasattr(self, "lbl_opacity_val"):
       self.lbl_opacity_val.setText(f"{transparency_pct}%")
+    self._save_config()
+
+  def set_base_width(self, width: int):
+    """Sets base HUD width (235..340 px) safely and updates geometry."""
+    self.base_width = max(235, min(340, int(width)))
+    self._apply_scaling()
+    self._save_config()
+
+  def set_row_spacing(self, spacing: int):
+    """Sets metric row vertical spacing (0..6 px) safely and updates metrics."""
+    self.row_spacing = max(0, min(6, int(spacing)))
+    self._apply_scaling()
+    self._save_config()
+
+  def set_font_weight(self, weight: int):
+    """Sets text thickness (font weight 400..700) safely and updates metrics."""
+    snapped = int(round(max(400, min(700, weight)) / 100.0) * 100)
+    self.font_weight = snapped
+    self._apply_scaling()
     self._save_config()
 
   def _on_scale_changed(self, val: int):
@@ -1338,13 +1396,14 @@ class ArtaleExpOverlay(QWidget):
 
   def _apply_scaling(self):
     s = self.ui_scale
+    row_sp = getattr(self, "row_spacing", config.DEFAULT_ROW_SPACING)
     if self.current_mode == "simple":
       pad_h = max(14, int(18 * s))
       pad_v = max(4, int(5 * s))
       self.card_layout.setContentsMargins(pad_h, pad_v, pad_h, pad_v)
       self.card_layout.setSpacing(0)
     else:
-      base_w = 290 if self.current_mode == "game" else 340
+      base_w = self.base_width
       self.setFixedWidth(int(base_w * s))
       self.card_layout.setContentsMargins(
           max(6, int(14 * s)),
@@ -1353,12 +1412,13 @@ class ArtaleExpOverlay(QWidget):
           max(6, int(12 * s)),
       )
       self.card_layout.setSpacing(max(3, int(6 * s)))
-      self.details_layout.setSpacing(max(2, int(3 * s)))
+      self.details_layout.setSpacing(0 if row_sp == 0 else max(1, int(row_sp * s)))
 
     # 2. Metric rows
     for row in self.metric_widgets.values():
       if isinstance(row, MetricRow):
-        row.update_scale(s)
+        row.v_pad_base = row_sp
+        row.update_scale(s, self.font_weight)
 
     # 3. EXP Progress Bar height & style
     bar_h = max(6, int(8 * s))
@@ -1377,18 +1437,7 @@ class ArtaleExpOverlay(QWidget):
         }}
     """)
 
-    # 4. Title & State badge
-    title_size = max(10, int(14 * s))
-    self.lbl_title.setStyleSheet(f"""
-        QLabel {{
-            color: #e2e8f0;
-            font-size: {title_size}px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            font-family: {FONT_LATIN};
-            background-color: #0e121c;
-        }}
-    """)
+    # 4. State badge
     self._update_state_badge_style()
 
     # 5. Header control buttons
@@ -1427,14 +1476,26 @@ class ArtaleExpOverlay(QWidget):
     auto_font.setPixelSize(auto_start_font_size)
     self.btn_auto_start.setFont(auto_font)
 
-    # 7. Copyright footer
+    # 7. Footer (ARTALE EXP + Copyright)
     cr_size = max(9, int(11 * s))
+    foot_pad = max(1, int(2 * s))
+    self.lbl_title.setStyleSheet(f"""
+        QLabel {{
+            color: #94a3b8;
+            font-size: {cr_size}px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            font-family: {FONT_LATIN};
+            background-color: #0e121c;
+            padding-top: {foot_pad}px;
+        }}
+    """)
     self.lbl_copyright.setStyleSheet(f"""
         QLabel {{
             font-size: {cr_size}px;
             font-family: {FONT_FALLBACK};
             background-color: #0e121c;
-            padding-top: {max(1, int(2 * s))}px;
+            padding-top: {foot_pad}px;
         }}
     """)
 
@@ -1443,6 +1504,8 @@ class ArtaleExpOverlay(QWidget):
     val_w = max(28, int(36 * s))
     self.lbl_scale_val.setFixedWidth(val_w)
     self.lbl_opacity_val.setFixedWidth(val_w)
+    if hasattr(self, "lbl_weight_val"):
+      self.lbl_weight_val.setFixedWidth(val_w)
     self.slider_panel.setStyleSheet(f"""
         QFrame {{
             background: transparent;
@@ -1481,7 +1544,7 @@ class ArtaleExpOverlay(QWidget):
     if hasattr(self, "simple_metric_widgets"):
       for w in self.simple_metric_widgets.values():
         if isinstance(w, (SimpleMetricItem, SimpleProgressBarItem)):
-          w.update_scale(s)
+          w.update_scale(s, self.font_weight)
     if hasattr(self, "simple_status_dot"):
       self._update_status_indicator()
     if hasattr(self, "simple_actions_widget"):
@@ -1776,6 +1839,14 @@ class ArtaleExpOverlay(QWidget):
 
           self.ui_scale = max(0.50, min(2.00, round(float(cfg.get("ui_scale", 1.0)), 2)))
           self.opacity_val = max(0.20, min(1.00, round(float(cfg.get("opacity", 0.95)), 2)))
+          self.base_width = max(
+              235, min(340, int(cfg.get("base_width", config.DEFAULT_BASE_WIDTH)))
+          )
+          self.row_spacing = max(
+              0, min(6, int(cfg.get("row_spacing", config.DEFAULT_ROW_SPACING)))
+          )
+          raw_w = int(cfg.get("font_weight", config.DEFAULT_FONT_WEIGHT))
+          self.font_weight = int(round(max(400, min(700, raw_w)) / 100.0) * 100)
 
           if "auto_start" in cfg:
             self.engine.auto_start_enabled = bool(cfg["auto_start"])
@@ -1840,6 +1911,9 @@ class ArtaleExpOverlay(QWidget):
           "game_mode_items": self.game_mode_items,
           "ui_scale": getattr(self, "ui_scale", 1.0),
           "opacity": getattr(self, "opacity_val", 0.95),
+          "base_width": getattr(self, "base_width", config.DEFAULT_BASE_WIDTH),
+          "row_spacing": getattr(self, "row_spacing", config.DEFAULT_ROW_SPACING),
+          "font_weight": getattr(self, "font_weight", config.DEFAULT_FONT_WEIGHT),
           "auto_start": getattr(self.engine, "auto_start_enabled", True),
           "auto_pause_enabled": getattr(
               self.engine, "auto_pause_enabled", config.DEFAULT_AUTO_PAUSE_ENABLED

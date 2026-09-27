@@ -36,10 +36,17 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.close()
 
   def test_initial_full_mode(self):
-    """Verify that full mode displays all 10 metrics with title visible."""
+    """Verify that full mode displays all 10 metrics with aligned base_width."""
     self.assertFalse(self.overlay.is_game_mode)
-    self.assertTrue(self.overlay.lbl_title.isVisible())
-    self.assertEqual(self.overlay.width(), 340)
+    self.assertEqual(self.overlay.width(), self.overlay.base_width)
+    self.assertEqual(
+        self.overlay.lbl_title.alignment(),
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+    )
+    self.assertEqual(
+        self.overlay.lbl_copyright.alignment(),
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+    )
 
     # Check all 10 metric widgets are present and visible
     for key in ALL_METRIC_KEYS:
@@ -49,7 +56,7 @@ class TestOverlayHud(unittest.TestCase):
       )
 
   def test_game_mode_toggle_and_height_shrinkage(self):
-    """Verify switching to game mode hides title and shrinks window height tightly."""
+    """Verify switching to game mode hides footer and shrinks window height tightly while keeping aligned width."""
     self.overlay._set_sliders_visible(False)
     full_height = self.overlay.size().height()
 
@@ -57,7 +64,7 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.on_f9()
     self.assertTrue(self.overlay.is_game_mode)
     self.assertFalse(self.overlay.lbl_title.isVisible())
-    self.assertEqual(self.overlay.width(), 290)
+    self.assertEqual(self.overlay.width(), self.overlay.base_width)
 
     game_height = self.overlay.size().height()
     self.assertLess(
@@ -87,8 +94,7 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.on_f9()
     self.assertEqual(self.overlay.current_mode, "full")
     self.assertFalse(self.overlay.is_game_mode)
-    self.assertTrue(self.overlay.lbl_title.isVisible())
-    self.assertEqual(self.overlay.width(), 340)
+    self.assertEqual(self.overlay.width(), self.overlay.base_width)
     self.overlay._set_sliders_visible(False)
     self.assertEqual(self.overlay.size().height(), full_height)
 
@@ -125,12 +131,27 @@ class TestOverlayHud(unittest.TestCase):
         custom_order,
         auto_pause_enabled=False,
         auto_pause_seconds=25,
+        ui_scale=1.25,
+        opacity_val=0.80,
+        base_width=260,
+        row_spacing=1,
+        font_weight=500,
+    )
+    self.assertEqual(dlg.windowTitle(), "設定")
+    self.assertEqual(
+        dlg.list_widget.verticalScrollBarPolicy(),
+        Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
     )
     self.assertEqual(dlg.get_full_order(), full_order)
     self.assertEqual(dlg.get_ordered_items(), custom_order)
     self.assertFalse(dlg.get_auto_pause_enabled())
     self.assertEqual(dlg.get_auto_pause_seconds(), 25)
     self.assertFalse(dlg.spin_auto_pause_sec.isEnabled())
+    self.assertAlmostEqual(dlg.get_ui_scale(), 1.25, places=2)
+    self.assertAlmostEqual(dlg.get_opacity_val(), 0.80, places=2)
+    self.assertEqual(dlg.get_base_width(), 260)
+    self.assertEqual(dlg.get_row_spacing(), 1)
+    self.assertEqual(dlg.get_font_weight(), 500)
 
     # Move item 1 (EXP 進度條) up by 1 position
     dlg.list_widget.setCurrentRow(1)
@@ -152,6 +173,11 @@ class TestOverlayHud(unittest.TestCase):
     self.assertTrue(dlg.get_auto_pause_enabled())
     self.assertEqual(dlg.get_auto_pause_seconds(), 10)
     self.assertTrue(dlg.spin_auto_pause_sec.isEnabled())
+    self.assertAlmostEqual(dlg.get_ui_scale(), 1.00, places=2)
+    self.assertAlmostEqual(dlg.get_opacity_val(), 0.95, places=2)
+    self.assertEqual(dlg.get_base_width(), 290)
+    self.assertEqual(dlg.get_row_spacing(), 3)
+    self.assertEqual(dlg.get_font_weight(), 600)
 
   def test_eta_displays_dash_when_not_measuring(self):
     """Verify that 升級預估時間 shows '-' instead of '待機中' when not measuring."""
@@ -299,7 +325,6 @@ class TestOverlayHud(unittest.TestCase):
     """Verify Simple Mode pill appearance, 3-mode circulation, and metrics sync."""
     # 1. Start in Full Mode
     self.assertEqual(self.overlay.current_mode, "full")
-    self.assertTrue(self.overlay.lbl_title.isVisible())
     self.assertFalse(self.overlay.simple_widget.isVisible())
     self.assertFalse(self.overlay.outer_card.is_pill)
 
@@ -367,7 +392,6 @@ class TestOverlayHud(unittest.TestCase):
     # 5. F9 -> Circulate back to Full Mode
     self.overlay.on_f9()
     self.assertEqual(self.overlay.current_mode, "full")
-    self.assertTrue(self.overlay.lbl_title.isVisible())
     self.assertFalse(self.overlay.simple_widget.isVisible())
     self.assertFalse(self.overlay.outer_card.is_pill)
 
@@ -600,10 +624,18 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.simple_status_dot._breath_timer.isActive())
 
   def test_copyright_visibility_modes(self):
-    """Verify that copyright is visible only in Full Mode, centered, and hidden when unfocused."""
-    # 1. Full Mode: Centered alignment
+    """Verify that footer (ARTALE EXP on left, copyright on right) is visible only in Full Mode and hidden when unfocused."""
+    # 1. Full Mode: Left/Right alignment
     self.overlay._set_mode("full")
-    self.assertEqual(self.overlay.lbl_copyright.alignment(), Qt.AlignmentFlag.AlignCenter)
+    self.assertEqual(
+        self.overlay.lbl_title.alignment(),
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+    )
+    self.assertEqual(
+        self.overlay.lbl_copyright.alignment(),
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+    )
+    self.assertEqual(self.overlay.lbl_title.text(), "ARTALE EXP")
     self.assertIn("© 2026 By", self.overlay.lbl_copyright.text())
     self.assertIn("G8G", self.overlay.lbl_copyright.text())
 
@@ -611,18 +643,26 @@ class TestOverlayHud(unittest.TestCase):
     from unittest.mock import patch
     with patch.object(self.overlay, "isActiveWindow", return_value=True):
       self.overlay._update_focus_visibility()
+      self.assertTrue(self.overlay.footer_widget.isVisible())
+      self.assertTrue(self.overlay.lbl_title.isVisible())
       self.assertTrue(self.overlay.lbl_copyright.isVisible())
 
     with patch.object(self.overlay, "isActiveWindow", return_value=False):
       self.overlay._update_focus_visibility()
+      self.assertFalse(self.overlay.footer_widget.isVisible())
+      self.assertFalse(self.overlay.lbl_title.isVisible())
       self.assertFalse(self.overlay.lbl_copyright.isVisible())
 
     # 2. Game Mode: Always hidden
     self.overlay._set_mode("game")
+    self.assertFalse(self.overlay.footer_widget.isVisible())
+    self.assertFalse(self.overlay.lbl_title.isVisible())
     self.assertFalse(self.overlay.lbl_copyright.isVisible())
 
     # 3. Simple Mode: Always hidden
     self.overlay._set_mode("simple")
+    self.assertFalse(self.overlay.footer_widget.isVisible())
+    self.assertFalse(self.overlay.lbl_title.isVisible())
     self.assertFalse(self.overlay.lbl_copyright.isVisible())
 
   def test_about_dialog_content(self):
@@ -659,6 +699,7 @@ class TestOverlayHud(unittest.TestCase):
       event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10))
       self.overlay.contextMenuEvent(event)
 
+    self.assertIn("設定", actions_seen)
     self.assertIn("快捷鍵", actions_seen)
     self.assertIn("關於...", actions_seen)
     self.assertIn("關閉程式", actions_seen)

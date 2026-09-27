@@ -132,37 +132,17 @@ class MetricRow(QFrame):
     super().__init__(parent)
     self.is_highlight: bool = is_highlight
     self.scale: float = 1.0
+    self.font_weight: int = 600
+    self.v_pad_base: int = 1
     self.current_color: Optional[str] = None
     self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
     self.layout = QHBoxLayout(self)
-    self.layout.setContentsMargins(6, 3, 6, 3)
-    self.layout.setSpacing(10)
+    self.layout.setContentsMargins(6, 1, 6, 1)
+    self.layout.setSpacing(6)
 
     self.lbl_title = QLabel(title)
-    self.lbl_title.setStyleSheet(f"""
-        QLabel {{
-            color: #94a3b8;
-            font-size: 13px;
-            font-weight: 500;
-            font-family: {config.FONT_CHINESE};
-            background-color: #0e121c;
-        }}
-    """)
-
     self.lbl_value = QLabel(default_val)
-    val_color = "#FFFFFF" if is_highlight else "#f1f5f9"
-    font_size = "16px" if is_highlight else "15px"
-    font_weight = "700" if is_highlight else "600"
-    self.lbl_value.setStyleSheet(f"""
-        QLabel {{
-            color: {val_color};
-            font-size: {font_size};
-            font-weight: {font_weight};
-            font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
-            background-color: #0e121c;
-        }}
-    """)
     self.lbl_value.setAlignment(
         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
     )
@@ -170,9 +150,25 @@ class MetricRow(QFrame):
     self.layout.addWidget(self.lbl_title)
     self.layout.addStretch()
     self.layout.addWidget(self.lbl_value)
+    self.update_scale(1.0, 600)
 
-  def update_scale(self, scale: float) -> None:
+  def _get_weights(self) -> tuple[int, int]:
+    w = self.font_weight
+    if w <= 400:
+      return 400, (500 if self.is_highlight else 400)
+    elif w <= 500:
+      return 500, (600 if self.is_highlight else 500)
+    elif w <= 600:
+      return 500, (700 if self.is_highlight else 600)
+    else:
+      return 600, 700
+
+  def update_scale(
+      self, scale: float, font_weight: Optional[int] = None
+  ) -> None:
     self.scale = scale
+    if font_weight is not None:
+      self.font_weight = font_weight
     title_size = max(9, int(13 * scale))
     val_size = max(11, int((16 if self.is_highlight else 15) * scale))
     val_color = (
@@ -180,18 +176,23 @@ class MetricRow(QFrame):
         if self.current_color
         else ("#FFFFFF" if self.is_highlight else "#f1f5f9")
     )
-    font_weight = "700" if self.is_highlight else "600"
+    title_w, val_w = self._get_weights()
+    v_pad = (
+        0
+        if self.v_pad_base == 0
+        else max(1, int(self.v_pad_base * scale))
+    )
     self.layout.setContentsMargins(
         max(3, int(6 * scale)),
-        max(2, int(3 * scale)),
+        v_pad,
         max(3, int(6 * scale)),
-        max(2, int(3 * scale)),
+        v_pad,
     )
     self.lbl_title.setStyleSheet(f"""
         QLabel {{
             color: #94a3b8;
             font-size: {title_size}px;
-            font-weight: 500;
+            font-weight: {title_w};
             font-family: {config.FONT_CHINESE};
             background-color: #0e121c;
         }}
@@ -200,7 +201,7 @@ class MetricRow(QFrame):
         QLabel {{
             color: {val_color};
             font-size: {val_size}px;
-            font-weight: {font_weight};
+            font-weight: {val_w};
             font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
             background-color: #0e121c;
         }}
@@ -211,7 +212,7 @@ class MetricRow(QFrame):
     if color != self.current_color:
       self.current_color = color
       val_size = max(11, int((16 if self.is_highlight else 15) * self.scale))
-      font_weight = "700" if self.is_highlight else "600"
+      _, val_w = self._get_weights()
       fg_color = (
           color if color else ("#FFFFFF" if self.is_highlight else "#f1f5f9")
       )
@@ -219,7 +220,7 @@ class MetricRow(QFrame):
           QLabel {{
               color: {fg_color};
               font-size: {val_size}px;
-              font-weight: {font_weight};
+              font-weight: {val_w};
               font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
               background-color: #0e121c;
           }}
@@ -261,6 +262,7 @@ class SimpleMetricItem(QWidget):
     self.key: str = key
     self.label_color: str = label_color
     self.scale: float = 1.0
+    self.font_weight: int = 600
     self.current_val_color: str = "#f8fafc"
 
     self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -283,12 +285,28 @@ class SimpleMetricItem(QWidget):
 
     layout.addWidget(self.lbl_label)
     layout.addWidget(self.lbl_value)
-    self.update_scale(1.0)
+    self.update_scale(1.0, 600)
 
-  def update_scale(self, scale: float = 1.0) -> None:
+  def _get_weights(self) -> tuple[int, int]:
+    w = self.font_weight
+    if w <= 400:
+      return 400, 400
+    elif w <= 500:
+      return 500, 500
+    elif w <= 600:
+      return 600, 700
+    else:
+      return 600, 700
+
+  def update_scale(
+      self, scale: float = 1.0, font_weight: Optional[int] = None
+  ) -> None:
     self.scale = scale
+    if font_weight is not None:
+      self.font_weight = font_weight
     lbl_font_size = max(10, int(13 * scale))
     val_font_size = max(12, int(15 * scale))
+    lbl_w, val_w = self._get_weights()
     self.layout().setSpacing(max(3, int(5 * scale)))
     val_min_w = max(55, int(86 * scale))
     self.lbl_value.setMinimumWidth(val_min_w)
@@ -296,7 +314,7 @@ class SimpleMetricItem(QWidget):
         QLabel {{
             color: {self.label_color};
             font-size: {lbl_font_size}px;
-            font-weight: 600;
+            font-weight: {lbl_w};
             font-family: {config.FONT_CHINESE};
             background-color: #0e121c;
         }}
@@ -305,7 +323,7 @@ class SimpleMetricItem(QWidget):
         QLabel {{
             color: {self.current_val_color};
             font-size: {val_font_size}px;
-            font-weight: 700;
+            font-weight: {val_w};
             font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
             background-color: #0e121c;
         }}
@@ -317,11 +335,12 @@ class SimpleMetricItem(QWidget):
     self.lbl_value.setText(val_str)
     self.current_val_color = color if color else "#f8fafc"
     val_font_size = max(12, int(15 * self.scale))
+    _, val_w = self._get_weights()
     self.lbl_value.setStyleSheet(f"""
         QLabel {{
             color: {self.current_val_color};
             font-size: {val_font_size}px;
-            font-weight: 700;
+            font-weight: {val_w};
             font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
             background-color: #0e121c;
         }}
@@ -334,6 +353,7 @@ class SimpleProgressBarItem(QWidget):
   def __init__(self, parent=None):
     super().__init__(parent)
     self.scale: float = 1.0
+    self.font_weight: int = 600
     self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
     layout = QHBoxLayout(self)
@@ -353,11 +373,16 @@ class SimpleProgressBarItem(QWidget):
 
     layout.addWidget(self.lbl_label)
     layout.addWidget(self.bar)
-    self.update_scale(1.0)
+    self.update_scale(1.0, 600)
 
-  def update_scale(self, scale: float = 1.0) -> None:
+  def update_scale(
+      self, scale: float = 1.0, font_weight: Optional[int] = None
+  ) -> None:
     self.scale = scale
+    if font_weight is not None:
+      self.font_weight = font_weight
     lbl_font_size = max(10, int(13 * scale))
+    lbl_w = 400 if self.font_weight <= 400 else (500 if self.font_weight <= 500 else 600)
     bar_w = max(35, int(50 * scale))
     bar_h = max(5, int(7 * scale))
     radius = max(2, int(3 * scale))
@@ -366,7 +391,7 @@ class SimpleProgressBarItem(QWidget):
         QLabel {{
             color: #38bdf8;
             font-size: {lbl_font_size}px;
-            font-weight: 600;
+            font-weight: {lbl_w};
             font-family: {config.FONT_CHINESE};
             background-color: #0e121c;
         }}
