@@ -8,7 +8,7 @@ On macOS: Uses native Carbon RegisterEventHotKey (⌘6~⌘9).
 import ctypes
 import logging
 import sys
-import time
+import threading
 from typing import Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -223,6 +223,8 @@ class HotkeyWorker(QThread):
     super().__init__()
     self.running: bool = True
     self.tid: int = 0
+    self._ready_event = threading.Event()
+    self._stop_event = threading.Event()
     self.macos_hotkeys: Optional[MacOSCarbonHotkeys] = None
     if sys.platform == "darwin":
       self.macos_hotkeys = MacOSCarbonHotkeys(self._on_macos_hotkey)
@@ -240,8 +242,8 @@ class HotkeyWorker(QThread):
   def run(self) -> None:
     """Executes the Win32 message pump for registered hotkeys (on Windows)."""
     if sys.platform != "win32":
-      while self.running:
-        time.sleep(0.1)
+      self._ready_event.set()
+      self._stop_event.wait()
       return
 
     import ctypes.wintypes
@@ -260,24 +262,28 @@ class HotkeyWorker(QThread):
     registered_ids = [1006, 1007, 1008, 1009]
 
     msg = ctypes.wintypes.MSG()
+    # Ensure the thread's Win32 message queue is created before signaling ready
+    user32.PeekMessageW(ctypes.byref(msg), 0, 0, 0, 0)
+    self._ready_event.set()
+
     while self.running:
-      if user32.PeekMessageW(ctypes.byref(msg), 0, 0, 0, 1):  # PM_REMOVE
-        if msg.message == 0x0312:  # WM_HOTKEY
-          hk_id = msg.wParam
-          if hk_id == 1006:
-            self.f6_pressed.emit()
-          elif hk_id == 1007:
-            self.f7_pressed.emit()
-          elif hk_id == 1008:
-            self.f8_pressed.emit()
-          elif hk_id == 1009:
-            self.f9_pressed.emit()
-        elif msg.message == 0x0012:  # WM_QUIT
-          break
-        user32.TranslateMessage(ctypes.byref(msg))
-        user32.DispatchMessageW(ctypes.byref(msg))
-      else:
-        time.sleep(0.02)
+      ret = user32.GetMessageW(ctypes.byref(msg), 0, 0, 0)
+      if ret <= 0 or not self.running:
+        break
+      if msg.message == 0x0312:  # WM_HOTKEY
+        hk_id = msg.wParam
+        if hk_id == 1006:
+          self.f6_pressed.emit()
+        elif hk_id == 1007:
+          self.f7_pressed.emit()
+        elif hk_id == 1008:
+          self.f8_pressed.emit()
+        elif hk_id == 1009:
+          self.f9_pressed.emit()
+      elif msg.message == 0x0012:  # WM_QUIT
+        break
+      user32.TranslateMessage(ctypes.byref(msg))
+      user32.DispatchMessageW(ctypes.byref(msg))
 
     for hk_id in registered_ids:
       user32.UnregisterHotKey(0, hk_id)
@@ -285,12 +291,15 @@ class HotkeyWorker(QThread):
   def stop(self) -> None:
     """Stops the hotkey message loop and notifies thread."""
     self.running = False
+    self._stop_event.set()
     if self.macos_hotkeys:
       self.macos_hotkeys.cleanup()
       self.macos_hotkeys = None
-    if self.tid and sys.platform == "win32":
-      try:
-        ctypes.windll.user32.PostThreadMessageW(self.tid, 0x0012, 0, 0)
-      except Exception:
-        pass
+    if sys.platform == "win32" and self.isRunning():
+      self._ready_event.wait(timeout=0.2)
+      if self.tid:
+        try:
+          ctypes.windll.user32.PostThreadMessageW(self.tid, 0x0012, 0, 0)
+        except Exception:
+          pass
     self.wait(1000)

@@ -8,6 +8,17 @@ import platform
 import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+# Cap BLAS/OpenMP thread pools before NumPy is imported anywhere to prevent
+# OpenBLAS from pre-allocating ~740 MB of per-thread arena virtual memory.
+for _blas_env in (
+    "OPENBLAS_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+):
+  os.environ.setdefault(_blas_env, "1")
+
 # Developer mode flag: active if ARTALE_DEV=1 or --dev is passed in sys.argv.
 IS_DEV: bool = os.environ.get("ARTALE_DEV", "0") == "1" or "--dev" in sys.argv
 
@@ -57,14 +68,14 @@ DEFAULT_TARGET_WINDOW: str = (
 )
 
 # Typography and fonts: strictly Google Sans for numbers/Latin, PingFang TC for Chinese
-FONT_FAMILY: str = "'Google Sans', 'PingFang TC', sans-serif"
+FONT_FAMILY: str = "'PingFang TC'"
 FONT_LATIN: str = "'Google Sans'"
 FONT_CHINESE: str = "'PingFang TC'"
-FONT_FALLBACK: str = "'Google Sans', 'PingFang TC', sans-serif"
+FONT_FALLBACK: str = "'PingFang TC'"
 
 # Application metadata & About info
 APP_NAME: str = "Artale EXP Calculator"
-APP_VERSION: str = "1.0.0-rc.29"
+APP_VERSION: str = "1.0.0-rc.30"
 APP_AUTHOR: str = "G8G"
 APP_COPYRIGHT: str = "© 2026 By G8G"
 APP_DISCORD_ID: str = "garyhuang"

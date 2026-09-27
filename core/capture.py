@@ -10,9 +10,25 @@ import logging
 import os
 import sys
 import time
+import types
 from typing import Optional
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
+
+if "cv2" not in sys.modules:
+
+  class _LazyCv2Module(types.ModuleType):
+    """Defers loading 83MB cv2.pyd until a cv2 attribute is actually accessed."""
+
+    def __getattr__(self, name: str):
+      sys.modules.pop("cv2", None)
+      import importlib
+
+      real_cv2 = importlib.import_module("cv2")
+      sys.modules["cv2"] = real_cv2
+      return getattr(real_cv2, name)
+
+  sys.modules["cv2"] = _LazyCv2Module("cv2")
 
 import config
 from core.engine import parse_frame
@@ -112,6 +128,8 @@ class CaptureWorker(QThread):
 
     last_sample_time = 0.0
     last_res = None
+    gdi_buf = None
+    gdi_buf_size = 0
     logger.info("Engaging Win32 GDI window capture fallback for HWND %d", target_h)
 
     while self.running and user32.IsWindow(target_h):
@@ -157,8 +175,11 @@ class CaptureWorker(QThread):
       header.biBitCount = 32
       header.biCompression = 0
 
-      buf = (ctypes.c_char * (w * h * 4))()
-      gdi32.GetDIBits(mem_dc, bmp, 0, h, buf, ctypes.byref(header), 0)
+      req_size = w * h * 4
+      if gdi_buf is None or gdi_buf_size != req_size:
+        gdi_buf = (ctypes.c_char * req_size)()
+        gdi_buf_size = req_size
+      gdi32.GetDIBits(mem_dc, bmp, 0, h, gdi_buf, ctypes.byref(header), 0)
 
       # Cleanup GDI handles immediately
       gdi32.SelectObject(mem_dc, old_bmp)
@@ -166,19 +187,18 @@ class CaptureWorker(QThread):
       gdi32.DeleteDC(mem_dc)
       user32.ReleaseDC(target_h, hwnd_dc)
 
-      arr = np.frombuffer(buf, dtype=np.uint8).reshape((h, w, 4))
-      bgr = np.ascontiguousarray(arr[:, :, :3])
+      bgra = np.frombuffer(gdi_buf, dtype=np.uint8).reshape((h, w, 4))
 
-      cur_res = (bgr.shape[1], bgr.shape[0])
+      cur_res = (w, h)
       res_changed = last_res != cur_res
       if res_changed:
         last_res = cur_res
 
       try:
-        parsed = parse_frame(bgr)
+        parsed = parse_frame(bgra)
         if parsed:
           if res_changed and config.IS_DEV:
-            save_crop_debug(bgr, parsed)
+            save_crop_debug(bgra[:, :, :3], parsed)
 
           exp_val, pct, raw_str, dt_ms = parsed[:4]
           self.frame_parsed.emit(
@@ -218,16 +238,16 @@ class CaptureWorker(QThread):
       last_sample_time = now
 
       try:
-        bgr = frame.convert_to_bgr().frame_buffer
-        cur_res = (bgr.shape[1], bgr.shape[0])
+        bgra = frame.frame_buffer
+        cur_res = (bgra.shape[1], bgra.shape[0])
         res_changed = last_res != cur_res
         if res_changed:
           last_res = cur_res
 
-        parsed = parse_frame(bgr)
+        parsed = parse_frame(bgra)
         if parsed:
           if res_changed and config.IS_DEV:
-            save_crop_debug(bgr, parsed)
+            save_crop_debug(bgra[:, :, :3], parsed)
 
           exp_val, pct, raw_str, dt_ms = parsed[:4]
           self.frame_parsed.emit(
@@ -267,11 +287,13 @@ class CaptureWorker(QThread):
       # 2. Window verified: attach via Windows Graphics Capture
       self.status_changed.emit("連線至遊戲視窗...", False)
       try:
-        # Tier 1: Optimal settings (no border, no cursor)
+        interval_ms = max(50, int(self.sample_interval * 1000))
+        # Tier 1: Optimal settings (no border, no cursor, hardware DWM interval throttling)
         try:
           capture = WindowsCapture(
               cursor_capture=False,
               draw_border=False,
+              minimum_update_interval=interval_ms,
               window_hwnd=target_h,
           )
           capture.event(on_frame_arrived)
@@ -279,18 +301,28 @@ class CaptureWorker(QThread):
           self.capture_control = capture.start_free_threaded()
         except Exception as e_opt:
           logger.warning(
-              "WindowsCapture with border/cursor disabled failed (%s). Retrying with compatibility settings...",
+              "WindowsCapture Tier 1 failed (%s). Retrying compatibility settings...",
               e_opt,
           )
-          # Tier 2: Compatibility settings (pass None to avoid invoking unsupported APIs on older Windows 10 builds)
-          capture = WindowsCapture(
-              cursor_capture=None,
-              draw_border=None,
-              window_hwnd=target_h,
-          )
-          capture.event(on_frame_arrived)
-          capture.event(on_closed)
-          self.capture_control = capture.start_free_threaded()
+          try:
+            capture = WindowsCapture(
+                cursor_capture=False,
+                draw_border=False,
+                window_hwnd=target_h,
+            )
+            capture.event(on_frame_arrived)
+            capture.event(on_closed)
+            self.capture_control = capture.start_free_threaded()
+          except Exception:
+            # Tier 3: Compatibility settings for older Windows 10 builds
+            capture = WindowsCapture(
+                cursor_capture=None,
+                draw_border=None,
+                window_hwnd=target_h,
+            )
+            capture.event(on_frame_arrived)
+            capture.event(on_closed)
+            self.capture_control = capture.start_free_threaded()
 
         while self.running and not self.capture_control.is_finished():
           if user32 and not user32.IsWindow(target_h):

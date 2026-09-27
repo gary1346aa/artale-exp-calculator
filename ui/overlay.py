@@ -85,10 +85,18 @@ def init_application_fonts() -> None:
     return
   fonts_dir = config.get_resource_path(os.path.join("assets", "fonts"))
   if os.path.isdir(fonts_dir):
-    for f in ["GoogleSans.ttf", "PingFangTC-Regular.otf", "PingFangTC-Medium.otf"]:
+    font_files = (
+        ["GoogleSans.ttf"]
+        if sys.platform == "darwin"
+        else ["GoogleSans.ttf", "PingFangTC-Regular.otf", "PingFangTC-Medium.otf"]
+    )
+    for f in font_files:
       p = os.path.join(fonts_dir, f)
       if os.path.isfile(p):
         QFontDatabase.addApplicationFont(p)
+  qapp = QApplication.instance()
+  if qapp is not None:
+    qapp.setFont(QFont("PingFang TC", 10))
   _fonts_initialized = True
 
 
@@ -424,21 +432,33 @@ class ArtaleExpOverlay(QWidget):
     self.details_layout.setContentsMargins(0, 0, 0, 0)
     self.details_layout.setSpacing(1)
 
-    self.row_duration = MetricRow("練功時長", "00:00:00", self)
-    self.row_1m = MetricRow("1分鐘經驗", "0", self)
-    self.row_est_10m = MetricRow("預估10分", "0", self)
-    self.row_acc_10m = MetricRow("累積10分", "0", self)
-    self.row_est_60m = MetricRow("預估60分", "0", self, is_highlight=False)
-    self.row_acc_60m = MetricRow("累積60分", "0", self)
+    self.row_duration = MetricRow("練功時長", "00:00:00", self.details_container)
+    self.row_duration.hide()
+    self.row_1m = MetricRow("1分鐘經驗", "0", self.details_container)
+    self.row_1m.hide()
+    self.row_est_10m = MetricRow("預估10分", "0", self.details_container)
+    self.row_est_10m.hide()
+    self.row_acc_10m = MetricRow("累積10分", "0", self.details_container)
+    self.row_acc_10m.hide()
+    self.row_est_60m = MetricRow("預估60分", "0", self.details_container, is_highlight=False)
+    self.row_est_60m.hide()
+    self.row_acc_60m = MetricRow("累積60分", "0", self.details_container)
+    self.row_acc_60m.hide()
 
     self.sep_summary = self._create_separator()
+    self.sep_summary.setParent(self.details_container)
+    self.sep_summary.hide()
 
-    self.row_accum = MetricRow("累計經驗", "0", self, is_highlight=True)
-    self.row_current = MetricRow("當前經驗", "無資料", self)
-    self.row_eta = MetricRow("升級預估時間", "-", self, is_highlight=False)
+    self.row_accum = MetricRow("累計經驗", "0", self.details_container, is_highlight=True)
+    self.row_accum.hide()
+    self.row_current = MetricRow("當前經驗", "無資料", self.details_container)
+    self.row_current.hide()
+    self.row_eta = MetricRow("升級預估時間", "-", self.details_container, is_highlight=False)
+    self.row_eta.hide()
 
     # 4. EXP Progress Bar (managed dynamically with metrics)
-    self.gauge_bar = QProgressBar(self)
+    self.gauge_bar = QProgressBar(self.details_container)
+    self.gauge_bar.hide()
     self.gauge_bar.setFixedHeight(8)
     self.gauge_bar.setTextVisible(False)
     self.gauge_bar.setRange(0, 10000)
@@ -543,26 +563,10 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.addWidget(self.slider_panel)
     self.slider_panel.hide()
 
-    # 6. Footer Bar (strictly visible in Full Mode: ARTALE EXP on left, Copyright on right)
+    # 6. Footer Bar (strictly visible in Full Mode: Copyright centered)
     self.footer_widget = QWidget(self.outer_card)
     footer_layout = QHBoxLayout(self.footer_widget)
-    footer_layout.setContentsMargins(4, 1, 4, 0)
-    footer_layout.setSpacing(6)
-
-    self.lbl_title = QLabel("ARTALE EXP", self.footer_widget)
-    self.lbl_title.setAlignment(
-        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-    )
-    self.lbl_title.setStyleSheet(f"""
-            QLabel {{
-                color: #94a3b8;
-                font-size: 11px;
-                font-weight: 700;
-                letter-spacing: 0.4px;
-                font-family: {FONT_LATIN};
-                background-color: #0e121c;
-            }}
-        """)
+    footer_layout.setContentsMargins(0, 0, 0, 0)
 
     self.lbl_copyright = QLabel(self.footer_widget)
     self.lbl_copyright.setText(
@@ -570,18 +574,16 @@ class ArtaleExpOverlay(QWidget):
         ' #f1f5f9; font-weight: 700;">G8G</b>'
     )
     self.lbl_copyright.setAlignment(
-        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        Qt.AlignmentFlag.AlignCenter
     )
     self.lbl_copyright.setStyleSheet(f"""
             QLabel {{
                 font-size: 11px;
-                font-family: {FONT_FAMILY};
+                font-family: {FONT_LATIN};
                 background-color: #0e121c;
             }}
         """)
 
-    footer_layout.addWidget(self.lbl_title)
-    footer_layout.addStretch()
     footer_layout.addWidget(self.lbl_copyright)
     self.card_layout.addWidget(self.footer_widget)
 
@@ -676,6 +678,9 @@ class ArtaleExpOverlay(QWidget):
     return sep
 
   def _update_auto_start_button_style(self, enabled: bool):
+    if getattr(self, "_last_auto_start_style_state", None) == enabled:
+      return
+    self._last_auto_start_style_state = enabled
     if enabled:
       self.btn_auto_start.setText("自動開始 ON")
       self.btn_auto_start.set_custom_style(
@@ -799,19 +804,18 @@ class ArtaleExpOverlay(QWidget):
                 background-color: rgba(255, 255, 255, 0.12);
             }}
         """)
-    f9_key = config.HOTKEY_LABEL_SWITCH_MODE
     if self.current_mode == "simple":
-      act_mode = menu.addAction(f"切換至完整模式 [{f9_key}]")
+      act_mode = menu.addAction("切換至完整模式")
       act_mode.triggered.connect(self.on_f9)
       act_game = menu.addAction("切換至遊戲模式")
       act_game.triggered.connect(lambda: self._set_mode("game"))
     elif self.current_mode == "game":
-      act_mode = menu.addAction(f"切換至極簡模式 [{f9_key}]")
+      act_mode = menu.addAction("切換至極簡模式")
       act_mode.triggered.connect(self.on_f9)
       act_full = menu.addAction("切換至完整模式")
       act_full.triggered.connect(lambda: self._set_mode("full"))
     else:
-      act_mode = menu.addAction(f"切換至遊戲模式 [{f9_key}]")
+      act_mode = menu.addAction("切換至遊戲模式")
       act_mode.triggered.connect(self.on_f9)
       act_simple = menu.addAction("切換至極簡模式")
       act_simple.triggered.connect(lambda: self._set_mode("simple"))
@@ -1051,9 +1055,11 @@ class ArtaleExpOverlay(QWidget):
       self.sub_widget.hide()
       self.sep1.hide()
       self.details_container.hide()
+      for w in self.metric_widgets.values():
+        w.hide()
+      self.sep_summary.hide()
       self.slider_panel.hide()
       self.footer_widget.hide()
-      self.lbl_title.hide()
       self.lbl_copyright.hide()
 
       # Set pill card padding: comfortable padding so the dot and content sit nicely inside the capsule curve
@@ -1131,7 +1137,6 @@ class ArtaleExpOverlay(QWidget):
         self.setMaximumSize(16777215, 16777215)
         self.setFixedWidth(int(self.base_width * self.ui_scale))
         self.footer_widget.hide()
-        self.lbl_title.hide()
         self.btn_f9.setText("")
         self.btn_f9.set_icon_name("simple_mode")
         self.btn_f9.setToolTip(f"切換至極簡模式 [{config.HOTKEY_LABEL_SWITCH_MODE}]")
@@ -1147,7 +1152,6 @@ class ArtaleExpOverlay(QWidget):
         self.setMaximumSize(16777215, 16777215)
         self.setFixedWidth(int(self.base_width * self.ui_scale))
         self.footer_widget.show()
-        self.lbl_title.show()
         self.btn_f9.setText("")
         self.btn_f9.set_icon_name("game_mode")
         self.btn_f9.setToolTip(f"切換遊戲模式 [{config.HOTKEY_LABEL_SWITCH_MODE}]")
@@ -1204,7 +1208,6 @@ class ArtaleExpOverlay(QWidget):
       self.slider_panel.hide()
       self.header_widget.hide()
       self.footer_widget.hide()
-      self.lbl_title.hide()
       self.lbl_copyright.hide()
       self._update_simple_mode_focus_state()
       return
@@ -1227,7 +1230,6 @@ class ArtaleExpOverlay(QWidget):
     h_delta = self.header_widget.sizeHint().height() + self.card_layout.spacing()
     if self.current_mode == "game":
       self.footer_widget.hide()
-      self.lbl_title.hide()
       self.lbl_copyright.hide()
       if is_active:
         was_hidden = not self.header_widget.isVisible()
@@ -1248,11 +1250,9 @@ class ArtaleExpOverlay(QWidget):
       self.header_widget.show()
       if is_active:
         self.footer_widget.show()
-        self.lbl_title.show()
         self.lbl_copyright.show()
       else:
         self.footer_widget.hide()
-        self.lbl_title.hide()
         self.lbl_copyright.hide()
 
     self.card_layout.activate()
@@ -1348,6 +1348,11 @@ class ArtaleExpOverlay(QWidget):
 
   def _update_state_badge_style(self):
     s = self.ui_scale
+    state_key = (self.engine.is_running, self.engine.is_paused, s)
+    if getattr(self, "_last_badge_state_key", None) == state_key:
+      return
+    self._last_badge_state_key = state_key
+
     badge_size = max(8, int(11 * s))
     pad_v = max(1, int(2 * s))
     pad_h = max(4, int(7 * s))
@@ -1476,24 +1481,13 @@ class ArtaleExpOverlay(QWidget):
     auto_font.setPixelSize(auto_start_font_size)
     self.btn_auto_start.setFont(auto_font)
 
-    # 7. Footer (ARTALE EXP + Copyright)
+    # 7. Copyright footer
     cr_size = max(9, int(11 * s))
     foot_pad = max(1, int(2 * s))
-    self.lbl_title.setStyleSheet(f"""
-        QLabel {{
-            color: #94a3b8;
-            font-size: {cr_size}px;
-            font-weight: 700;
-            letter-spacing: 0.4px;
-            font-family: {FONT_LATIN};
-            background-color: #0e121c;
-            padding-top: {foot_pad}px;
-        }}
-    """)
     self.lbl_copyright.setStyleSheet(f"""
         QLabel {{
             font-size: {cr_size}px;
-            font-family: {FONT_FALLBACK};
+            font-family: {FONT_LATIN};
             background-color: #0e121c;
             padding-top: {foot_pad}px;
         }}
@@ -1663,49 +1657,52 @@ class ArtaleExpOverlay(QWidget):
 
     # State Badge (scaled) & F7 button text
     self._update_state_badge_style()
-    if self.engine.is_running:
-      self.btn_f7.setText("")
-      self.btn_f7.set_icon_name("pause")
-      self.btn_f7.set_custom_style(
-          bg=QColor(239, 68, 68, 38),
-          border=QColor(239, 68, 68, 80),
-          text_color=QColor("#f87171"),
-      )
-    elif self.engine.is_paused:
-      self.btn_f7.setText("")
-      self.btn_f7.set_icon_name("play")
-      self.btn_f7.set_custom_style(
-          bg=QColor(16, 185, 129, 38),
-          border=QColor(52, 211, 153, 80),
-          text_color=QColor("#34d399"),
-      )
-    else:
-      self.btn_f7.setText("")
-      self.btn_f7.set_icon_name("play")
-      self.btn_f7.set_custom_style(None, None, None)
-
-    if hasattr(self, "simple_btn_f7"):
-      f7_key = config.HOTKEY_LABEL_START_PAUSE
+    f7_state = (self.engine.is_running, self.engine.is_paused)
+    if getattr(self, "_last_f7_btn_state", None) != f7_state:
+      self._last_f7_btn_state = f7_state
       if self.engine.is_running:
-        self.simple_btn_f7.set_icon_name("pause")
-        self.simple_btn_f7.setToolTip(f"暫停測速 [{f7_key}]")
-        self.simple_btn_f7.set_custom_style(
+        self.btn_f7.setText("")
+        self.btn_f7.set_icon_name("pause")
+        self.btn_f7.set_custom_style(
             bg=QColor(239, 68, 68, 38),
             border=QColor(239, 68, 68, 80),
             text_color=QColor("#f87171"),
         )
       elif self.engine.is_paused:
-        self.simple_btn_f7.set_icon_name("play")
-        self.simple_btn_f7.setToolTip(f"繼續測速 [{f7_key}]")
-        self.simple_btn_f7.set_custom_style(
+        self.btn_f7.setText("")
+        self.btn_f7.set_icon_name("play")
+        self.btn_f7.set_custom_style(
             bg=QColor(16, 185, 129, 38),
             border=QColor(52, 211, 153, 80),
             text_color=QColor("#34d399"),
         )
       else:
-        self.simple_btn_f7.set_icon_name("play")
-        self.simple_btn_f7.setToolTip(f"開始測速 [{f7_key}]")
-        self.simple_btn_f7.set_custom_style(None, None, None)
+        self.btn_f7.setText("")
+        self.btn_f7.set_icon_name("play")
+        self.btn_f7.set_custom_style(None, None, None)
+
+      if hasattr(self, "simple_btn_f7"):
+        f7_key = config.HOTKEY_LABEL_START_PAUSE
+        if self.engine.is_running:
+          self.simple_btn_f7.set_icon_name("pause")
+          self.simple_btn_f7.setToolTip(f"暫停測速 [{f7_key}]")
+          self.simple_btn_f7.set_custom_style(
+              bg=QColor(239, 68, 68, 38),
+              border=QColor(239, 68, 68, 80),
+              text_color=QColor("#f87171"),
+          )
+        elif self.engine.is_paused:
+          self.simple_btn_f7.set_icon_name("play")
+          self.simple_btn_f7.setToolTip(f"繼續測速 [{f7_key}]")
+          self.simple_btn_f7.set_custom_style(
+              bg=QColor(16, 185, 129, 38),
+              border=QColor(52, 211, 153, 80),
+              text_color=QColor("#34d399"),
+          )
+        else:
+          self.simple_btn_f7.set_icon_name("play")
+          self.simple_btn_f7.setToolTip(f"開始測速 [{f7_key}]")
+          self.simple_btn_f7.set_custom_style(None, None, None)
 
     # Values in detailed mode (same rows are reused in game mode!)
     self.row_duration.set_value(m["練功時長"])
@@ -1722,8 +1719,9 @@ class ArtaleExpOverlay(QWidget):
 
     # Gauge Progress Bar
     if "raw_pct" in m and m["raw_pct"] is not None:
-      val_100x = int(m["raw_pct"] * 100)
-      self.gauge_bar.setValue(min(10000, max(0, val_100x)))
+      val_100x = min(10000, max(0, int(m["raw_pct"] * 100)))
+      if val_100x != self.gauge_bar.value():
+        self.gauge_bar.setValue(val_100x)
 
     # Simple Mode metrics
     if hasattr(self, "simple_metric_widgets"):

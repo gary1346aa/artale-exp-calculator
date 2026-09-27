@@ -40,12 +40,8 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.is_game_mode)
     self.assertEqual(self.overlay.width(), self.overlay.base_width)
     self.assertEqual(
-        self.overlay.lbl_title.alignment(),
-        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-    )
-    self.assertEqual(
         self.overlay.lbl_copyright.alignment(),
-        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+        Qt.AlignmentFlag.AlignCenter,
     )
 
     # Check all 10 metric widgets are present and visible
@@ -63,7 +59,6 @@ class TestOverlayHud(unittest.TestCase):
     # Toggle to Game Mode
     self.overlay.on_f9()
     self.assertTrue(self.overlay.is_game_mode)
-    self.assertFalse(self.overlay.lbl_title.isVisible())
     self.assertEqual(self.overlay.width(), self.overlay.base_width)
 
     game_height = self.overlay.size().height()
@@ -331,7 +326,6 @@ class TestOverlayHud(unittest.TestCase):
     # 2. F9 -> Game Mode
     self.overlay.on_f9()
     self.assertEqual(self.overlay.current_mode, "game")
-    self.assertFalse(self.overlay.lbl_title.isVisible())
     self.assertFalse(self.overlay.simple_widget.isVisible())
     self.assertFalse(self.overlay.outer_card.is_pill)
 
@@ -624,18 +618,13 @@ class TestOverlayHud(unittest.TestCase):
     self.assertFalse(self.overlay.simple_status_dot._breath_timer.isActive())
 
   def test_copyright_visibility_modes(self):
-    """Verify that footer (ARTALE EXP on left, copyright on right) is visible only in Full Mode and hidden when unfocused."""
-    # 1. Full Mode: Left/Right alignment
+    """Verify that footer copyright is centered, visible only in Full Mode and hidden when unfocused."""
+    # 1. Full Mode: Centered alignment
     self.overlay._set_mode("full")
     self.assertEqual(
-        self.overlay.lbl_title.alignment(),
-        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-    )
-    self.assertEqual(
         self.overlay.lbl_copyright.alignment(),
-        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+        Qt.AlignmentFlag.AlignCenter,
     )
-    self.assertEqual(self.overlay.lbl_title.text(), "ARTALE EXP")
     self.assertIn("© 2026 By", self.overlay.lbl_copyright.text())
     self.assertIn("G8G", self.overlay.lbl_copyright.text())
 
@@ -644,25 +633,21 @@ class TestOverlayHud(unittest.TestCase):
     with patch.object(self.overlay, "isActiveWindow", return_value=True):
       self.overlay._update_focus_visibility()
       self.assertTrue(self.overlay.footer_widget.isVisible())
-      self.assertTrue(self.overlay.lbl_title.isVisible())
       self.assertTrue(self.overlay.lbl_copyright.isVisible())
 
     with patch.object(self.overlay, "isActiveWindow", return_value=False):
       self.overlay._update_focus_visibility()
       self.assertFalse(self.overlay.footer_widget.isVisible())
-      self.assertFalse(self.overlay.lbl_title.isVisible())
       self.assertFalse(self.overlay.lbl_copyright.isVisible())
 
     # 2. Game Mode: Always hidden
     self.overlay._set_mode("game")
     self.assertFalse(self.overlay.footer_widget.isVisible())
-    self.assertFalse(self.overlay.lbl_title.isVisible())
     self.assertFalse(self.overlay.lbl_copyright.isVisible())
 
     # 3. Simple Mode: Always hidden
     self.overlay._set_mode("simple")
     self.assertFalse(self.overlay.footer_widget.isVisible())
-    self.assertFalse(self.overlay.lbl_title.isVisible())
     self.assertFalse(self.overlay.lbl_copyright.isVisible())
 
   def test_about_dialog_content(self):
@@ -807,6 +792,54 @@ class TestOverlayHud(unittest.TestCase):
     ev_cmd9 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_9, Qt.KeyboardModifier.ControlModifier)
     self.overlay.keyPressEvent(ev_cmd9)
     self.assertEqual(self.overlay.on_f9.call_count, 2)
+
+  def test_launch_in_simple_mode(self):
+    """Verify that launching with mode='simple' has all detailed metric rows and gauge bar hidden."""
+    from unittest.mock import patch
+    with patch.object(
+        ArtaleExpOverlay,
+        "_load_config",
+        lambda self: setattr(self, "current_mode", "simple"),
+    ):
+      overlay_simple = ArtaleExpOverlay(load_config=True)
+      try:
+        overlay_simple.show()
+        self.assertEqual(overlay_simple.current_mode, "simple")
+        self.assertTrue(overlay_simple.simple_widget.isVisible())
+        self.assertFalse(overlay_simple.header_widget.isVisible())
+        self.assertFalse(overlay_simple.sub_widget.isVisible())
+        self.assertFalse(overlay_simple.details_container.isVisible())
+        self.assertFalse(overlay_simple.gauge_bar.isVisible())
+        for key, w in overlay_simple.metric_widgets.items():
+          self.assertFalse(
+              w.isVisible(),
+              f"Widget {key} should not be visible when launched in simple mode",
+          )
+      finally:
+        overlay_simple.close()
+
+  def test_context_menu_no_bracketed_shortcut_in_mode_items(self):
+    """Verify that mode switch options in right-click menu do not contain '[F9]' or bracketed shortcut text."""
+    from unittest.mock import patch
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtGui import QContextMenuEvent
+
+    actions_seen = []
+
+    def fake_exec(menu_self, pos=None):
+      for act in menu_self.actions():
+        actions_seen.append(act.text())
+      return None
+
+    with patch("PyQt6.QtWidgets.QMenu.exec", new=fake_exec):
+      event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10))
+      self.overlay.contextMenuEvent(event)
+
+    for act_text in actions_seen:
+      if "切換至" in act_text:
+        self.assertNotIn("[F9]", act_text)
+        self.assertNotIn("[", act_text)
+        self.assertNotIn("]", act_text)
 
 
 class TestSettingsPersistence(unittest.TestCase):

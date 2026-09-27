@@ -41,21 +41,27 @@ class StatusDotWidget(QLabel):
     self._is_breathing: bool = False
     self._breath_alpha: float = 1.0
     self._breath_step: float = 0.0
+    self._last_state_key: Optional[tuple] = None
 
     self.setFixedSize(size, size)
     self.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
     self._breath_timer = QTimer(self)
-    self._breath_timer.setInterval(40)  # ~25 FPS
+    self._breath_timer.setInterval(80)  # ~12.5 FPS smooth breathing
     self._breath_timer.timeout.connect(self._on_breath_tick)
 
   def update_scale(self, size: int) -> None:
     """Updates the fixed bounding size of the dot."""
-    self._dot_size = max(8, size)
+    new_size = max(8, size)
+    if new_size == self._dot_size and self._last_state_key is not None:
+      return
+    self._dot_size = new_size
+    self._last_state_key = None
     self.setFixedSize(self._dot_size, self._dot_size)
     self.setStyleSheet(
-        f"color: {self._color.name()}; font-size: {self._dot_size}px; background: transparent;"
+        f"color: {self._color.name()}; font-size: {self._dot_size}px;"
+        f" font-family: {config.FONT_CHINESE}; background: transparent;"
     )
     self.update()
 
@@ -67,11 +73,19 @@ class StatusDotWidget(QLabel):
       tooltip: str = "",
   ) -> None:
     """Updates the state, color, breathing animation, and tooltip of the dot."""
+    qcolor = QColor(color) if isinstance(color, str) else color
+    color_name = qcolor.name()
+    state_key = (is_solid, color_name, self._dot_size, is_breathing, tooltip)
+    if state_key == self._last_state_key:
+      return
+    self._last_state_key = state_key
+
     self._is_solid = is_solid
-    self._color = QColor(color) if isinstance(color, str) else color
+    self._color = qcolor
     self.setText("●" if is_solid else "○")
     self.setStyleSheet(
-        f"color: {self._color.name()}; font-size: {self._dot_size}px; background-color: #0e121c;"
+        f"color: {color_name}; font-size: {self._dot_size}px;"
+        f" font-family: {config.FONT_CHINESE}; background-color: #0e121c;"
     )
     if tooltip:
       self.setToolTip(tooltip)
@@ -88,7 +102,7 @@ class StatusDotWidget(QLabel):
     self.update()
 
   def _on_breath_tick(self) -> None:
-    self._breath_step += 0.14
+    self._breath_step += 0.28
     # Smooth sinusoidal breathing between 0.0 and 1.0
     self._breath_alpha = 0.50 + 0.50 * math.sin(self._breath_step)
     self.update()
@@ -135,6 +149,7 @@ class MetricRow(QFrame):
     self.font_weight: int = 600
     self.v_pad_base: int = 1
     self.current_color: Optional[str] = None
+    self._val_is_ascii: bool = default_val.isascii()
     self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
     self.layout = QHBoxLayout(self)
@@ -177,6 +192,7 @@ class MetricRow(QFrame):
         else ("#FFFFFF" if self.is_highlight else "#f1f5f9")
     )
     title_w, val_w = self._get_weights()
+    val_ff = config.FONT_LATIN if self._val_is_ascii else config.FONT_CHINESE
     v_pad = (
         0
         if self.v_pad_base == 0
@@ -202,17 +218,21 @@ class MetricRow(QFrame):
             color: {val_color};
             font-size: {val_size}px;
             font-weight: {val_w};
-            font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
+            font-family: {val_ff};
             background-color: #0e121c;
         }}
     """)
 
   def set_value(self, val_str: str, color: Optional[str] = None) -> None:
-    self.lbl_value.setText(val_str)
-    if color != self.current_color:
+    if val_str != self.lbl_value.text():
+      self.lbl_value.setText(val_str)
+    is_ascii = val_str.isascii()
+    if color != self.current_color or is_ascii != self._val_is_ascii:
       self.current_color = color
+      self._val_is_ascii = is_ascii
       val_size = max(11, int((16 if self.is_highlight else 15) * self.scale))
       _, val_w = self._get_weights()
+      val_ff = config.FONT_LATIN if is_ascii else config.FONT_CHINESE
       fg_color = (
           color if color else ("#FFFFFF" if self.is_highlight else "#f1f5f9")
       )
@@ -221,7 +241,7 @@ class MetricRow(QFrame):
               color: {fg_color};
               font-size: {val_size}px;
               font-weight: {val_w};
-              font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
+              font-family: {val_ff};
               background-color: #0e121c;
           }}
       """)
@@ -264,6 +284,7 @@ class SimpleMetricItem(QWidget):
     self.scale: float = 1.0
     self.font_weight: int = 600
     self.current_val_color: str = "#f8fafc"
+    self._val_is_ascii: bool = True
 
     self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
@@ -307,6 +328,7 @@ class SimpleMetricItem(QWidget):
     lbl_font_size = max(10, int(13 * scale))
     val_font_size = max(12, int(15 * scale))
     lbl_w, val_w = self._get_weights()
+    val_ff = config.FONT_LATIN if self._val_is_ascii else config.FONT_CHINESE
     self.layout().setSpacing(max(3, int(5 * scale)))
     val_min_w = max(55, int(86 * scale))
     self.lbl_value.setMinimumWidth(val_min_w)
@@ -324,7 +346,7 @@ class SimpleMetricItem(QWidget):
             color: {self.current_val_color};
             font-size: {val_font_size}px;
             font-weight: {val_w};
-            font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
+            font-family: {val_ff};
             background-color: #0e121c;
         }}
     """)
@@ -332,19 +354,25 @@ class SimpleMetricItem(QWidget):
   update_style = update_scale
 
   def set_value(self, val_str: str, color: Optional[str] = None) -> None:
-    self.lbl_value.setText(val_str)
-    self.current_val_color = color if color else "#f8fafc"
-    val_font_size = max(12, int(15 * self.scale))
-    _, val_w = self._get_weights()
-    self.lbl_value.setStyleSheet(f"""
-        QLabel {{
-            color: {self.current_val_color};
-            font-size: {val_font_size}px;
-            font-weight: {val_w};
-            font-family: {config.FONT_LATIN}, {config.FONT_CHINESE};
-            background-color: #0e121c;
-        }}
-    """)
+    if val_str != self.lbl_value.text():
+      self.lbl_value.setText(val_str)
+    new_color = color if color else "#f8fafc"
+    is_ascii = val_str.isascii()
+    if new_color != self.current_val_color or is_ascii != self._val_is_ascii:
+      self.current_val_color = new_color
+      self._val_is_ascii = is_ascii
+      val_font_size = max(12, int(15 * self.scale))
+      _, val_w = self._get_weights()
+      val_ff = config.FONT_LATIN if is_ascii else config.FONT_CHINESE
+      self.lbl_value.setStyleSheet(f"""
+          QLabel {{
+              color: {self.current_val_color};
+              font-size: {val_font_size}px;
+              font-weight: {val_w};
+              font-family: {val_ff};
+              background-color: #0e121c;
+          }}
+      """)
 
 
 class SimpleProgressBarItem(QWidget):
@@ -412,7 +440,9 @@ class SimpleProgressBarItem(QWidget):
   update_style = update_scale
 
   def set_value(self, val_100x: int) -> None:
-    self.bar.setValue(min(10000, max(0, val_100x)))
+    clamped = min(10000, max(0, val_100x))
+    if clamped != self.bar.value():
+      self.bar.setValue(clamped)
 
 
 def draw_vector_icon(

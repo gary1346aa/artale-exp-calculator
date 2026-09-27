@@ -7,7 +7,6 @@ Zero external package dependencies; uses native macOS frameworks.
 import ctypes
 import sys
 from typing import List, Optional, Tuple
-import cv2
 import numpy as np
 
 
@@ -442,7 +441,7 @@ def capture_macos_window(window_id: int) -> Optional[np.ndarray]:
 
     arr = arr[: bytes_per_row * height].reshape((height, bytes_per_row))
     rgba = arr[:, : width * 4].reshape((height, width, 4))
-    bgr = cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGR)
+    bgr = np.ascontiguousarray(rgba[:, :, 2::-1])
     return bgr
   except Exception:
     return None

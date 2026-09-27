@@ -62,11 +62,16 @@ def _ensure_dialog_fonts() -> None:
     return
   fonts_dir = config.get_resource_path(os.path.join("assets", "fonts"))
   if os.path.isdir(fonts_dir):
-    for fname in [
-        "GoogleSans.ttf",
-        "PingFangTC-Regular.otf",
-        "PingFangTC-Medium.otf",
-    ]:
+    font_files = (
+        ["GoogleSans.ttf"]
+        if sys.platform == "darwin"
+        else [
+            "GoogleSans.ttf",
+            "PingFangTC-Regular.otf",
+            "PingFangTC-Medium.otf",
+        ]
+    )
+    for fname in font_files:
       fpath = os.path.join(fonts_dir, fname)
       if os.path.isfile(fpath):
         QFontDatabase.addApplicationFont(fpath)

@@ -62,6 +62,39 @@ class PythonExpEngineTest(unittest.TestCase):
     self.assertAlmostEqual(pct_val, 0.32, places=3)
     self.assertEqual(raw_str, "772097[0.32%]")
 
+  def test_bgra_zero_copy_and_static_skip_equivalence(self) -> None:
+    """Verifies 4-channel BGRA zero-copy buffer parsing and static-frame cold skip."""
+    from core import engine as main_engine
+
+    text = "772097[0.32%]"
+    strip_h = 38
+    strip_w = 350
+    strip_bgr = np.zeros((strip_h, strip_w, 3), dtype=np.uint8)
+    strip_bgra = np.zeros((strip_h, strip_w, 4), dtype=np.uint8)
+    strip_bgra[:, :, 3] = 255
+
+    cur_x = 20
+    base_y = 6
+    for ch in text:
+      tpl = self.engine.templates[ch]
+      w = tpl['w']
+      h = tpl['h']
+      fmap = tpl['fmap']
+      char_y = base_y if h == 25 else (base_y + 2)
+      char_patch = (fmap * 255.0).astype(np.uint8)
+      for c in range(3):
+        strip_bgr[char_y:char_y + h, cur_x:cur_x + w, c] = char_patch
+        strip_bgra[char_y:char_y + h, cur_x:cur_x + w, c] = char_patch
+      cur_x += 6 if ch == '.' else (w + 2)
+
+    res_bgr = main_engine.parse_frame(strip_bgr)
+    res_bgra = main_engine.parse_frame(strip_bgra)
+    self.assertIsNotNone(res_bgr)
+    self.assertIsNotNone(res_bgra)
+    self.assertEqual(res_bgr.exp_value, res_bgra.exp_value)
+    self.assertAlmostEqual(res_bgr.exp_percent, res_bgra.exp_percent, places=3)
+    self.assertEqual(res_bgr.raw_string, res_bgra.raw_string)
+
 
 if __name__ == '__main__':
   unittest.main()

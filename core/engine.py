@@ -9,9 +9,9 @@ import os
 import sys
 import time
 from typing import Optional, Tuple
-import numpy as np
 
 import config
+import numpy as np
 
 class ExpResult(ctypes.Structure):
   """C-compatible struct matching the native artale_exp_core export."""
@@ -195,7 +195,7 @@ def _parse_frame_python(bgr_img: np.ndarray) -> Optional[ParsedFrame]:
   if _cached_crop_box is not None:
     cx, cy, cw, ch = _cached_crop_box
     if cy + ch <= h and cx + cw <= w:
-      crop_bgr = bgr_img[cy : cy + ch, cx : cx + cw]
+      crop_bgr = bgr_img[cy : cy + ch, cx : cx + cw, :3]
       parsed = engine.parse_crop(crop_bgr)
       if parsed:
         exp_val, pct_val, raw_str, _crop_dt, _ = parsed
@@ -204,7 +204,7 @@ def _parse_frame_python(bgr_img: np.ndarray) -> Optional[ParsedFrame]:
 
   strip_h = min(h, max(80, int(h * 0.15)))
   strip_y = max(0, h - strip_h)
-  strip_bgr = bgr_img[strip_y:, :]
+  strip_bgr = bgr_img[strip_y:, :, :3]
   strip_gray = cv2.cvtColor(strip_bgr, cv2.COLOR_BGR2GRAY)
 
   found = False
@@ -275,7 +275,7 @@ def _parse_frame_python(bgr_img: np.ndarray) -> Optional[ParsedFrame]:
   if crop_w <= 10 or crop_h <= 10:
     return None
 
-  crop_bgr = bgr_img[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
+  crop_bgr = bgr_img[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w, :3]
   parsed = engine.parse_crop(crop_bgr)
   if not parsed:
     return None
@@ -308,11 +308,22 @@ def parse_frame(bgr_img: Optional[np.ndarray]) -> Optional[ParsedFrame]:
 
   h, w = bgr_img.shape[:2]
   c = bgr_img.shape[2] if len(bgr_img.shape) > 2 else 1
-  stride = w * c
 
   if _use_cpp and _core_dll is not None:
     res = ExpResult()
-    buf = np.ascontiguousarray(bgr_img)
+    if (
+        bgr_img.dtype == np.uint8
+        and len(bgr_img.shape) == 3
+        and bgr_img.strides[2] == 1
+        and bgr_img.strides[1] == c
+        and bgr_img.strides[0] >= w * c
+    ):
+      buf = bgr_img
+      stride = int(bgr_img.strides[0])
+    else:
+      buf = np.ascontiguousarray(bgr_img, dtype=np.uint8)
+      stride = w * c
+
     ret = _core_dll.ParseExpFromBuffer(
         buf.ctypes.data_as(ctypes.c_char_p),
         w,

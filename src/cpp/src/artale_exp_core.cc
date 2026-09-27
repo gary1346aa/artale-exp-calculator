@@ -50,6 +50,7 @@ struct EngineState {
   bool has_cached_crop = false;
   BoundingBox cached_crop_box;
   BoundingBox cached_logo_box;
+  std::vector<uint8_t> last_failed_strip_gray;
 };
 
 EngineState& GetEngineState() {
@@ -136,19 +137,29 @@ void ExtractGraySubRect(const uint8_t* bgr_data, int width, int height, int stri
 // Locates the EXP logo in the bottom strip of the frame using multi-scale
 // template matching.
 bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride, int bytes_per_px,
-                   BoundingBox* out_logo_box) {
+                   const std::vector<uint8_t>* last_failed_strip_gray,
+                   std::vector<uint8_t>* out_strip_gray, BoundingBox* out_logo_box) {
   int strip_h = std::min(height, std::max(80, static_cast<int>(height * 0.15f)));
   int strip_y = std::max(0, height - strip_h);
   int strip_w = width;
   if (strip_w < 50 || strip_h < 20) return false;
 
-  std::vector<uint8_t> strip_gray(strip_w * strip_h);
+  out_strip_gray->resize(static_cast<size_t>(strip_w) * static_cast<size_t>(strip_h));
   ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px, 0, strip_y, strip_w, strip_h,
-                     strip_gray.data());
+                     out_strip_gray->data());
 
-  std::vector<float> strip_float(strip_w * strip_h);
-  for (size_t i = 0; i < strip_gray.size(); ++i) {
-    strip_float[i] = static_cast<float>(strip_gray[i]);
+  // Lossless static-frame skip: if the bottom strip is byte-for-byte identical
+  // to the previous failed cold-search strip, skip the 16-scale NCC search.
+  if (last_failed_strip_gray != nullptr &&
+      last_failed_strip_gray->size() == out_strip_gray->size() &&
+      std::memcmp(out_strip_gray->data(), last_failed_strip_gray->data(),
+                  out_strip_gray->size()) == 0) {
+    return false;
+  }
+
+  std::vector<float> strip_float(out_strip_gray->size());
+  for (size_t i = 0; i < out_strip_gray->size(); ++i) {
+    strip_float[i] = static_cast<float>((*out_strip_gray)[i]);
   }
 
   // Calculate resolution-guided center scale
@@ -273,6 +284,7 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width, int height
   // Invalidate cache if resolution changed
   if (state.last_frame_width != width || state.last_frame_height != height) {
     state.has_cached_crop = false;
+    state.last_failed_strip_gray.clear();
     state.last_frame_width = width;
     state.last_frame_height = height;
   }
@@ -292,6 +304,7 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width, int height
                                       text_box.y, text_box.w, text_box.h, crop_gray.data());
 
       if (state.engine.ParseCrop(crop_gray.data(), text_box.w, text_box.h, text_box.w, &crop_res)) {
+        state.last_failed_strip_gray.clear();
         auto t_end = std::chrono::steady_clock::now();
         float dt_ms = std::chrono::duration<float, std::milli>(t_end - t_start).count();
 
@@ -315,8 +328,13 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width, int height
   }
 
   // 2. Cold path: locate logo across ROI
-  if (!artale::exp::LocateExpLogo(bgr_data, width, height, stride, bytes_per_px, &logo_box)) {
+  std::vector<uint8_t> current_strip_gray;
+  if (!artale::exp::LocateExpLogo(bgr_data, width, height, stride, bytes_per_px,
+                                  &state.last_failed_strip_gray, &current_strip_gray, &logo_box)) {
     state.has_cached_crop = false;
+    if (!current_strip_gray.empty()) {
+      state.last_failed_strip_gray = std::move(current_strip_gray);
+    }
     return 0;
   }
 
@@ -335,6 +353,9 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width, int height
 
   if (text_box.w < 10 || text_box.h < 10) {
     state.has_cached_crop = false;
+    if (!current_strip_gray.empty()) {
+      state.last_failed_strip_gray = std::move(current_strip_gray);
+    }
     return 0;
   }
 
@@ -346,6 +367,7 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width, int height
     state.has_cached_crop = true;
     state.cached_crop_box = text_box;
     state.cached_logo_box = logo_box;
+    state.last_failed_strip_gray.clear();
 
     auto t_end = std::chrono::steady_clock::now();
     float dt_ms = std::chrono::duration<float, std::milli>(t_end - t_start).count();
@@ -368,6 +390,9 @@ ARTALE_API int ParseExpFromBuffer(const uint8_t* bgr_data, int width, int height
   }
 
   state.has_cached_crop = false;
+  if (!current_strip_gray.empty()) {
+    state.last_failed_strip_gray = std::move(current_strip_gray);
+  }
   return 0;
 }
 
