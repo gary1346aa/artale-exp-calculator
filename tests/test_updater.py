@@ -191,6 +191,55 @@ class TestUpdater(unittest.TestCase):
       with self.assertRaises(urllib.error.URLError):
         _safe_urlopen(mock_req, timeout=5)
 
+  def test_same_version_flag_distinction(self):
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.read.return_value = b"""{
+      "tag_name": "v1.0.0",
+      "body": "Same version release",
+      "assets": [
+        {"name": "ArtaleExpCalculator-win-x64.zip", "browser_download_url": "https://github.com/test/download.zip", "size": 12345}
+      ]
+    }"""
+    mock_cm = MagicMock()
+    mock_cm.__enter__.return_value = mock_resp
+    with patch("urllib.request.urlopen", return_value=mock_cm):
+      has_same, info_same, msg_same = check_for_update(current_version="1.0.0", allow_same_version=True)
+      self.assertTrue(has_same)
+      self.assertIsNotNone(info_same)
+      self.assertTrue(info_same.is_same_version)
+      self.assertIn("重新下載安裝", msg_same)
+
+      has_higher, info_higher, msg_higher = check_for_update(current_version="0.9.0", allow_same_version=True)
+      self.assertTrue(has_higher)
+      self.assertIsNotNone(info_higher)
+      self.assertFalse(info_higher.is_same_version)
+      self.assertIn("發現新版本", msg_higher)
+
+  def test_windows_update_script_utf8_bom_and_staging(self):
+    from core.updater import apply_update_and_restart
+
+    with patch("sys.platform", "win32"), patch("sys.frozen", True, create=True), patch("subprocess.Popen") as mock_popen:
+      target_dir = r"C:\Users\測試使用者\桌面\Artale's Folder"
+      archive_path = r"C:\Users\測試使用者\AppData\Local\Temp\update.zip"
+      ok, msg = apply_update_and_restart(archive_path, target_dir=target_dir, is_dev=False)
+      self.assertTrue(ok)
+      self.assertTrue(mock_popen.called)
+      args = mock_popen.call_args[0][0]
+      script_path = args[-1]
+      try:
+        with open(script_path, "rb") as f:
+          raw = f.read()
+        # Verify UTF-8 BOM is present for Windows PowerShell 5.1 Chinese path compatibility
+        self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))
+        text = raw.decode("utf-8-sig")
+        self.assertIn("桌面", text)
+        self.assertIn("Artale''s Folder", text)
+        self.assertIn("artale_stage_", text)
+      finally:
+        if os.path.exists(script_path):
+          os.remove(script_path)
+
 
 if __name__ == "__main__":
   unittest.main()

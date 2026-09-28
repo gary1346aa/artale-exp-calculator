@@ -37,6 +37,7 @@ class UpdateInfo:
   asset_size: int
   published_at: str = ""
   sha256: Optional[str] = None
+  is_same_version: bool = False
 
 
 def parse_version_tuple(version_str: str) -> Tuple[int, int, int, int, int]:
@@ -290,6 +291,7 @@ def check_for_update(
       )
       sha256 = download_info.get("sha256")
       asset_name = download_url.split("/")[-1] if download_url else "update.zip"
+      same_ver = latest_tuple == current_tuple
 
       info = UpdateInfo(
           version=remote_version,
@@ -300,11 +302,12 @@ def check_for_update(
           asset_size=0,
           published_at=manifest.get("release_date", ""),
           sha256=sha256,
+          is_same_version=same_ver,
       )
       status_msg = (
           f"發現新版本 v{remote_version}"
           if latest_tuple > current_tuple
-          else f"發現版本 v{remote_version} (已是最新，可重新安裝/更新)"
+          else f"目前已是最新版本 v{remote_version} (可重新下載安裝)"
       )
       return True, info, status_msg
 
@@ -345,6 +348,8 @@ def check_for_update(
   ):
     return False, None, f"目前已是最新版本 ({config.get_full_version_string()}) ✓"
 
+  same_ver = latest_tuple == current_tuple
+
   # Find matching platform asset
   assets = data.get("assets", [])
   matched_asset = select_best_asset(assets)
@@ -360,6 +365,7 @@ def check_for_update(
         asset_name="browser_release",
         asset_size=0,
         published_at=data.get("published_at", ""),
+        is_same_version=same_ver,
     )
     return True, info, f"發現新版本 v{remote_version} (無直接下載包，請前往網頁下載)"
 
@@ -371,11 +377,12 @@ def check_for_update(
       asset_name=matched_asset.get("name", "update.zip"),
       asset_size=matched_asset.get("size", 0),
       published_at=data.get("published_at", ""),
+      is_same_version=same_ver,
   )
   status_msg = (
       f"發現新版本 v{remote_version}"
       if latest_tuple > current_tuple
-      else f"發現版本 v{remote_version} (已是最新，可重新安裝/更新)"
+      else f"目前已是最新版本 v{remote_version} (可重新下載安裝)"
   )
   return True, info, status_msg
 
@@ -460,29 +467,66 @@ def apply_update_and_restart(
   current_pid = os.getpid()
 
   if sys.platform == "win32":
-    ps1_content = f"""$ErrorActionPreference = 'SilentlyContinue'
+    escaped_archive = archive_path.replace("'", "''")
+    escaped_target = target_dir.replace("'", "''")
+    ps1_content = f"""$ErrorActionPreference = 'Stop'
 $pidToWait = {current_pid}
-$archive = '{archive_path}'
-$target = '{target_dir}'
+$archive = '{escaped_archive}'
+$target = '{escaped_target}'
+$stageDir = Join-Path $env:TEMP 'artale_stage_{current_pid}'
+$logFile = Join-Path $env:TEMP 'artale_update_error.log'
 
-# 1. Wait up to 10 seconds for current process to exit
+# 1. Wait up to 15 seconds for current process to exit
 try {{
     $proc = Get-Process -Id $pidToWait -ErrorAction SilentlyContinue
     if ($proc) {{
-        $proc.WaitForExit(10000)
+        $proc.WaitForExit(15000)
     }}
 }} catch {{}}
 
 Start-Sleep -Milliseconds 600
 
-# 2. Extract update archive into target directory
+# 2. Extract update archive to temporary staging directory and copy with retry
 try {{
-    Expand-Archive -LiteralPath $archive -DestinationPath $target -Force
-}} catch {{}}
+    if (Test-Path -LiteralPath $stageDir) {{
+        Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
+    }}
+    New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
+    Expand-Archive -LiteralPath $archive -DestinationPath $stageDir -Force
+
+    # Unwrap single top-level directory if present
+    $sourceDir = $stageDir
+    $topItems = @(Get-ChildItem -LiteralPath $stageDir -Force)
+    if ($topItems.Count -eq 1 -and $topItems[0].PSIsContainer) {{
+        $sourceDir = $topItems[0].FullName
+    }}
+
+    $copied = $false
+    for ($attempt = 1; $attempt -le 10; $attempt++) {{
+        try {{
+            Copy-Item -Path (Join-Path $sourceDir '*') -Destination $target -Recurse -Force -ErrorAction Stop
+            $copied = $true
+            break
+        }} catch {{
+            if ($attempt -eq 10) {{
+                throw $_
+            }}
+            Start-Sleep -Milliseconds 500
+        }}
+    }}
+}} catch {{
+    try {{
+        "[$(Get-Date -Format o)] Update failed: $($_.Exception.Message)" | Out-File -LiteralPath $logFile -Encoding utf8 -Append
+    }} catch {{}}
+}} finally {{
+    if (Test-Path -LiteralPath $stageDir) {{
+        Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
+    }}
+}}
 
 # 3. Restart main application
 $exe = Join-Path $target 'ArtaleExpCalculator.exe'
-if (Test-Path $exe) {{
+if (Test-Path -LiteralPath $exe) {{
     Start-Process -FilePath $exe -WorkingDirectory $target
 }}
 
@@ -492,7 +536,8 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
 """
     script_path = os.path.join(tempfile.gettempdir(), f"artale_update_{current_pid}.ps1")
     try:
-      with open(script_path, "w", encoding="utf-8") as f:
+      # Use utf-8-sig (UTF-8 with BOM) so Windows PowerShell 5.1 properly reads Unicode/Chinese paths
+      with open(script_path, "w", encoding="utf-8-sig") as f:
         f.write(ps1_content)
 
       # Launch hidden background PowerShell process on Windows (CREATE_NO_WINDOW + NEW_PROCESS_GROUP)

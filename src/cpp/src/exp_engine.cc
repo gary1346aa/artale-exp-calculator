@@ -137,14 +137,6 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h, int src_str
     float fy = static_cast<float>((dy + 0.5) * scale_y - 0.5);
     int sy = static_cast<int>(std::floor(fy));
     fy -= sy;
-    if (sy < 0) {
-      fy = 0.0f;
-      sy = 0;
-    }
-    if (sy >= src_h - 1) {
-      fy = 0.0f;
-      sy = src_h - 1;
-    }
     yofs[dy] = sy;
     float c0 = 1.0f - fy;
     float c1 = fy;
@@ -153,8 +145,9 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h, int src_str
   }
 
   for (int dy = 0; dy < dst_h; ++dy) {
-    int sy0 = yofs[dy];
-    int sy1 = std::min(sy0 + 1, src_h - 1);
+    int sy = yofs[dy];
+    int sy0 = std::max(0, std::min(sy, src_h - 1));
+    int sy1 = std::max(0, std::min(sy + 1, src_h - 1));
     int32_t b0 = ibeta[dy * 2 + 0];
     int32_t b1 = ibeta[dy * 2 + 1];
 
@@ -340,7 +333,7 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h, int src_str
                                  vmull_s16(vget_high_s16(r1_1_lo), vget_high_s16(a1_lo))),
                       4);
       int32x4_t s1_1_hi =
-          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_high_s16(r1_1_hi), vget_high_s16(a1_hi)),
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r1_1_hi), vget_low_s16(a1_hi)),
                                  vmull_s16(vget_high_s16(r1_1_hi), vget_high_s16(a1_hi))),
                       4);
 
@@ -394,7 +387,7 @@ void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h, int src_str
                                  vmull_s16(vget_high_s16(r1_lo), vget_high_s16(alpha_lo))),
                       4);
       int32x4_t s1_hi =
-          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_high_s16(r1_hi), vget_high_s16(alpha_hi)),
+          vshrq_n_s32(vpaddq_s32(vmull_s16(vget_low_s16(r1_hi), vget_low_s16(alpha_hi)),
                                  vmull_s16(vget_high_s16(r1_hi), vget_high_s16(alpha_hi))),
                       4);
 
@@ -468,14 +461,6 @@ void ExpEngine::ResizeGrayScalar(const uint8_t* src, int src_w, int src_h, int s
     float fy = static_cast<float>((dy + 0.5) * scale_y - 0.5);
     int sy = static_cast<int>(std::floor(fy));
     fy -= sy;
-    if (sy < 0) {
-      fy = 0.0f;
-      sy = 0;
-    }
-    if (sy >= src_h - 1) {
-      fy = 0.0f;
-      sy = src_h - 1;
-    }
     yofs[dy] = sy;
     float c0 = 1.0f - fy;
     float c1 = fy;
@@ -484,8 +469,9 @@ void ExpEngine::ResizeGrayScalar(const uint8_t* src, int src_w, int src_h, int s
   }
 
   for (int dy = 0; dy < dst_h; ++dy) {
-    int sy0 = yofs[dy];
-    int sy1 = std::min(sy0 + 1, src_h - 1);
+    int sy = yofs[dy];
+    int sy0 = std::max(0, std::min(sy, src_h - 1));
+    int sy1 = std::max(0, std::min(sy + 1, src_h - 1));
     int32_t b0 = ibeta[dy * 2 + 0];
     int32_t b1 = ibeta[dy * 2 + 1];
 
@@ -611,7 +597,7 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int i
         for (; c < img_w; ++c) {
           double val = static_cast<double>(img_row[c]);
           col_sum[c] += val;
-          col_sum2[c] += val * val;
+          col_sum2[c] = std::fma(val, val, col_sum2[c]);
         }
       }
     } else {
@@ -739,7 +725,7 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int i
     for (; nx < out_w; ++nx) {
       double sum_i = pref_i[nx + tw] - pref_i[nx];
       double sum_i2 = pref_i2[nx + tw] - pref_i2[nx];
-      double var_i = sum_i2 - (sum_i * sum_i) * inv_pixels;
+      double var_i = std::fma(-(sum_i * sum_i), inv_pixels, sum_i2);
       if (var_i <= 1e-5) {
         inv_norm[nx] = 0.0f;
       } else {
@@ -926,20 +912,20 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int i
           float32x4_t i2 = vld1q_f32(img_row + c + 8);
           float32x4_t i3 = vld1q_f32(img_row + c + 12);
 
-          acc0 = vmlaq_f32(acc0, t0, i0);
-          acc1 = vmlaq_f32(acc1, t0, i1);
-          acc2 = vmlaq_f32(acc2, t0, i2);
-          acc3 = vmlaq_f32(acc3, t0, i3);
+          acc0 = vfmaq_f32(acc0, t0, i0);
+          acc1 = vfmaq_f32(acc1, t0, i1);
+          acc2 = vfmaq_f32(acc2, t0, i2);
+          acc3 = vfmaq_f32(acc3, t0, i3);
 
           float32x4_t i0_b = vld1q_f32(img_row + c + 1);
           float32x4_t i1_b = vld1q_f32(img_row + c + 5);
           float32x4_t i2_b = vld1q_f32(img_row + c + 9);
           float32x4_t i3_b = vld1q_f32(img_row + c + 13);
 
-          acc0_b = vmlaq_f32(acc0_b, t1, i0_b);
-          acc1_b = vmlaq_f32(acc1_b, t1, i1_b);
-          acc2_b = vmlaq_f32(acc2_b, t1, i2_b);
-          acc3_b = vmlaq_f32(acc3_b, t1, i3_b);
+          acc0_b = vfmaq_f32(acc0_b, t1, i0_b);
+          acc1_b = vfmaq_f32(acc1_b, t1, i1_b);
+          acc2_b = vfmaq_f32(acc2_b, t1, i2_b);
+          acc3_b = vfmaq_f32(acc3_b, t1, i3_b);
         }
         for (; c < tw; ++c) {
           float32x4_t t0 = vdupq_n_f32(t_ptr[c]);
@@ -948,10 +934,10 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int i
           float32x4_t i2 = vld1q_f32(img_row + c + 8);
           float32x4_t i3 = vld1q_f32(img_row + c + 12);
 
-          acc0 = vmlaq_f32(acc0, t0, i0);
-          acc1 = vmlaq_f32(acc1, t0, i1);
-          acc2 = vmlaq_f32(acc2, t0, i2);
-          acc3 = vmlaq_f32(acc3, t0, i3);
+          acc0 = vfmaq_f32(acc0, t0, i0);
+          acc1 = vfmaq_f32(acc1, t0, i1);
+          acc2 = vfmaq_f32(acc2, t0, i2);
+          acc3 = vfmaq_f32(acc3, t0, i3);
         }
         t_ptr += tw;
       }
@@ -992,20 +978,20 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int i
 
           float32x4_t i0 = vld1q_f32(img_row + c);
           float32x4_t i1 = vld1q_f32(img_row + c + 4);
-          acc0 = vmlaq_f32(acc0, t0, i0);
-          acc1 = vmlaq_f32(acc1, t0, i1);
+          acc0 = vfmaq_f32(acc0, t0, i0);
+          acc1 = vfmaq_f32(acc1, t0, i1);
 
           float32x4_t i0_b = vld1q_f32(img_row + c + 1);
           float32x4_t i1_b = vld1q_f32(img_row + c + 5);
-          acc0_b = vmlaq_f32(acc0_b, t1, i0_b);
-          acc1_b = vmlaq_f32(acc1_b, t1, i1_b);
+          acc0_b = vfmaq_f32(acc0_b, t1, i0_b);
+          acc1_b = vfmaq_f32(acc1_b, t1, i1_b);
         }
         for (; c < tw; ++c) {
           float32x4_t t0 = vdupq_n_f32(t_ptr[c]);
           float32x4_t i0 = vld1q_f32(img_row + c);
           float32x4_t i1 = vld1q_f32(img_row + c + 4);
-          acc0 = vmlaq_f32(acc0, t0, i0);
-          acc1 = vmlaq_f32(acc1, t0, i1);
+          acc0 = vfmaq_f32(acc0, t0, i0);
+          acc1 = vfmaq_f32(acc1, t0, i1);
         }
         t_ptr += tw;
       }
@@ -1035,13 +1021,13 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int i
           float32x4_t t1 = vdupq_n_f32(t_ptr[c + 1]);
           float32x4_t img0 = vld1q_f32(img_row + c);
           float32x4_t img1 = vld1q_f32(img_row + c + 1);
-          acc = vmlaq_f32(acc, t0, img0);
-          acc_b = vmlaq_f32(acc_b, t1, img1);
+          acc = vfmaq_f32(acc, t0, img0);
+          acc_b = vfmaq_f32(acc_b, t1, img1);
         }
         for (; c < tw; ++c) {
           float32x4_t t_val = vdupq_n_f32(t_ptr[c]);
           float32x4_t img_val = vld1q_f32(img_row + c);
-          acc = vmlaq_f32(acc, t_val, img_val);
+          acc = vfmaq_f32(acc, t_val, img_val);
         }
         t_ptr += tw;
       }
@@ -1053,16 +1039,107 @@ void ExpEngine::MatchTemplateNcc(const float* image, int img_w, int img_h, int i
     }
 #endif
     for (; x < out_w; ++x) {
-      double sum_it = 0.0;
+      float acc = 0.0f;
+      float acc_b = 0.0f;
       const float* t_ptr = tpl.zero_mean_fmap.data();
       for (int r = 0; r < th; ++r) {
         const float* img_row = image + (y + r) * img_stride + x;
-        for (int c = 0; c < tw; ++c) {
-          sum_it += t_ptr[c] * img_row[c];
+        int c = 0;
+        for (; c + 1 < tw; c += 2) {
+          acc = std::fmaf(t_ptr[c], img_row[c], acc);
+          acc_b = std::fmaf(t_ptr[c + 1], img_row[c + 1], acc_b);
+        }
+        for (; c < tw; ++c) {
+          acc = std::fmaf(t_ptr[c], img_row[c], acc);
         }
         t_ptr += tw;
       }
-      float ncc = static_cast<float>(sum_it * inv_norm[x]);
+      float sum_it = acc + acc_b;
+      float ncc = sum_it * inv_norm[x];
+      resp_row[x] = std::max(-1.0f, std::min(1.0f, ncc));
+    }
+  }
+}
+
+void ExpEngine::MatchTemplateNccScalar(const float* image, int img_w, int img_h, int img_stride,
+                                       const PreparedTemplate& tpl, float* out_response) {
+  const int tw = tpl.width;
+  const int th = tpl.height;
+  const int out_w = img_w - tw + 1;
+  const int out_h = img_h - th + 1;
+  if (out_w <= 0 || out_h <= 0) return;
+
+  const float tpl_norm = tpl.norm;
+  if (tpl_norm <= 1e-6f) {
+    std::fill(out_response, out_response + out_w * out_h, 0.0f);
+    return;
+  }
+
+  const double inv_pixels = 1.0 / (tw * th);
+  std::vector<double> col_sum(img_w, 0.0);
+  std::vector<double> col_sum2(img_w, 0.0);
+  std::vector<double> pref_i(img_w + 1, 0.0);
+  std::vector<double> pref_i2(img_w + 1, 0.0);
+  std::vector<float> inv_norm(out_w, 0.0f);
+
+  for (int y = 0; y < out_h; ++y) {
+    float* resp_row = out_response + y * out_w;
+    if (y == 0) {
+      for (int r = 0; r < th; ++r) {
+        const float* img_row = image + r * img_stride;
+        for (int c = 0; c < img_w; ++c) {
+          double val = static_cast<double>(img_row[c]);
+          col_sum[c] += val;
+          col_sum2[c] = std::fma(val, val, col_sum2[c]);
+        }
+      }
+    } else {
+      const float* row_sub = image + (y - 1) * img_stride;
+      const float* row_add = image + (y + th - 1) * img_stride;
+      for (int c = 0; c < img_w; ++c) {
+        double vs = static_cast<double>(row_sub[c]);
+        double va = static_cast<double>(row_add[c]);
+        col_sum[c] += (va - vs);
+        col_sum2[c] += (va * va - vs * vs);
+      }
+    }
+
+    pref_i[0] = 0.0;
+    pref_i2[0] = 0.0;
+    for (int c = 0; c < img_w; ++c) {
+      pref_i[c + 1] = pref_i[c] + col_sum[c];
+      pref_i2[c + 1] = pref_i2[c] + col_sum2[c];
+    }
+
+    for (int nx = 0; nx < out_w; ++nx) {
+      double sum_i = pref_i[nx + tw] - pref_i[nx];
+      double sum_i2 = pref_i2[nx + tw] - pref_i2[nx];
+      double var_i = std::fma(-(sum_i * sum_i), inv_pixels, sum_i2);
+      if (var_i <= 1e-5) {
+        inv_norm[nx] = 0.0f;
+      } else {
+        inv_norm[nx] = static_cast<float>(1.0 / (tpl_norm * std::sqrt(var_i)));
+      }
+    }
+
+    for (int x = 0; x < out_w; ++x) {
+      float acc = 0.0f;
+      float acc_b = 0.0f;
+      const float* t_ptr = tpl.zero_mean_fmap.data();
+      for (int r = 0; r < th; ++r) {
+        const float* img_row = image + (y + r) * img_stride + x;
+        int c = 0;
+        for (; c + 1 < tw; c += 2) {
+          acc = std::fmaf(t_ptr[c], img_row[c], acc);
+          acc_b = std::fmaf(t_ptr[c + 1], img_row[c + 1], acc_b);
+        }
+        for (; c < tw; ++c) {
+          acc = std::fmaf(t_ptr[c], img_row[c], acc);
+        }
+        t_ptr += tw;
+      }
+      float sum_it = acc + acc_b;
+      float ncc = sum_it * inv_norm[x];
       resp_row[x] = std::max(-1.0f, std::min(1.0f, ncc));
     }
   }
@@ -1078,11 +1155,12 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
 
   const PreparedTemplate& tpl_bracket = prepared_templates_.at('[');
   const PreparedTemplate& tpl_8 = prepared_templates_.at('8');
+  const PreparedTemplate& tpl_pct = prepared_templates_.at('%');
 
-  // 1 & 2. Robust multi-scale search using '[' and '8'
+  // 1 & 2. Robust multi-scale search using '[', '8', and '%'
   float expected_s = (height > 0) ? (38.0f / static_cast<float>(height)) : 1.0f;
   float s_min = std::max(0.35f, expected_s * 0.65f);
-  float s_max = std::min(2.50f, expected_s * 1.45f);
+  float s_max = std::min(3.60f, std::max(expected_s * 1.25f, std::min(2.50f, expected_s * 1.45f)));
 
   constexpr int kNumScales = 18;
   float best_combo = -1.0f;
@@ -1093,6 +1171,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
   std::vector<float> work_float_buf;
   std::vector<float> resp_bracket;
   std::vector<float> resp_8;
+  std::vector<float> resp_pct;
 
   for (int s_idx = 0; s_idx < kNumScales; ++s_idx) {
     float cs = s_min + (s_max - s_min) * (static_cast<float>(s_idx) / (kNumScales - 1));
@@ -1114,12 +1193,6 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
     resp_bracket.resize(out_bw * out_bh);
     MatchTemplateNcc(work_float_buf.data(), wn, hn, wn, tpl_bracket, resp_bracket.data());
 
-    int out_8w = wn - tpl_8.width + 1;
-    int out_8h = hn - tpl_8.height + 1;
-    if (out_8w <= 0 || out_8h <= 0) continue;
-    resp_8.resize(out_8w * out_8h);
-    MatchTemplateNcc(work_float_buf.data(), wn, hn, wn, tpl_8, resp_8.data());
-
     float max_vb = -1.0f;
     int argmax_by = 0;
     for (int y = 0; y < out_bh; ++y) {
@@ -1132,12 +1205,31 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
       }
     }
 
+    const float* band_ptr = work_float_buf.data() + argmax_by * wn;
+
+    int out_8w = wn - tpl_8.width + 1;
+    int out_8h = kCanonicalStripHeight - tpl_8.height + 1;
+    if (out_8w <= 0 || out_8h <= 0) continue;
+    resp_8.resize(out_8w * out_8h);
+    MatchTemplateNcc(band_ptr, wn, kCanonicalStripHeight, wn, tpl_8, resp_8.data());
+
+    int out_pw = wn - tpl_pct.width + 1;
+    int out_ph = kCanonicalStripHeight - tpl_pct.height + 1;
+    if (out_pw <= 0 || out_ph <= 0) continue;
+    resp_pct.resize(out_pw * out_ph);
+    MatchTemplateNcc(band_ptr, wn, kCanonicalStripHeight, wn, tpl_pct, resp_pct.data());
+
     float max_v8 = -1.0f;
     for (float val : resp_8) {
       if (val > max_v8) max_v8 = val;
     }
 
-    float combo = max_vb + max_v8;
+    float max_vp = -1.0f;
+    for (float val : resp_pct) {
+      if (val > max_vp) max_vp = val;
+    }
+
+    float combo = max_vb + std::max(max_v8, max_vp);
     if (combo > best_combo) {
       best_combo = combo;
       best_cs = cs;
@@ -1201,13 +1293,19 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
     }
   }
 
-  // 4. Grammar-constrained dynamic programming beam search
+  // 4. Strict grammar-constrained DP beam search: ^\d+\[\d{1,2}\.\d{1,2}%\]$
   // States:
-  // 0: EXP digits (0-9) or '['
-  // 1: inside brackets (0-9, '.') or '%'
-  // 2: after '%', expecting ']'
-  // 3: completed string
-  constexpr int kNumStates = 4;
+  // 0: start (expecting first EXP digit 0-9 -> 1)
+  // 1: EXP digits (0-9 -> 1, '[' -> 2)
+  // 2: after '[', expecting 1st pct integer digit (0-9 -> 3)
+  // 3: after 1st pct integer digit (0-9 -> 4, '.' -> 5)
+  // 4: after 2nd pct integer digit ('.' -> 5)
+  // 5: after '.', expecting 1st pct decimal digit (0-9 -> 6)
+  // 6: after 1st pct decimal digit (0-9 -> 7, '%' -> 8)
+  // 7: after 2nd pct decimal digit ('%' -> 8)
+  // 8: after '%', expecting ']' (']' -> 9)
+  // 9: completed string
+  constexpr int kNumStates = 10;
   std::vector<DpNode> dp((win_w + 1) * kNumStates);
   auto get_dp = [&](int x, int st) -> DpNode& { return dp[x * kNumStates + st]; };
 
@@ -1229,19 +1327,35 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
         next_blank.ncc = 0.0f;
       }
 
-      // Allowed transitions based on grammar
+      // Allowed transitions based on strict grammar
       std::vector<std::pair<char, int>> allowed;
       if (st == 0) {
         for (char d = '0'; d <= '9'; ++d)
-          allowed.emplace_back(d, 0);
-        allowed.emplace_back('[', 1);
+          allowed.emplace_back(d, 1);
       } else if (st == 1) {
         for (char d = '0'; d <= '9'; ++d)
           allowed.emplace_back(d, 1);
-        allowed.emplace_back('.', 1);
-        allowed.emplace_back('%', 2);
+        allowed.emplace_back('[', 2);
       } else if (st == 2) {
-        allowed.emplace_back(']', 3);
+        for (char d = '0'; d <= '9'; ++d)
+          allowed.emplace_back(d, 3);
+      } else if (st == 3) {
+        for (char d = '0'; d <= '9'; ++d)
+          allowed.emplace_back(d, 4);
+        allowed.emplace_back('.', 5);
+      } else if (st == 4) {
+        allowed.emplace_back('.', 5);
+      } else if (st == 5) {
+        for (char d = '0'; d <= '9'; ++d)
+          allowed.emplace_back(d, 6);
+      } else if (st == 6) {
+        for (char d = '0'; d <= '9'; ++d)
+          allowed.emplace_back(d, 7);
+        allowed.emplace_back('%', 8);
+      } else if (st == 7) {
+        allowed.emplace_back('%', 8);
+      } else if (st == 8) {
+        allowed.emplace_back(']', 9);
       } else {
         continue;
       }
@@ -1258,7 +1372,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
         if (resp_it == responses.end()) continue;
         const auto& resp_vec = resp_it->second;
 
-        float min_ncc = (ch == '1' || ch == ']') ? kMinNccNarrowOrBracket : kMinNccDigitOrDot;
+        float min_ncc = (ch == '1' || ch == '[' || ch == ']') ? kMinNccNarrowOrBracket : kMinNccDigitOrDot;
         int min_adv = (ch == '.') ? 4 : ((ch == '[' || ch == ']') ? 6 : std::max(t.width, 11));
 
         if (x + t.width <= win_w && x < static_cast<int>(resp_vec.size())) {
@@ -1286,21 +1400,21 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
     }
   }
 
-  // Select best terminal state in state 3
+  // Select best terminal state in state 9
   int best_term_x = -1;
   int best_term_st = -1;
   float best_term_score = -1e8f;
 
   for (int x = 0; x <= win_w; ++x) {
-    const DpNode& node = get_dp(x, 3);
+    const DpNode& node = get_dp(x, 9);
     if (node.score > best_term_score) {
       best_term_score = node.score;
       best_term_x = x;
-      best_term_st = 3;
+      best_term_st = 9;
     }
   }
 
-  // Require completed grammar (state 3 reached with closing bracket)
+  // Require completed grammar (state 9 reached with closing bracket)
   if (best_term_x == -1 || best_term_score <= 0.0f) {
     return false;
   }
@@ -1321,6 +1435,18 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
   }
 
   std::reverse(chars.begin(), chars.end());
+
+  // Enforce character contiguity so digits/occluded regions cannot be skipped
+  for (size_t i = 0; i + 1 < chars.size(); ++i) {
+    char ch = chars[i].character;
+    const PreparedTemplate& t = prepared_templates_.at(ch);
+    int min_adv = (ch == '.') ? 4 : ((ch == '[' || ch == ']') ? 6 : std::max(t.width, 11));
+    int gap = chars[i + 1].x - (chars[i].x + min_adv);
+    int max_gap = (ch == '%') ? 24 : 8;
+    if (gap > max_gap) {
+      return false;
+    }
+  }
 
   std::string raw_str;
   for (const auto& rc : chars) {
@@ -1344,19 +1470,20 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
     pct_part.pop_back();
   }
 
-  int64_t exp_val = 0;
-  if (!exp_digits.empty()) {
-    char* end = nullptr;
-    exp_val = std::strtoll(exp_digits.c_str(), &end, 10);
+  if (exp_digits.empty() || pct_part.empty()) {
+    return false;
   }
 
-  double pct_val = 0.0;
-  if (!pct_part.empty()) {
-    char* end = nullptr;
-    pct_val = std::strtod(pct_part.c_str(), &end);
-    if (end != nullptr && *end != '\0') {
-      pct_val = 0.0;
-    }
+  char* exp_end = nullptr;
+  int64_t exp_val = std::strtoll(exp_digits.c_str(), &exp_end, 10);
+  if (exp_end == nullptr || *exp_end != '\0') {
+    return false;
+  }
+
+  char* pct_end = nullptr;
+  double pct_val = std::strtod(pct_part.c_str(), &pct_end);
+  if (pct_end == nullptr || *pct_end != '\0' || pct_val < 0.0 || pct_val >= 100.0) {
+    return false;
   }
 
   auto t_end = std::chrono::steady_clock::now();

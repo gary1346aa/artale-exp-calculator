@@ -75,7 +75,7 @@ FONT_FALLBACK: str = "'PingFang TC'"
 
 # Application metadata & About info
 APP_NAME: str = "Artale EXP Calculator"
-APP_VERSION: str = "1.0.0-rc.30"
+APP_VERSION: str = "1.0.0-rc.31"
 APP_AUTHOR: str = "G8G"
 APP_COPYRIGHT: str = "© 2026 By G8G"
 APP_DISCORD_ID: str = "garyhuang"

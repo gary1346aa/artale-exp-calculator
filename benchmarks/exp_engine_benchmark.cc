@@ -59,6 +59,13 @@ class PythonHarness {
     }
   }
 
+  void RunParseCropLowRes() {
+    if (fn_parse_crop_low_res_ && py_call_no_args_) {
+      void* res = py_call_no_args_(fn_parse_crop_low_res_);
+      if (res && py_decref_) py_decref_(res);
+    }
+  }
+
  private:
   PythonHarness() {
     const char* dll_names[] = {
@@ -102,7 +109,7 @@ workspace_dir = r'C:/Users/gary1/artale_exp_calculator'
 if workspace_dir not in sys.path:
     sys.path.insert(0, workspace_dir)
 import cv2, numpy as np
-import python_exp_engine
+from core import python_engine as python_exp_engine
 
 _py_engine = python_exp_engine.get_engine()
 _bench_gray = np.full((38, 350), 128, dtype=np.uint8)
@@ -125,6 +132,20 @@ for _ch in _text:
             _bench_sample_crop[_cy + _y, _cur_x + _x] = [_v, _v, _v]
     _cur_x += 6 if _ch == '.' else _tw + 2
 
+_bench_low_res_base = np.zeros((38, 420, 3), dtype=np.uint8)
+_cur_x = 20
+for _ch in "444444442[44.44%]":
+    _tpl = _py_engine.templates[_ch]
+    _fmap = _tpl['fmap']
+    _th, _tw = _fmap.shape
+    _cy = _base_y if _th == 25 else _base_y + 2
+    for _y in range(_th):
+        for _x in range(_tw):
+            _v = int(round(_fmap[_y, _x] * 255.0))
+            _bench_low_res_base[_cy + _y, _cur_x + _x] = [_v, _v, _v]
+    _cur_x += 6 if _ch == '.' else _tw + 2
+_bench_low_res_crop = cv2.resize(_bench_low_res_base, (210, 19), interpolation=cv2.INTER_LINEAR)
+
 def _py_bench_resize():
     cv2.resize(_bench_gray, (230, 25), interpolation=cv2.INTER_LINEAR)
 
@@ -133,6 +154,9 @@ def _py_bench_ncc():
 
 def _py_bench_parse_crop():
     _py_engine.parse_crop(_bench_sample_crop)
+
+def _py_bench_parse_crop_low_res():
+    _py_engine.parse_crop(_bench_low_res_crop)
 )";
 
     if (py_run(kBootstrapCode) != 0) return;
@@ -143,8 +167,9 @@ def _py_bench_parse_crop():
     fn_resize_ = py_getattr(main_mod, "_py_bench_resize");
     fn_ncc_ = py_getattr(main_mod, "_py_bench_ncc");
     fn_parse_crop_ = py_getattr(main_mod, "_py_bench_parse_crop");
+    fn_parse_crop_low_res_ = py_getattr(main_mod, "_py_bench_parse_crop_low_res");
 
-    initialized_ = (fn_resize_ && fn_ncc_ && fn_parse_crop_);
+    initialized_ = (fn_resize_ && fn_ncc_ && fn_parse_crop_ && fn_parse_crop_low_res_);
   }
 
   bool initialized_ = false;
@@ -153,12 +178,13 @@ def _py_bench_parse_crop():
   void* fn_resize_ = nullptr;
   void* fn_ncc_ = nullptr;
   void* fn_parse_crop_ = nullptr;
+  void* fn_parse_crop_low_res_ = nullptr;
 };
 
-// Helper to synthesize a representative 38px strip containing "772097[0.32%]"
-std::vector<uint8_t> CreateSampleExpStrip(int width, int height) {
+// Helper to synthesize a representative 38px strip containing `text`
+std::vector<uint8_t> CreateSampleExpStrip(int width, int height,
+                                          const std::string& text = "772097[0.32%]") {
   std::vector<uint8_t> strip(width * height, 0);
-  std::string text = "772097[0.32%]";
   int cur_x = 20;
   int base_y = 6;
 
@@ -292,6 +318,41 @@ static void BM_SteadyStateParseCrop_Python(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_SteadyStateParseCrop_Python);
+
+// =========================================================================
+// 4. Low-Res 1920x720 (210x19 without '8') Strip Parsing: C++ vs Python
+// =========================================================================
+static void BM_SteadyStateParseCrop_LowRes720p_Cpp(benchmark::State& state) {
+  ExpEngine engine;
+  constexpr int kBaseW = 420;
+  constexpr int kBaseH = 38;
+  constexpr int kLowW = 210;
+  constexpr int kLowH = 19;
+  std::vector<uint8_t> canonical = CreateSampleExpStrip(kBaseW, kBaseH, "444444442[44.44%]");
+  std::vector<uint8_t> low_res(kLowW * kLowH, 0);
+  ExpEngine::ResizeGray(canonical.data(), kBaseW, kBaseH, kBaseW, low_res.data(), kLowW, kLowH,
+                        kLowW);
+  CropParseResult result;
+
+  for (auto _ : state) {
+    bool ok = engine.ParseCrop(low_res.data(), kLowW, kLowH, kLowW, &result);
+    benchmark::DoNotOptimize(ok);
+    benchmark::DoNotOptimize(result);
+  }
+}
+BENCHMARK(BM_SteadyStateParseCrop_LowRes720p_Cpp);
+
+static void BM_SteadyStateParseCrop_LowRes720p_Python(benchmark::State& state) {
+  PythonHarness& harness = PythonHarness::Get();
+  if (!harness.IsAvailable()) {
+    state.SkipWithError("Python 3.14 runtime could not be loaded");
+    return;
+  }
+  for (auto _ : state) {
+    harness.RunParseCropLowRes();
+  }
+}
+BENCHMARK(BM_SteadyStateParseCrop_LowRes720p_Python);
 
 }  // namespace
 }  // namespace exp

@@ -66,6 +66,7 @@ from ui.components import (
     MetricRow,
     SimpleMetricItem,
     SimpleProgressBarItem,
+    SmoothBadge,
     SmoothButton,
     SmoothCard,
     StatusDotWidget,
@@ -340,18 +341,7 @@ class ArtaleExpOverlay(QWidget):
     header_layout.setSpacing(5)
 
     # State Badge: [計時中] / [已暫停] / [待機中]
-    self.lbl_state_badge = QLabel("待機中")
-    self.lbl_state_badge.setStyleSheet(f"""
-            QLabel {{
-                color: #94a3b8;
-                background-color: rgba(255, 255, 255, 0.08);
-                padding: 2px 7px;
-                border-radius: 4px;
-                font-size: 11px;
-                font-weight: 600;
-                font-family: {FONT_CHINESE};
-            }}
-        """)
+    self.lbl_state_badge = SmoothBadge("待機中", self.header_widget)
 
     # Vector-smoothed Control buttons (F7, F8, F9, Settings, Close)
     self.btn_f7 = SmoothButton(parent=self, icon_name="play")
@@ -1353,51 +1343,30 @@ class ArtaleExpOverlay(QWidget):
       return
     self._last_badge_state_key = state_key
 
-    badge_size = max(8, int(11 * s))
-    pad_v = max(1, int(2 * s))
-    pad_h = max(4, int(7 * s))
-
     if self.engine.is_running:
-      self.lbl_state_badge.setText("計時中")
-      self.lbl_state_badge.setStyleSheet(f"""
-          QLabel {{
-              color: #34d399;
-              background-color: rgba(16, 185, 129, 0.18);
-              border: 1px solid rgba(52, 211, 153, 0.3);
-              padding: {pad_v}px {pad_h}px;
-              border-radius: 4px;
-              font-size: {badge_size}px;
-              font-weight: 700;
-              font-family: {FONT_FAMILY};
-          }}
-      """)
+      self.lbl_state_badge.set_badge_style(
+          "計時中",
+          fg=QColor("#34d399"),
+          bg=QColor(16, 185, 129, 45),
+          border=QColor(52, 211, 153, 95),
+          scale=s,
+      )
     elif self.engine.is_paused:
-      self.lbl_state_badge.setText("已暫停")
-      self.lbl_state_badge.setStyleSheet(f"""
-          QLabel {{
-              color: #fbbf24;
-              background-color: rgba(245, 158, 11, 0.18);
-              border: 1px solid rgba(251, 191, 36, 0.3);
-              padding: {pad_v}px {pad_h}px;
-              border-radius: 4px;
-              font-size: {badge_size}px;
-              font-weight: 700;
-              font-family: {FONT_FAMILY};
-          }}
-      """)
+      self.lbl_state_badge.set_badge_style(
+          "已暫停",
+          fg=QColor("#fbbf24"),
+          bg=QColor(245, 158, 11, 45),
+          border=QColor(251, 191, 36, 95),
+          scale=s,
+      )
     else:
-      self.lbl_state_badge.setText("待機中")
-      self.lbl_state_badge.setStyleSheet(f"""
-          QLabel {{
-              color: #94a3b8;
-              background-color: rgba(255, 255, 255, 0.08);
-              padding: {pad_v}px {pad_h}px;
-              border-radius: 4px;
-              font-size: {badge_size}px;
-              font-weight: 600;
-              font-family: {FONT_FAMILY};
-          }}
-      """)
+      self.lbl_state_badge.set_badge_style(
+          "待機中",
+          fg=QColor("#94a3b8"),
+          bg=QColor(255, 255, 255, 18),
+          border=QColor(255, 255, 255, 30),
+          scale=s,
+      )
 
   def _apply_scaling(self):
     s = self.ui_scale

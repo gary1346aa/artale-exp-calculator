@@ -28,17 +28,21 @@ class MeasurementState(enum.Enum):
 class ExpSample:
   """Timestamped EXP reading snapshot."""
 
-  __slots__ = ("timestamp", "exp_value", "exp_percent")
+  __slots__ = ("timestamp", "exp_value", "exp_percent", "cum_exp", "cum_pct")
 
   def __init__(
       self,
       timestamp: float,
       exp_value: int,
       exp_percent: Optional[float],
+      cum_exp: int = 0,
+      cum_pct: float = 0.0,
   ):
     self.timestamp = timestamp
     self.exp_value = exp_value
     self.exp_percent = exp_percent
+    self.cum_exp = cum_exp
+    self.cum_pct = cum_pct
 
 
 class ExpMetricsEngine:
@@ -68,6 +72,10 @@ class ExpMetricsEngine:
     self.pause_start_time: Optional[float] = None
     self.total_paused_duration: float = 0.0
 
+    # Snapshot at pause start for excluding EXP/level-ups gained while paused
+    self._pause_start_sample: Optional[ExpSample] = None
+    self._pause_start_level: Optional[int] = None
+
     # Cumulative gains for current measurement
     self.total_gained_exp: int = 0
     self.total_gained_pct: float = 0.0
@@ -76,6 +84,10 @@ class ExpMetricsEngine:
     self.current_level: Optional[int] = None
     self.level_up_carry_exp: int = 0
     self.level_up_carry_pct: float = 0.0
+    self._level_up_rollback: Optional[Dict[str, Any]] = None
+    self._resync_candidate_level: Optional[int] = None
+    self._resync_streak: int = 0
+    self._resync_last_exp: int = -1
 
     # Samples buffer for rolling window rate calculations (1m, 10m, 60m)
     self.samples: deque[ExpSample] = deque()
@@ -143,14 +155,68 @@ class ExpMetricsEngine:
       return False
 
     if self.state == MeasurementState.PAUSED:
+      paused_dt = 0.0
       if self.pause_start_time is not None:
-        self.total_paused_duration += now - self.pause_start_time
+        paused_dt = max(0.0, now - self.pause_start_time)
+        self.total_paused_duration += paused_dt
         self.pause_start_time = None
+
+      # Shift rolling window sample timestamps forward by paused duration so
+      # active window calculations (1m, 10m, 60m) exclude paused time.
+      if paused_dt > 0.0:
+        for s in self.samples:
+          s.timestamp += paused_dt
+
       self.state = MeasurementState.RUNNING
       if self.latest_sample is not None:
+        # Exclude any EXP or level-ups gained while paused:
+        if self._pause_start_sample is not None:
+          leveled_up_while_paused = (
+              (
+                  self.current_level is not None
+                  and self._pause_start_level is not None
+                  and self.current_level != self._pause_start_level
+              )
+              or self.latest_sample.exp_value < self._pause_start_sample.exp_value
+          )
+          if leveled_up_while_paused:
+            # Bank pre-pause active gains and anchor new level baseline at resume EXP
+            self.level_up_carry_exp = self.total_gained_exp
+            self.level_up_carry_pct = self.total_gained_pct
+            self.baseline_exp = self.latest_sample.exp_value
+            self.baseline_exp_percent = self.latest_sample.exp_percent
+            self._level_up_rollback = None
+          else:
+            paused_d_exp = max(
+                0,
+                self.latest_sample.exp_value - self._pause_start_sample.exp_value,
+            )
+            paused_d_pct = (
+                max(
+                    0.0,
+                    self.latest_sample.exp_percent
+                    - self._pause_start_sample.exp_percent,
+                )
+                if (
+                    self.latest_sample.exp_percent is not None
+                    and self._pause_start_sample.exp_percent is not None
+                )
+                else 0.0
+            )
+            if paused_d_exp > 0 and self.baseline_exp is not None:
+              self.baseline_exp += paused_d_exp
+            if paused_d_pct > 0.0 and self.baseline_exp_percent is not None:
+              self.baseline_exp_percent += paused_d_pct
+
         self.latest_sample = ExpSample(
-            now, self.latest_sample.exp_value, self.latest_sample.exp_percent
+            now,
+            self.latest_sample.exp_value,
+            self.latest_sample.exp_percent,
+            cum_exp=self.total_gained_exp,
+            cum_pct=self.total_gained_pct,
         )
+      self._pause_start_sample = None
+      self._pause_start_level = None
       return True
 
     # Starting from IDLE: set new baseline and start timer
@@ -158,10 +224,13 @@ class ExpMetricsEngine:
     self.measurement_start_time = now
     self.total_paused_duration = 0.0
     self.pause_start_time = None
+    self._pause_start_sample = None
+    self._pause_start_level = None
     self.total_gained_exp = 0
     self.total_gained_pct = 0.0
     self.level_up_carry_exp = 0
     self.level_up_carry_pct = 0.0
+    self._level_up_rollback = None
     self.samples.clear()
 
     if self.latest_sample is not None:
@@ -169,7 +238,11 @@ class ExpMetricsEngine:
       self.baseline_exp_percent = self.latest_sample.exp_percent
       self.baseline_timestamp = now
       self.latest_sample = ExpSample(
-          now, self.latest_sample.exp_value, self.latest_sample.exp_percent
+          now,
+          self.latest_sample.exp_value,
+          self.latest_sample.exp_percent,
+          cum_exp=0,
+          cum_pct=0.0,
       )
       self.samples.append(self.latest_sample)
 
@@ -184,6 +257,8 @@ class ExpMetricsEngine:
       self.pause_start_time = (
           timestamp if timestamp is not None else time.time()
       )
+      self._pause_start_sample = self.latest_sample
+      self._pause_start_level = self.current_level
 
     if disable_auto_start:
       self.auto_start_enabled = False
@@ -206,17 +281,27 @@ class ExpMetricsEngine:
     self.state = MeasurementState.IDLE
     self.measurement_start_time = None
     self.pause_start_time = None
+    self._pause_start_sample = None
+    self._pause_start_level = None
     self.total_paused_duration = 0.0
     self.total_gained_exp = 0
     self.total_gained_pct = 0.0
     self.level_up_carry_exp = 0
     self.level_up_carry_pct = 0.0
+    self._level_up_rollback = None
     self.samples.clear()
 
     if self.latest_sample is not None:
       self.baseline_exp = self.latest_sample.exp_value
       self.baseline_exp_percent = self.latest_sample.exp_percent
       self.baseline_timestamp = self.latest_sample.timestamp
+      self.latest_sample = ExpSample(
+          self.latest_sample.timestamp,
+          self.latest_sample.exp_value,
+          self.latest_sample.exp_percent,
+          cum_exp=0,
+          cum_pct=0.0,
+      )
       self.samples.append(self.latest_sample)
 
     if disable_auto_start:
@@ -254,16 +339,81 @@ class ExpMetricsEngine:
       return False
 
     now = timestamp if timestamp is not None else time.time()
+    prev_tracked_level = self.current_level
 
     # Mathematical cross-validation against EXP table
     is_valid, matched_level = validate_sample(
         exp_value, exp_percent, self.current_level
     )
-    if not is_valid:
-      # Mathematical mismatch between exp_value and exp_percent -> discard outlier
-      return False
+    if not is_valid and self._level_up_rollback is not None:
+      rb = self._level_up_rollback
+      rb_valid, rb_lvl = validate_sample(
+          exp_value, exp_percent, rb["prev_level"]
+      )
+      if (
+          rb_valid
+          and rb_lvl == rb["prev_level"]
+          and exp_value >= rb["prev_latest_sample"].exp_value
+      ):
+        self.current_level = rb["prev_level"]
+        prev_tracked_level = rb["prev_level"]
+        self.level_up_carry_exp = rb["prev_carry_exp"]
+        self.level_up_carry_pct = rb["prev_carry_pct"]
+        self.baseline_exp = rb["prev_baseline_exp"]
+        self.baseline_exp_percent = rb["prev_baseline_pct"]
+        self.total_gained_exp = rb["prev_total_gained_exp"]
+        self.total_gained_pct = rb["prev_total_gained_pct"]
+        self.latest_sample = rb["prev_latest_sample"]
+        if self.samples and self.samples[-1] is rb["level_up_sample"]:
+          self.samples.pop()
+        self._level_up_rollback = None
+        is_valid = True
+        matched_level = rb_lvl
 
-    sample = ExpSample(now, exp_value, exp_percent)
+    if not is_valid:
+      alt_level = (
+          find_level_from_exp_and_pct(exp_value, exp_percent)
+          if exp_percent is not None
+          else None
+      )
+      if alt_level is not None:
+        if (
+            alt_level == self._resync_candidate_level
+            and exp_value >= self._resync_last_exp
+        ):
+          self._resync_streak += 1
+          self._resync_last_exp = exp_value
+        else:
+          self._resync_candidate_level = alt_level
+          self._resync_streak = 1
+          self._resync_last_exp = exp_value
+
+        if self._resync_streak >= 3:
+          self.current_level = alt_level
+          self._resync_candidate_level = None
+          self._resync_streak = 0
+          self._resync_last_exp = -1
+          is_valid = True
+          matched_level = alt_level
+        else:
+          return False
+      else:
+        self._resync_candidate_level = None
+        self._resync_streak = 0
+        self._resync_last_exp = -1
+        return False
+    else:
+      self._resync_candidate_level = None
+      self._resync_streak = 0
+      self._resync_last_exp = -1
+
+    sample = ExpSample(
+        now,
+        exp_value,
+        exp_percent,
+        cum_exp=self.total_gained_exp,
+        cum_pct=self.total_gained_pct,
+    )
 
     # 1. Capture session initial EXP once on launch
     if self.initial_exp is None:
@@ -296,8 +446,25 @@ class ExpMetricsEngine:
           else self.baseline_exp_percent
       )
 
+      is_paused_level_up = False
+      if (
+          matched_level is not None
+          and prev_tracked_level is not None
+          and matched_level > prev_tracked_level
+      ):
+        is_paused_level_up = True
+      elif (
+          ref_pct is not None
+          and exp_percent is not None
+          and ref_pct >= (98.0 if exp_percent == 0.0 else 95.0)
+          and exp_percent < 15.0
+      ):
+        is_paused_level_up = True
+
       is_increasing = False
-      if ref_exp is not None and exp_value > ref_exp:
+      if is_paused_level_up:
+        is_increasing = True
+      elif ref_exp is not None and exp_value > ref_exp:
         is_increasing = True
       elif (
           ref_pct is not None
@@ -305,23 +472,53 @@ class ExpMetricsEngine:
           and exp_percent > ref_pct
       ):
         is_increasing = True
-      elif (
-          ref_pct is not None
-          and exp_percent is not None
-          and ref_pct > 85.0
-          and exp_percent < 15.0
-      ):
-        is_increasing = True
 
       if self.auto_start_enabled and is_increasing:
         self.start_measurement(timestamp=now)
       else:
-        if self.state == MeasurementState.IDLE and not self.auto_start_enabled:
-          self.baseline_exp = exp_value
-          self.baseline_exp_percent = exp_percent
-          self.baseline_timestamp = now
-        if matched_level is not None:
-          self.current_level = matched_level
+        if self.state == MeasurementState.PAUSED and self.latest_sample is not None:
+          if not is_paused_level_up and exp_value < self.latest_sample.exp_value:
+            # Reject negative OCR drop while paused
+            return False
+          if is_paused_level_up:
+            self._level_up_rollback = {
+                "prev_level": prev_tracked_level,
+                "prev_carry_exp": self.level_up_carry_exp,
+                "prev_carry_pct": self.level_up_carry_pct,
+                "prev_baseline_exp": self.baseline_exp,
+                "prev_baseline_pct": self.baseline_exp_percent,
+                "prev_total_gained_exp": self.total_gained_exp,
+                "prev_total_gained_pct": self.total_gained_pct,
+                "prev_latest_sample": self.latest_sample,
+                "level_up_sample": sample,
+            }
+            if (
+                matched_level is not None
+                and prev_tracked_level is not None
+                and matched_level > prev_tracked_level
+            ):
+              self.current_level = matched_level
+            elif prev_tracked_level is not None:
+              self.current_level = prev_tracked_level + 1
+            elif matched_level is not None:
+              self.current_level = matched_level
+          else:
+            if exp_value > self.latest_sample.exp_value or (
+                exp_percent is not None
+                and self.latest_sample.exp_percent is not None
+                and exp_percent > self.latest_sample.exp_percent
+            ):
+              self._level_up_rollback = None
+            if matched_level is not None:
+              self.current_level = matched_level
+        else:
+          if self.state == MeasurementState.IDLE and not self.auto_start_enabled:
+            self.baseline_exp = exp_value
+            self.baseline_exp_percent = exp_percent
+            self.baseline_timestamp = now
+          if matched_level is not None:
+            self.current_level = matched_level
+
         if (
             self.latest_sample is None
             or not self.auto_start_enabled
@@ -330,14 +527,13 @@ class ExpMetricsEngine:
           self.latest_sample = sample
         return True
 
-      if matched_level is not None:
-        self.current_level = matched_level
-
     # 4. Ingest sample if measurement is actively running
     if self.state == MeasurementState.RUNNING:
       if not self.samples:
         if matched_level is not None:
           self.current_level = matched_level
+        sample.cum_exp = self.total_gained_exp
+        sample.cum_pct = self.total_gained_pct
         self.samples.append(sample)
         self.latest_sample = sample
       else:
@@ -357,6 +553,8 @@ class ExpMetricsEngine:
           prev_level = find_level_from_exp_and_pct(
               prev.exp_value, prev.exp_percent
           )
+        if prev_level is None:
+          prev_level = prev_tracked_level
 
         if (
             matched_level is not None
@@ -367,13 +565,24 @@ class ExpMetricsEngine:
         elif (
             prev.exp_percent is not None
             and sample.exp_percent is not None
-            and prev.exp_percent > 85.0
+            and prev.exp_percent >= (98.0 if sample.exp_percent == 0.0 else 95.0)
             and sample.exp_percent < 15.0
         ):
           is_level_up = True
 
         if is_level_up:
-          ref_lvl = prev_level if prev_level is not None else self.current_level
+          self._level_up_rollback = {
+              "prev_level": prev_tracked_level,
+              "prev_carry_exp": self.level_up_carry_exp,
+              "prev_carry_pct": self.level_up_carry_pct,
+              "prev_baseline_exp": self.baseline_exp,
+              "prev_baseline_pct": self.baseline_exp_percent,
+              "prev_total_gained_exp": self.total_gained_exp,
+              "prev_total_gained_pct": self.total_gained_pct,
+              "prev_latest_sample": prev,
+              "level_up_sample": sample,
+          }
+          ref_lvl = prev_level if prev_level is not None else prev_tracked_level
           req_exp = (
               EXP_TO_NEXT_LEVEL.get(ref_lvl) if ref_lvl is not None else None
           )
@@ -392,8 +601,14 @@ class ExpMetricsEngine:
           # Reset baseline for the new level
           self.baseline_exp = 0
           self.baseline_exp_percent = 0.0
-          if self.current_level is not None:
-            self.current_level += 1
+          if (
+              matched_level is not None
+              and prev_level is not None
+              and matched_level > prev_level
+          ):
+            self.current_level = matched_level
+          elif prev_tracked_level is not None:
+            self.current_level = prev_tracked_level + 1
           elif matched_level is not None:
             self.current_level = matched_level
 
@@ -406,6 +621,9 @@ class ExpMetricsEngine:
           if dt > 0 and (delta_exp / dt) > 2_000_000 and delta_pct < 0.05:
             # Absurd single-second spike (> 2M/s without pct increase): Discard.
             return False
+
+          if delta_exp > 0 or delta_pct > 0.0:
+            self._level_up_rollback = None
 
           if matched_level is not None:
             self.current_level = matched_level
@@ -422,6 +640,9 @@ class ExpMetricsEngine:
           self.total_gained_pct = self.level_up_carry_pct + max(
               0.0, sample.exp_percent - self.baseline_exp_percent
           )
+
+        sample.cum_exp = self.total_gained_exp
+        sample.cum_pct = self.total_gained_pct
 
         has_gained = is_level_up or delta_exp > 0 or delta_pct > 0.0
         if has_gained:
@@ -445,13 +666,13 @@ class ExpMetricsEngine:
       return 0, 0.0, 0.0
 
     latest = self.latest_sample if self.latest_sample else self.samples[-1]
-    if now is None:
-      ref_now = latest.timestamp
-    elif (
+    if (
         self.state == MeasurementState.PAUSED
         and self.pause_start_time is not None
     ):
       ref_now = self.pause_start_time
+    elif now is None:
+      ref_now = latest.timestamp
     else:
       ref_now = max(latest.timestamp, now)
 
@@ -470,34 +691,8 @@ class ExpMetricsEngine:
     if dt <= 0:
       return 0, 0.0, 0.0
 
-    # Level-up aware calculation across window boundaries:
-    if (
-        oldest.exp_percent is not None
-        and latest.exp_percent is not None
-        and latest.exp_percent < oldest.exp_percent
-        and oldest.exp_percent > 85.0
-        and latest.exp_percent < 15.0
-    ):
-      oldest_lvl = find_level_from_exp_and_pct(
-          oldest.exp_value, oldest.exp_percent
-      )
-      req_exp = (
-          EXP_TO_NEXT_LEVEL.get(oldest_lvl) if oldest_lvl is not None else None
-      )
-      if req_exp is not None:
-        d_exp = max(0, req_exp - oldest.exp_value) + latest.exp_value
-      else:
-        d_exp = max(0, latest.exp_value)
-      d_pct = (100.0 - oldest.exp_percent) + latest.exp_percent
-    else:
-      d_exp = max(0, latest.exp_value - oldest.exp_value)
-      d_pct = 0.0
-      if latest.exp_percent is not None and oldest.exp_percent is not None:
-        if latest.exp_percent >= oldest.exp_percent:
-          d_pct = latest.exp_percent - oldest.exp_percent
-        else:
-          d_pct = (100.0 - oldest.exp_percent) + latest.exp_percent
-
+    d_exp = max(0, latest.cum_exp - oldest.cum_exp)
+    d_pct = max(0.0, latest.cum_pct - oldest.cum_pct)
     return d_exp, d_pct, dt
 
   def get_metrics(self, now: Optional[float] = None) -> Dict[str, Any]:

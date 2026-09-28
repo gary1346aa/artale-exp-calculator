@@ -73,6 +73,11 @@ class ExpEngine {
   static void MatchTemplateNcc(const float* image, int img_w, int img_h, int img_stride,
                                const PreparedTemplate& tpl, float* out_response);
 
+  // Pure scalar reference implementation of sliding-window NCC for bit-exact
+  // verification.
+  static void MatchTemplateNccScalar(const float* image, int img_w, int img_h, int img_stride,
+                                     const PreparedTemplate& tpl, float* out_response);
+
   const std::unordered_map<char, PreparedTemplate>& templates() const {
     return prepared_templates_;
   }

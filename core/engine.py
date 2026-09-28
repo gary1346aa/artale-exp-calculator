@@ -235,7 +235,7 @@ def _parse_frame_python(bgr_img: np.ndarray) -> Optional[ParsedFrame]:
 
   if not found:
     s_center = min(w / 3840.0, h / 2160.0)
-    s_min = max(0.24, s_center * 0.65)
+    s_min = max(0.16, s_center * 0.65)
     s_max = min(1.45, s_center * 1.35)
     scales = np.linspace(s_min, s_max, 16)
 

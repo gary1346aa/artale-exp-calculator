@@ -281,17 +281,19 @@ def validate_sample(
   if exp_value == 0 and exp_percent == 0.0:
     return True, current_level
 
+  eff_tol = min(tolerance, 0.01) if exp_percent == 0.0 else tolerance
+
   # 1. Check known current level first
   if current_level is not None and current_level in EXP_TO_NEXT_LEVEL:
     calc_pct = (exp_value / EXP_TO_NEXT_LEVEL[current_level]) * 100.0
-    if abs(calc_pct - exp_percent) <= tolerance:
+    if abs(calc_pct - exp_percent) <= eff_tol:
       return True, current_level
 
     # Check next level in case of level up
     next_level = current_level + 1
     if next_level in EXP_TO_NEXT_LEVEL:
       calc_pct_next = (exp_value / EXP_TO_NEXT_LEVEL[next_level]) * 100.0
-      if abs(calc_pct_next - exp_percent) <= tolerance:
+      if abs(calc_pct_next - exp_percent) <= eff_tol:
         return True, next_level
 
     # If level is established and doesn't match current or next level, reject!

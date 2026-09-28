@@ -731,14 +731,17 @@ class SmoothButton(QPushButton):
     cy = rect.center().y()
 
     if self.icon_name == "autostart" and self.text():
-      # Auto-start with automotive (A) symbol on left + text (centered group)
+      # Auto-start with automotive (A) symbol on left + vector-smoothed text (centered group)
       ic_size = (
           self.custom_icon_size
           if self.custom_icon_size
           else rect.height() * 0.55
       )
       gap = max(4.0, ic_size * 0.45)
-      fm = painter.fontMetrics()
+      f = QFont(self.font())
+      f.setWeight(QFont.Weight.Medium)
+      f.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
+      fm = QFontMetricsF(f)
       text_w = fm.horizontalAdvance(self.text())
       total_w = ic_size + gap + text_w
       start_x = rect.center().x() - total_w / 2.0
@@ -747,12 +750,13 @@ class SmoothButton(QPushButton):
       draw_vector_icon(painter, "autostart", ic_x, cy, fg, ic_size)
 
       text_x = start_x + ic_size + gap
-      fm = QFontMetricsF(self.font())
       tight_text = fm.tightBoundingRect(self.text())
       draw_text_y = cy - (tight_text.top() + tight_text.bottom()) / 2.0
-      painter.setFont(self.font())
-      painter.setPen(fg)
-      painter.drawText(QPointF(text_x, draw_text_y), self.text())
+      path = QPainterPath()
+      path.addText(QPointF(text_x, draw_text_y), f, self.text())
+      painter.setPen(Qt.PenStyle.NoPen)
+      painter.setBrush(QBrush(fg))
+      painter.drawPath(path)
     elif self.icon_name:
       # Icon-only button: optically centered vector icon
       ic_size = (
@@ -765,3 +769,77 @@ class SmoothButton(QPushButton):
       painter.setPen(fg)
       painter.setFont(self.font())
       painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
+
+
+class SmoothBadge(QLabel):
+  """State badge widget with vector-smoothed anti-aliased border, fill, and glyph outlines."""
+
+  def __init__(self, text: str = "", parent=None):
+    super().__init__(text, parent)
+    self.bg_color: QColor = QColor(255, 255, 255, 18)
+    self.border_color: QColor = QColor(255, 255, 255, 30)
+    self.text_color: QColor = QColor("#94a3b8")
+    self.scale: float = 1.0
+    self.set_badge_style(
+        text,
+        self.text_color,
+        self.bg_color,
+        self.border_color,
+        1.0,
+    )
+
+  def set_badge_style(
+      self,
+      text: str,
+      fg: QColor,
+      bg: QColor,
+      border: QColor,
+      scale: float = 1.0,
+  ) -> None:
+    """Updates badge text, colors, and scaled dimensions."""
+    self.setText(text)
+    self.text_color = fg
+    self.bg_color = bg
+    self.border_color = border
+    self.scale = scale
+
+    f = QFont("PingFang TC")
+    f.setPixelSize(max(8, int(11 * scale)))
+    f.setWeight(QFont.Weight.Normal)
+    f.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
+    self.setFont(f)
+
+    fm = QFontMetricsF(f)
+    tw = fm.horizontalAdvance(text)
+    pad_h = max(10.0, 14.0 * scale)
+    h = max(18, int(22 * scale))
+    self.setFixedSize(int(round(tw + pad_h)), h)
+    self.update()
+
+  def paintEvent(self, event) -> None:
+    painter = QPainter(self)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+
+    rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
+    radius = max(4.0, 5.5 * self.scale)
+
+    painter.setBrush(QBrush(self.bg_color))
+    if self.border_color.alpha() > 0:
+      painter.setPen(QPen(self.border_color, 1.0))
+    else:
+      painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawRoundedRect(rect, radius, radius)
+
+    f = self.font()
+    fm = QFontMetricsF(f)
+    tight = fm.tightBoundingRect(self.text())
+    tx = rect.center().x() - fm.horizontalAdvance(self.text()) / 2.0
+    ty = rect.center().y() - (tight.top() + tight.bottom()) / 2.0
+
+    path = QPainterPath()
+    path.addText(QPointF(tx, ty), f, self.text())
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QBrush(self.text_color))
+    painter.drawPath(path)
+

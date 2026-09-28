@@ -121,48 +121,73 @@ class BlockEquivalenceTest(unittest.TestCase):
 
       diff = np.abs(cv_resized.astype(int) - cpp_resized.astype(int))
       max_diff = int(np.max(diff))
-      mean_diff = float(np.mean(diff))
+      mismatches = int(np.count_nonzero(diff))
 
-      # Fixed point integer vs float bilinear differs by at most 1 on boundary pixels
-      self.assertLessEqual(max_diff, 1, f'Resize ({sw}x{sh}->{dw}x{dh}) exceeded max_diff of 1: {max_diff}')
-      self.assertLess(mean_diff, 0.20, f'Resize ({sw}x{sh}->{dw}x{dh}) mean_diff too high: {mean_diff:.4f}')
+      self.assertEqual(max_diff, 0, f'Resize ({sw}x{sh}->{dw}x{dh}) max_diff != 0: {max_diff}')
+      self.assertEqual(mismatches, 0, f'Resize ({sw}x{sh}->{dw}x{dh}) mismatches != 0: {mismatches}')
 
-      # Pearson correlation coefficient must exceed 0.9999
-      r = np.corrcoef(cv_resized.flatten(), cpp_resized.flatten())[0, 1]
-      self.assertGreater(r, 0.9999, f'Resize correlation below 0.9999: {r:.6f}')
+  @staticmethod
+  def _render_canonical_bgr_strip(
+      engine: python_engine.PythonExpEngine,
+      text: str,
+      width: int = 420,
+      height: int = 38,
+  ) -> np.ndarray:
+    """Renders a 3-channel BGR strip at canonical 38px height."""
+    strip = np.zeros((height, width, 3), dtype=np.uint8)
+    cur_x = 20
+    base_y = 6
+    for ch in text:
+      tpl = engine.templates[ch]
+      w, h, fmap = tpl['w'], tpl['h'], tpl['fmap']
+      cy = base_y if h == 25 else base_y + 2
+      patch = np.round(fmap * 255.0).astype(np.uint8)
+      strip[cy : cy + h, cur_x : cur_x + w, 0] = patch
+      strip[cy : cy + h, cur_x : cur_x + w, 1] = patch
+      strip[cy : cy + h, cur_x : cur_x + w, 2] = patch
+      cur_x += 6 if ch == '.' else (8 if ch in '[]' else max(w, 11) + 2)
+    return strip
 
   def test_bilinear_resize_authentic_crop_exact_match(self) -> None:
-    """Tests that C++ ResizeGray matches cv2.resize bit-for-bit (0 mismatches) on 4K game crop."""
+    """Tests that C++ ResizeGray matches cv2.resize bit-for-bit across game strip scales."""
     crop_path = os.path.join(self.base_dir, 'debug_crops', 'crop_3840x2160.png')
-    if not os.path.exists(crop_path):
-      self.skipTest('crop_3840x2160.png not found')
+    if os.path.exists(crop_path):
+      crops = [cv2.imread(crop_path, cv2.IMREAD_GRAYSCALE)]
+    else:
+      bgr = self._render_canonical_bgr_strip(self.py_engine, '444444442[44.44%]')
+      gray_38 = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+      crops = [
+          cv2.resize(gray_38, (210, 19), interpolation=cv2.INTER_LINEAR),
+          gray_38,
+          cv2.resize(gray_38, (630, 57), interpolation=cv2.INTER_LINEAR),
+      ]
 
-    img = cv2.imread(crop_path, cv2.IMREAD_GRAYSCALE)
-    sh, sw = img.shape
-    dw = int(round(sw * (38.0 / sh)))
-    dh = int(round(sh * (38.0 / sh)))
+    for img in crops:
+      sh, sw = img.shape
+      dw = int(round(sw * (38.0 / sh)))
+      dh = int(round(sh * (38.0 / sh)))
 
-    cv_resized = cv2.resize(img, (dw, dh), interpolation=cv2.INTER_LINEAR)
-    cpp_resized = np.zeros((dh, dw), dtype=np.uint8)
+      cv_resized = cv2.resize(img, (dw, dh), interpolation=cv2.INTER_LINEAR)
+      cpp_resized = np.zeros((dh, dw), dtype=np.uint8)
 
-    self.cpp_lib.Test_ResizeGray(
-        img.tobytes(), sw, sh, sw,
-        cpp_resized.ctypes.data_as(ctypes.c_char_p), dw, dh, dw
-    )
+      self.cpp_lib.Test_ResizeGray(
+          img.tobytes(), sw, sh, sw,
+          cpp_resized.ctypes.data_as(ctypes.c_char_p), dw, dh, dw
+      )
 
-    diff = np.abs(cv_resized.astype(int) - cpp_resized.astype(int))
-    mismatches = int(np.count_nonzero(diff))
-    max_diff = int(np.max(diff))
-    self.assertEqual(
-        mismatches, 0,
-        f'4K crop resize had {mismatches} mismatches vs cv2.resize, max_diff={max_diff}'
-    )
+      diff = np.abs(cv_resized.astype(int) - cpp_resized.astype(int))
+      mismatches = int(np.count_nonzero(diff))
+      max_diff = int(np.max(diff))
+      self.assertEqual(
+          mismatches, 0,
+          f'Crop ({sw}x{sh}->{dw}x{dh}) resize had {mismatches} mismatches vs cv2.resize, max_diff={max_diff}'
+      )
 
   def test_match_template_ncc_vs_opencv(self) -> None:
-    """Tests that C++ MatchTemplateNcc matches cv2.matchTemplate within 1e-4 precision."""
+    """Tests that C++ MatchTemplateNcc matches cv2.matchTemplate within 1e-4 across all 15 chars."""
     img_w = 200
     img_h = 25
-    test_chars = ['8', '[', ']', '%', '.']
+    test_chars = sorted(self.py_engine.templates.keys())
 
     # Synthesize realistic background with characters
     np.random.seed(123)
@@ -196,31 +221,46 @@ class BlockEquivalenceTest(unittest.TestCase):
       )
 
   def test_grammar_dp_decoder_complete_equivalence(self) -> None:
-    """Tests that both C++ and Python engines decode identical EXP strings and numbers."""
-    crop_path = os.path.join(self.base_dir, 'debug_crops', 'crop_3840x2160.png')
-    if not os.path.exists(crop_path):
-      self.skipTest('crop_3840x2160.png not found')
+    """Tests that C++ and Python engines decode identical EXP strings across scales and strings."""
+    test_strings = [
+        '772097[0.32%]',
+        '772097[0.3%]',
+        '444444442[44.44%]',
+        '242424242[24.24%]',
+        '19896792[41.90%]',
+        '19896792[41.9%]',
+        '100[0.00%]',
+        '100[0.0%]',
+        '999999999[99.99%]',
+    ]
+    target_heights = [14, 16, 19, 25, 38, 57]
 
-    img = cv2.imread(crop_path)
-    h, w = img.shape[:2]
+    for text in test_strings:
+      canonical = self._render_canonical_bgr_strip(self.py_engine, text)
+      ch_orig, cw_orig = canonical.shape[:2]
+      for target_h in target_heights:
+        target_w = int(round(cw_orig * (target_h / float(ch_orig))))
+        img = cv2.resize(
+            canonical, (target_w, target_h), interpolation=cv2.INTER_LINEAR
+        )
+        h, w = img.shape[:2]
 
-    # Python output
-    py_res = self.py_engine.parse_crop(img)
-    self.assertIsNotNone(py_res)
-    py_val, py_pct, py_str, _, _ = py_res
+        py_res = self.py_engine.parse_crop(img)
+        self.assertIsNotNone(py_res, f'Python failed on {text} at h={target_h}')
+        py_val, py_pct, py_str, _, _ = py_res
 
-    # C++ output
-    cpp_res = CppExpResult()
-    ret = self.cpp_lib.ParseExpFromBuffer(
-        img.tobytes(), w, h, w * 3, 3, ctypes.byref(cpp_res)
-    )
-    self.assertEqual(ret, 0)
-    self.assertEqual(cpp_res.success, 1)
+        cpp_res = CppExpResult()
+        ret = self.cpp_lib.ParseExpFromBuffer(
+            img.tobytes(), w, h, w * 3, 3, ctypes.byref(cpp_res)
+        )
+        self.assertEqual(ret, 0)
+        self.assertEqual(cpp_res.success, 1, f'C++ failed on {text} at h={target_h}')
 
-    cpp_str = cpp_res.exp_string.decode('utf-8')
-    self.assertEqual(cpp_str, py_str)
-    self.assertEqual(cpp_res.exp_value, py_val)
-    self.assertAlmostEqual(cpp_res.exp_percent, py_pct, places=4)
+        cpp_str = cpp_res.exp_string.decode('utf-8')
+        self.assertEqual(cpp_str, py_str)
+        self.assertEqual(cpp_str, text)
+        self.assertEqual(cpp_res.exp_value, py_val)
+        self.assertAlmostEqual(cpp_res.exp_percent, py_pct, places=4)
 
 
 if __name__ == '__main__':

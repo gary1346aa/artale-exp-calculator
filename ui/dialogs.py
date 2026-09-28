@@ -1215,18 +1215,32 @@ class AboutDialog(QDialog):
     self.btn_check_update.setEnabled(True)
     if has_update and info:
       self.available_update = info
-      self.btn_check_update.setText("立即下載更新")
-      self.btn_check_update.set_color_scheme(
-          bg=QColor("#0284c7"),
-          hover_bg=QColor("#0369a1"),
-          border=QColor("#0369a1"),
-          text_color=QColor("#ffffff"),
-          bold=True,
-      )
-      self.lbl_update_status.setText(
-          f'<a href="{info.download_url}" style="color: #38bdf8; text-decoration:'
-          f' underline;">發現新版本 v{info.version}</a>'
-      )
+      if getattr(info, "is_same_version", False):
+        self.btn_check_update.setText("重新下載安裝")
+        self.btn_check_update.set_color_scheme(
+            bg=QColor("#0284c7"),
+            hover_bg=QColor("#0369a1"),
+            border=QColor("#0369a1"),
+            text_color=QColor("#ffffff"),
+            bold=True,
+        )
+        self.lbl_update_status.setText(
+            f'<a href="{info.download_url}" style="color: #34d399; text-decoration:'
+            f' underline;">目前已是最新版本 v{info.version}</a>'
+        )
+      else:
+        self.btn_check_update.setText("立即下載更新")
+        self.btn_check_update.set_color_scheme(
+            bg=QColor("#0284c7"),
+            hover_bg=QColor("#0369a1"),
+            border=QColor("#0369a1"),
+            text_color=QColor("#ffffff"),
+            bold=True,
+        )
+        self.lbl_update_status.setText(
+            f'<a href="{info.download_url}" style="color: #38bdf8; text-decoration:'
+            f' underline;">發現新版本 v{info.version}</a>'
+        )
     else:
       self.available_update = None
       if "最新版本" in status_msg:

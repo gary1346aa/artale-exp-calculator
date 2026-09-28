@@ -327,6 +327,144 @@ class TestExpMetricsEngine(unittest.TestCase):
     self.assertGreaterEqual(engine.samples[0].timestamp, 3960.0 - 3660.0)
     self.assertLessEqual(len(engine.samples), 62)
 
+  def test_rejects_false_zero_percent_level_up_while_hunting_above_85_pct(self):
+    """Reproduces reported Lv. 191 bug: hunting at ~89.5% with a bogus 6 (0.00%) reading."""
+    engine = ExpMetricsEngine()
+    engine.set_auto_pause(False, 10)
+    # Level 191 required EXP is 1,312,399,800
+    engine.add_sample(1051378334, 80.11, timestamp=0.0)
+    engine.start_measurement(timestamp=0.0)
+    self.assertEqual(engine.current_level, 191)
+
+    engine.add_sample(1127604505, 85.92, timestamp=5000.0)
+    engine.add_sample(1159654692, 88.36, timestamp=8066.0)
+    engine.add_sample(1175000000, 89.53, timestamp=8660.0)
+    self.assertEqual(engine.current_level, 191)
+    expected_gain_before = 1175000000 - 1051378334
+    self.assertEqual(engine.total_gained_exp, expected_gain_before)
+
+    # Bogus OCR frame: 6 (0.00%) while at 89.53%
+    bogus_accepted = engine.add_sample(6, 0.00, timestamp=8665.0)
+    self.assertFalse(bogus_accepted)
+    self.assertEqual(engine.current_level, 191)
+    self.assertEqual(engine.latest_sample.exp_value, 1175000000)
+    self.assertEqual(engine.total_gained_exp, expected_gain_before)
+
+    # Subsequent real Lv. 191 hunting frame MUST be accepted (not locked out!)
+    next_accepted = engine.add_sample(1175300000, 89.55, timestamp=8666.0)
+    self.assertTrue(next_accepted)
+    self.assertEqual(engine.current_level, 191)
+    self.assertEqual(engine.total_gained_exp, expected_gain_before + 300000)
+
+  def test_rolls_back_single_frame_false_level_up_at_99_percent(self):
+    """Verifies that even at 99.0%, a 1-frame (6, 0.00%) false level-up rolls back on the next real frame."""
+    engine = ExpMetricsEngine()
+    engine.set_auto_pause(False, 10)
+    # Level 191 (req = 1,312,399,800) at 99.00%
+    engine.add_sample(1299275802, 99.00, timestamp=100.0)
+    engine.start_measurement(timestamp=100.0)
+    self.assertEqual(engine.current_level, 191)
+
+    engine.add_sample(1300588202, 99.10, timestamp=110.0)
+    self.assertEqual(engine.total_gained_exp, 1312400)
+
+    # 1-frame glitch (6, 0.00%) tentatively triggers level-up at >= 98%
+    engine.add_sample(6, 0.00, timestamp=111.0)
+    self.assertEqual(engine.current_level, 192)
+
+    # Next frame is the real Lv. 191 bar (99.15%): engine MUST roll back false level-up!
+    recovered = engine.add_sample(1301244402, 99.15, timestamp=112.0)
+    self.assertTrue(recovered)
+    self.assertEqual(engine.current_level, 191)
+    self.assertEqual(engine.level_up_carry_exp, 0)
+    self.assertEqual(engine.total_gained_exp, 1301244402 - 1299275802)
+
+  def test_self_healing_level_resynchronization(self):
+    """Verifies that 3 consecutive consistent frames at a different level resynchronize current_level."""
+    engine = ExpMetricsEngine()
+    # Initially at Level 194: 686,615,140 (44.57%)
+    engine.add_sample(686615140, 44.57, timestamp=100.0)
+    self.assertEqual(engine.current_level, 194)
+
+    # Player switches to Level 188 character: 950,498,802 (84.99%)
+    # First 2 frames are held back as potential outliers, 3rd frame confirms and resyncs!
+    self.assertFalse(engine.add_sample(950498802, 84.99, timestamp=101.0))
+    self.assertFalse(engine.add_sample(950550000, 85.00, timestamp=102.0))
+    self.assertTrue(engine.add_sample(950600000, 85.00, timestamp=103.0))
+    self.assertEqual(engine.current_level, 188)
+
+  def test_pause_hunt_same_level_and_resume_excludes_paused_exp(self):
+    """Verifies that EXP gained while paused on the same level is excluded upon resume."""
+    engine = ExpMetricsEngine()
+    engine.set_auto_pause(False, 10)
+
+    # Start at t=0: 1,000,000 (10.00%)
+    engine.add_sample(1000000, 10.00, timestamp=0.0)
+    engine.start_measurement(timestamp=0.0)
+
+    # Active hunting for 30s: gain 300,000 EXP (10,000/s)
+    engine.add_sample(1300000, 13.00, timestamp=30.0)
+    self.assertEqual(engine.total_gained_exp, 300000)
+
+    # User pauses at t=30s and forgets to resume while hunting 200,000 EXP
+    engine.pause_measurement(disable_auto_start=True, timestamp=30.0)
+    engine.add_sample(1400000, 14.00, timestamp=60.0)
+    engine.add_sample(1500000, 15.00, timestamp=90.0)
+    self.assertEqual(engine.total_gained_exp, 300000)
+    self.assertEqual(engine.latest_sample.exp_value, 1500000)
+
+    # User resumes at t=90s (60s paused) and hunts for 30s more (+300,000 EXP)
+    engine.start_measurement(timestamp=90.0)
+    engine.add_sample(1800000, 18.00, timestamp=120.0)
+
+    # Active time is 60s (30s pre-pause + 30s post-resume), active gain is 600,000 (excluding 200,000 paused EXP)
+    self.assertEqual(engine.total_gained_exp, 600000)
+    self.assertAlmostEqual(engine.total_gained_pct, 6.00, places=4)
+    m = engine.get_metrics(now=120.0)
+    self.assertEqual(m["練功時長"], "00:01:00")
+    self.assertEqual(m["累計經驗"], "600,000")
+    self.assertEqual(m["1分鐘經驗"], "600,000")
+    self.assertEqual(m["預估10分"], "6,000,000")
+    self.assertEqual(m["預估60分"], "36,000,000")
+
+  def test_pause_hunt_level_up_and_resume_excludes_paused_exp(self):
+    """Verifies that leveling up while paused updates level and excludes all paused EXP upon resume."""
+    engine = ExpMetricsEngine()
+    engine.set_auto_pause(False, 10)
+
+    # Start near end of Level 194 (cap = 1,540,197,871): 1,540,000,000 (99.99%)
+    engine.add_sample(1540000000, 99.99, timestamp=0.0)
+    engine.start_measurement(timestamp=0.0)
+    self.assertEqual(engine.current_level, 194)
+
+    # Active hunting for 10s: gain 100,000 EXP -> 1,540,100,000 (99.99%)
+    engine.add_sample(1540100000, 99.99, timestamp=10.0)
+    self.assertEqual(engine.total_gained_exp, 100000)
+
+    # Pause at t=10s
+    engine.pause_measurement(disable_auto_start=True, timestamp=10.0)
+
+    # While paused, player kills monsters and levels up to Lv 195 at 50,000 (0.00%)
+    engine.add_sample(50000, 0.00, timestamp=30.0)
+    self.assertEqual(engine.current_level, 195)
+    # Active gain must still be frozen at 100,000 while paused
+    self.assertEqual(engine.total_gained_exp, 100000)
+
+    # Resume at t=50s (40s paused)
+    engine.start_measurement(timestamp=50.0)
+
+    # Hunt on Lv 195 for 10s: gain 50,000 EXP -> 100,000 (0.01%)
+    engine.add_sample(100000, 0.01, timestamp=60.0)
+
+    # Total active gain MUST be 100,000 (pre-pause) + 50,000 (post-resume) = 150,000
+    # (The 97,871 + 50,000 = 147,871 EXP gained across the level-up during pause is excluded!)
+    self.assertEqual(engine.current_level, 195)
+    self.assertEqual(engine.total_gained_exp, 150000)
+    m = engine.get_metrics(now=60.0)
+    self.assertEqual(m["練功時長"], "00:00:20")
+    self.assertEqual(m["累計經驗"], "150,000")
+    self.assertEqual(m["1分鐘經驗"], "450,000")  # 150,000 in 20s active = 450,000/min
+
 
 if __name__ == "__main__":
   unittest.main()
