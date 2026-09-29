@@ -1,4 +1,4 @@
-"""Unit tests for upgraded ExpMetricsEngine.
+"""Unit tests for ExpMetricsEngine.
 
 Validates:
 1. Initial EXP is set once on first sample and persists across measurement resets.

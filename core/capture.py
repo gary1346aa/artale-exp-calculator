@@ -104,9 +104,9 @@ class CaptureWorker(QThread):
   def _run_win32_gdi_capture(self, target_h: int) -> None:
     """Fallback capture loop using Win32 GDI (PrintWindow / BitBlt).
 
-    Provides 100% universal capture compatibility across all Windows builds,
-    VMs, or environments where Windows Graphics Capture API is unavailable
-    or restricted.
+    Provides fallback window capture across Windows builds, VMs, or
+    environments where Windows Graphics Capture API is unavailable or
+    restricted.
     """
     user32 = ctypes.windll.user32
     gdi32 = ctypes.windll.gdi32
@@ -204,7 +204,7 @@ class CaptureWorker(QThread):
           self.frame_parsed.emit(
               exp_val, pct if pct is not None else -1.0, dt_ms
           )
-          self.status_changed.emit("已準備就緒", True)
+          self.status_changed.emit("已鎖定視窗", True)
         else:
           self.status_changed.emit("搜尋經驗條中...", False)
       except Exception as e:
@@ -253,7 +253,7 @@ class CaptureWorker(QThread):
           self.frame_parsed.emit(
               exp_val, pct if pct is not None else -1.0, dt_ms
           )
-          self.status_changed.emit("已準備就緒", True)
+          self.status_changed.emit("已鎖定視窗", True)
         else:
           self.status_changed.emit("搜尋經驗條中...", False)
       except Exception as e:
@@ -288,7 +288,7 @@ class CaptureWorker(QThread):
       self.status_changed.emit("連線至遊戲視窗...", False)
       try:
         interval_ms = max(50, int(self.sample_interval * 1000))
-        # Tier 1: Optimal settings (no border, no cursor, hardware DWM interval throttling)
+        # Tier 1: Primary settings (no border, no cursor, DWM interval throttling)
         try:
           capture = WindowsCapture(
               cursor_capture=False,
@@ -410,7 +410,7 @@ class CaptureWorker(QThread):
             self.frame_parsed.emit(
                 exp_val, pct if pct is not None else -1.0, dt_ms
             )
-            self.status_changed.emit("已準備就緒", True)
+            self.status_changed.emit("已鎖定視窗", True)
           else:
             self.status_changed.emit("搜尋經驗條中...", False)
 

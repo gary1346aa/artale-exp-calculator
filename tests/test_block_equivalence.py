@@ -69,7 +69,7 @@ class BlockEquivalenceTest(unittest.TestCase):
     cls.cpp_lib.Test_MatchTemplateNcc.restype = ctypes.c_int
 
   def test_extract_gray_exact_match_opencv(self) -> None:
-    """Tests that C++ BGR2GRAY matches OpenCV cv2.cvtColor with 0 pixel difference."""
+    """Tests that C++ BGR2GRAY matches OpenCV cv2.cvtColor."""
     # Test 1: Synthetic color gradient ramp
     h, w = 120, 200
     ramp = np.zeros((h, w, 3), dtype=np.uint8)
@@ -149,7 +149,7 @@ class BlockEquivalenceTest(unittest.TestCase):
     return strip
 
   def test_bilinear_resize_authentic_crop_exact_match(self) -> None:
-    """Tests that C++ ResizeGray matches cv2.resize bit-for-bit across game strip scales."""
+    """Tests that C++ ResizeGray matches cv2.resize across game strip scales."""
     crop_path = os.path.join(self.base_dir, 'debug_crops', 'crop_3840x2160.png')
     if os.path.exists(crop_path):
       crops = [cv2.imread(crop_path, cv2.IMREAD_GRAYSCALE)]

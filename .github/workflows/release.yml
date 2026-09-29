@@ -56,6 +56,9 @@ jobs:
       - name: Package Windows Zip Archive
         shell: pwsh
         run: |
+          if (Test-Path "Artale_EXP_Calculator_Manual_TC.pdf") {
+            Copy-Item "Artale_EXP_Calculator_Manual_TC.pdf" "dist/ArtaleExpCalculator/Artale_EXP_Calculator_Manual_TC.pdf" -Force
+          }
           Compress-Archive -Path dist/ArtaleExpCalculator/* -DestinationPath dist/ArtaleExpCalculator-win-x64.zip
           $hash = (Get-FileHash dist/ArtaleExpCalculator-win-x64.zip -Algorithm SHA256).Hash
           Set-Content -Path dist/ArtaleExpCalculator-win-x64.sha256 -Value $hash
@@ -111,8 +114,15 @@ jobs:
 
       - name: Package macOS Zip Archive
         run: |
+          if [ -f "Artale_EXP_Calculator_Manual_TC.pdf" ]; then
+            cp "Artale_EXP_Calculator_Manual_TC.pdf" "dist/Artale_EXP_Calculator_Manual_TC.pdf"
+          fi
           cd dist
-          zip -r -y ArtaleExpCalculator-mac-arm64.zip ArtaleExpCalculator.app
+          if [ -f "Artale_EXP_Calculator_Manual_TC.pdf" ]; then
+            zip -r -y ArtaleExpCalculator-mac-arm64.zip ArtaleExpCalculator.app Artale_EXP_Calculator_Manual_TC.pdf
+          else
+            zip -r -y ArtaleExpCalculator-mac-arm64.zip ArtaleExpCalculator.app
+          fi
           shasum -a 256 ArtaleExpCalculator-mac-arm64.zip | awk '{print $1}' > ArtaleExpCalculator-mac-arm64.sha256
           echo "macOS SHA256: $(cat ArtaleExpCalculator-mac-arm64.sha256)"
 

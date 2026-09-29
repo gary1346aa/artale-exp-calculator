@@ -200,7 +200,7 @@ class SelectWindowDialog(QDialog):
 
     btn_save = QPushButton("確認選取", self)
     btn_save.setStyleSheet(
-        "background-color: #10b981; color: #ffffff; font-weight: bold; border:"
+        "background-color: #10b981; color: #ffffff; font-weight: normal; border:"
         " 1px solid #059669;"
     )
     btn_save.clicked.connect(self._on_confirm)

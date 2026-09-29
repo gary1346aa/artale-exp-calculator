@@ -116,7 +116,7 @@ def ensure_native_library() -> bool:
   except FileNotFoundError:
     pass
 
-  log("Warning: Could not build native C++ library. Pure Python engine will be used as fallback.")
+  log("Warning: Could not build native C++ library. Python engine will be used as fallback.")
   return False
 
 

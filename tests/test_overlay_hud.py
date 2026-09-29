@@ -65,7 +65,7 @@ class TestOverlayHud(unittest.TestCase):
     self.assertLess(
         game_height,
         full_height,
-        "Game mode height must be smaller than full mode height (zero empty slots)",
+        "Game mode height must be smaller than full mode height (no empty slots)",
     )
 
     # Verify visible widgets match default game mode items
@@ -688,6 +688,8 @@ class TestOverlayHud(unittest.TestCase):
     self.assertIn("快捷鍵", actions_seen)
     self.assertIn("關於...", actions_seen)
     self.assertIn("關閉程式", actions_seen)
+    self.assertFalse(any("縮放大小" in a for a in actions_seen))
+    self.assertFalse(any("透明度" in a for a in actions_seen))
 
   def test_context_menu_shortcuts_section(self):
     """Verifies that 快捷鍵 submenu displays platform-specific keys and triggers callbacks."""
@@ -706,17 +708,17 @@ class TestOverlayHud(unittest.TestCase):
       return None
 
     with patch("PyQt6.QtWidgets.QMenu.exec", new=fake_exec_mac), \
-         patch.object(config, "HOTKEY_LABEL_AUTO_START", "⌘6"), \
-         patch.object(config, "HOTKEY_LABEL_START_PAUSE", "⌘7"), \
-         patch.object(config, "HOTKEY_LABEL_RESET", "⌘8"), \
-         patch.object(config, "HOTKEY_LABEL_SWITCH_MODE", "⌘9"):
+         patch.object(config, "HOTKEY_LABEL_AUTO_START", "⌃6"), \
+         patch.object(config, "HOTKEY_LABEL_START_PAUSE", "⌃7"), \
+         patch.object(config, "HOTKEY_LABEL_RESET", "⌃8"), \
+         patch.object(config, "HOTKEY_LABEL_SWITCH_MODE", "⌃9"):
       event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10))
       self.overlay.contextMenuEvent(event)
 
-    self.assertTrue(any("⌘6" in text for text in sub_actions_mac))
-    self.assertTrue(any("⌘7" in text for text in sub_actions_mac))
-    self.assertTrue(any("⌘8" in text for text in sub_actions_mac))
-    self.assertTrue(any("⌘9" in text for text in sub_actions_mac))
+    self.assertTrue(any("⌃6" in text for text in sub_actions_mac))
+    self.assertTrue(any("⌃7" in text for text in sub_actions_mac))
+    self.assertTrue(any("⌃8" in text for text in sub_actions_mac))
+    self.assertTrue(any("⌃9" in text for text in sub_actions_mac))
     self.assertEqual(len(sub_actions_mac), 4)
 
     # Test Windows submenu structure
@@ -743,7 +745,7 @@ class TestOverlayHud(unittest.TestCase):
     self.assertEqual(len(sub_actions_win), 4)
 
   def test_keypress_event_shortcuts(self):
-    """Verifies that keyPressEvent triggers correct handlers for F-keys and ⌘-keys."""
+    """Verifies that keyPressEvent triggers correct handlers for F-keys and ⌃-keys."""
     from unittest.mock import MagicMock
     from PyQt6.QtCore import QEvent, Qt
     from PyQt6.QtGui import QKeyEvent
@@ -773,22 +775,22 @@ class TestOverlayHud(unittest.TestCase):
     self.overlay.keyPressEvent(ev_f9)
     self.assertEqual(self.overlay.on_f9.call_count, 1)
 
-    # ⌘6 (Command + 6 / ControlModifier on macOS)
+    # ⌃6 (Control + 6 / MetaModifier on macOS)
     ev_cmd6 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_6, Qt.KeyboardModifier.ControlModifier)
     self.overlay.keyPressEvent(ev_cmd6)
     self.assertEqual(self.overlay.on_f6.call_count, 2)
 
-    # ⌘7
+    # ⌃7
     ev_cmd7 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_7, Qt.KeyboardModifier.ControlModifier)
     self.overlay.keyPressEvent(ev_cmd7)
     self.assertEqual(self.overlay.on_f7.call_count, 2)
 
-    # ⌘8
+    # ⌃8
     ev_cmd8 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_8, Qt.KeyboardModifier.ControlModifier)
     self.overlay.keyPressEvent(ev_cmd8)
     self.assertEqual(self.overlay.on_f8.call_count, 2)
 
-    # ⌘9
+    # ⌃9
     ev_cmd9 = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_9, Qt.KeyboardModifier.ControlModifier)
     self.overlay.keyPressEvent(ev_cmd9)
     self.assertEqual(self.overlay.on_f9.call_count, 2)

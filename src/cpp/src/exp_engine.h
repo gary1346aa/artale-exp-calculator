@@ -63,8 +63,7 @@ class ExpEngine {
   static void ResizeGray(const uint8_t* src, int src_w, int src_h, int src_stride, uint8_t* dst,
                          int dst_w, int dst_h, int dst_stride);
 
-  // Pure scalar reference implementation of bilinear interpolation for
-  // bit-exact verification.
+  // Scalar reference implementation of bilinear interpolation.
   static void ResizeGrayScalar(const uint8_t* src, int src_w, int src_h, int src_stride,
                                uint8_t* dst, int dst_w, int dst_h, int dst_stride);
 
@@ -73,8 +72,7 @@ class ExpEngine {
   static void MatchTemplateNcc(const float* image, int img_w, int img_h, int img_stride,
                                const PreparedTemplate& tpl, float* out_response);
 
-  // Pure scalar reference implementation of sliding-window NCC for bit-exact
-  // verification.
+  // Scalar reference implementation of sliding-window NCC.
   static void MatchTemplateNccScalar(const float* image, int img_w, int img_h, int img_stride,
                                      const PreparedTemplate& tpl, float* out_response);
 

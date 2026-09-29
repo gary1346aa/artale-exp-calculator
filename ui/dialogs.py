@@ -82,7 +82,7 @@ def _make_smooth_font(
     weight: QFont.Weight = QFont.Weight.Normal,
     latin_first: bool = False,
 ) -> QFont:
-  """Creates a QFont matching the main HUD's crisp PingFang TC / Google Sans rendering."""
+  """Creates a QFont configured with PingFang TC and Google Sans."""
   _ensure_dialog_fonts()
   font = QFont()
   if latin_first:
@@ -106,7 +106,7 @@ def _draw_smooth_checkbox_indicator(
     hovered: bool = False,
     enabled: bool = True,
 ) -> None:
-  """Draws a vector-smoothed rounded checkbox indicator with an anti-aliased checkmark."""
+  """Draws a rounded checkbox indicator with an anti-aliased checkmark."""
   painter.save()
   painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
@@ -149,7 +149,7 @@ def _draw_smooth_checkbox_indicator(
 
 
 class SmoothCardFrame(QFrame):
-  """Frame with vector-smoothed anti-aliased rounded background and border."""
+  """Frame with anti-aliased rounded background and border."""
 
   def __init__(
       self,
@@ -176,7 +176,7 @@ class SmoothCardFrame(QFrame):
 
 
 class SmoothCheckBox(QCheckBox):
-  """CheckBox with vector-smoothed indicator and unhinted anti-aliased text."""
+  """CheckBox with custom indicator and anti-aliased text."""
 
   def __init__(self, text: str = "", parent=None):
     super().__init__(text, parent)
@@ -240,7 +240,7 @@ class SmoothCheckBox(QCheckBox):
 
 
 class SmoothSpinBox(QSpinBox):
-  """SpinBox with vector-smoothed rounded border and clean number-only input."""
+  """SpinBox with rounded border and numeric input."""
 
   def __init__(self, parent=None):
     super().__init__(parent)
@@ -290,7 +290,7 @@ class SmoothSpinBox(QSpinBox):
 
 
 class SmoothDialogButton(QPushButton):
-  """PushButton with vector-smoothed rounded border, optional arrow icon, and unhinted font."""
+  """PushButton with rounded border and optional arrow icon."""
 
   def __init__(
       self,
@@ -321,8 +321,7 @@ class SmoothDialogButton(QPushButton):
     self._hover_bg_color = hover_bg
     self._border_color = border
     self._text_color = text_color
-    weight = QFont.Weight.DemiBold if bold else QFont.Weight.Normal
-    self.setFont(_make_smooth_font(12, weight))
+    self.setFont(_make_smooth_font(12, QFont.Weight.Normal))
     self.update()
 
   def enterEvent(self, event) -> None:
@@ -413,7 +412,7 @@ class SmoothDialogButton(QPushButton):
 
 
 class SmoothListDelegate(QStyledItemDelegate):
-  """Custom delegate that paints list items and checkboxes with full vector antialiasing."""
+  """Custom delegate that paints list items and checkboxes with antialiasing."""
 
   def __init__(self, parent=None):
     super().__init__(parent)
@@ -471,7 +470,7 @@ class SmoothListDelegate(QStyledItemDelegate):
 
 
 class SmoothListWidget(QListWidget):
-  """ListWidget with vector-smoothed outer rounded border and custom checkbox delegate."""
+  """ListWidget with custom checkbox item delegate."""
 
   def __init__(self, parent=None):
     super().__init__(parent)
@@ -526,7 +525,7 @@ class SmoothListWidget(QListWidget):
 
 
 class SmoothSlider(QSlider):
-  """Horizontal slider with vector-smoothed anti-aliased groove and circular handle."""
+  """Horizontal slider with custom groove and circular handle."""
 
   def __init__(self, parent=None):
     super().__init__(Qt.Orientation.Horizontal, parent)
@@ -866,7 +865,6 @@ class GameModeSettingsDialog(QDialog):
         hover_bg=QColor("#059669"),
         border=QColor("#059669"),
         text_color=QColor("#ffffff"),
-        bold=True,
     )
     btn_save.clicked.connect(self.accept)
 
@@ -1222,7 +1220,6 @@ class AboutDialog(QDialog):
             hover_bg=QColor("#0369a1"),
             border=QColor("#0369a1"),
             text_color=QColor("#ffffff"),
-            bold=True,
         )
         self.lbl_update_status.setText(
             f'<a href="{info.download_url}" style="color: #34d399; text-decoration:'
@@ -1235,7 +1232,6 @@ class AboutDialog(QDialog):
             hover_bg=QColor("#0369a1"),
             border=QColor("#0369a1"),
             text_color=QColor("#ffffff"),
-            bold=True,
         )
         self.lbl_update_status.setText(
             f'<a href="{info.download_url}" style="color: #38bdf8; text-decoration:'
@@ -1260,7 +1256,6 @@ class AboutDialog(QDialog):
           hover_bg=QColor(255, 255, 255, 45),
           border=QColor(255, 255, 255, 38),
           text_color=QColor("#94a3b8"),
-          bold=True,
       )
       self.lbl_update_status.setText("準備下載中...")
       self.lbl_update_status.setStyleSheet("color: #94a3b8; background-color: #181d28;")
@@ -1281,7 +1276,6 @@ class AboutDialog(QDialog):
           hover_bg=QColor("#0369a1"),
           border=QColor("#0369a1"),
           text_color=QColor("#ffffff"),
-          bold=True,
       )
       self.lbl_update_status.setText(f"下載初始化失敗: {e}")
       self.lbl_update_status.setStyleSheet("color: #f87171; background-color: #181d28;")
@@ -1308,7 +1302,6 @@ class AboutDialog(QDialog):
           hover_bg=QColor("#059669"),
           border=QColor("#059669"),
           text_color=QColor("#ffffff"),
-          bold=True,
       )
       self.lbl_update_status.setText("下載完成！點擊按鈕重啟套用")
       self.lbl_update_status.setStyleSheet("color: #34d399; background-color: #181d28;")
@@ -1321,5 +1314,4 @@ class AboutDialog(QDialog):
           hover_bg=QColor("#0369a1"),
           border=QColor("#0369a1"),
           text_color=QColor("#ffffff"),
-          bold=True,
       )

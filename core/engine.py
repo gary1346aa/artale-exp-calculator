@@ -1,7 +1,7 @@
 """Native C++ SIMD engine binding and frame recognition interface.
 
 Complies with the Google Python Style Guide.
-Zero top-level OpenCV imports to enable clean production bundling.
+Avoids top-level OpenCV imports for production bundling.
 """
 
 import ctypes
@@ -292,9 +292,8 @@ def _parse_frame_python(bgr_img: np.ndarray) -> Optional[ParsedFrame]:
 def parse_frame(bgr_img: Optional[np.ndarray]) -> Optional[ParsedFrame]:
   """Parses EXP value, percentage, and bounding boxes from a BGR/BGRA frame.
 
-  Dispatches directly to the high-performance native C++ SIMD engine when
-  available. Falls back gracefully to the Python reference engine if the C++
-  shared library is missing.
+  Dispatches to the native C++ SIMD engine when available, and falls back to
+  the Python reference engine if the shared library is not loaded.
 
   Args:
     bgr_img: Contiguous numpy array containing BGR or BGRA pixel bytes.
@@ -346,7 +345,7 @@ def parse_frame(bgr_img: Optional[np.ndarray]) -> Optional[ParsedFrame]:
 
 
 def is_cpp_active() -> bool:
-  """Returns True if the high-speed C++ SIMD engine is loaded and active."""
+  """Returns True if the native C++ SIMD engine is loaded and active."""
   return _use_cpp and (_core_dll is not None)
 
 

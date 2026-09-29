@@ -385,7 +385,7 @@ TEST(ExpEngineTest, ParseCropLowResWithoutDigit8AndStrictGrammar) {
 #if !defined(__ARM_NEON) && !defined(__aarch64__)
 // Lightweight host-side ARM NEON intrinsic semantics verifier so that all
 // #elif defined(__ARM_NEON) code paths in ExtractGraySubRect, ResizeGray, and
-// MatchTemplateNcc are continuously verified for bit-exactness on x86_64 CI/hosts.
+// MatchTemplateNcc are verified on x86_64 CI/hosts.
 namespace neon_verify {
 
 struct uint8x8_t { uint8_t v[8]; };
@@ -960,7 +960,7 @@ TEST(ExpEngineTest, NeonKernelsMatchScalarAndAvx2BitExact) {
                                     << " -> " << sc.dw << "x" << sc.dh;
   }
 
-  // 3. Verify MatchTemplateNcc NEON vs AVX2 vs Scalar bit-exact across all 15 character templates
+  // 3. Verify MatchTemplateNcc NEON vs AVX2 vs Scalar across all 15 character templates
   ExpEngine engine;
   constexpr int kImgW = 230;
   constexpr int kImgH = 25;
@@ -979,9 +979,9 @@ TEST(ExpEngineTest, NeonKernelsMatchScalarAndAvx2BitExact) {
     neon_verify::MatchTemplateNccNeon(synth_img.data(), kImgW, kImgH, kImgW, tpl, resp_neon.data());
     ExpEngine::MatchTemplateNccScalar(synth_img.data(), kImgW, kImgH, kImgW, tpl, resp_scalar.data());
     EXPECT_EQ(resp_avx2, resp_neon)
-        << "NEON vs AVX2 NCC bit-exact mismatch for char '" << kv.first << "'";
+        << "NEON vs AVX2 NCC mismatch for char '" << kv.first << "'";
     EXPECT_EQ(resp_avx2, resp_scalar)
-        << "Scalar vs AVX2 NCC bit-exact mismatch for char '" << kv.first << "'";
+        << "Scalar vs AVX2 NCC mismatch for char '" << kv.first << "'";
   }
 }
 #endif

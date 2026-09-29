@@ -325,7 +325,7 @@ class ExpMetricsEngine:
 
     Handles initial EXP capture, baseline tracking, auto-start triggering,
     auto-pause inactivity detection, mathematical cross-validation against
-    the EXP table, and self-healing cumulative rate calculations.
+    the EXP table, and cumulative rate calculations.
 
     Args:
       exp_value: Total EXP points.
@@ -628,7 +628,7 @@ class ExpMetricsEngine:
           if matched_level is not None:
             self.current_level = matched_level
 
-        # Self-healing absolute difference formula:
+        # Cumulative gain from baseline and level-up carry:
         if self.baseline_exp is not None:
           self.total_gained_exp = self.level_up_carry_exp + max(
               0, sample.exp_value - self.baseline_exp
@@ -759,7 +759,7 @@ class ExpMetricsEngine:
     accum_exp_str = f"{self.total_gained_exp:,d}"
     total_gained_str = accum_exp_str
 
-    # 1. 1-minute rate metrics (Instantaneous tachometer)
+    # 1. 1-minute rate metrics
     exp_1m, pct_1m, dt_1m = self._get_window_gain(60.0, now=now)
     if self.state == MeasurementState.IDLE or elapsed <= 0.0:
       rate_1m_exp = 0
@@ -784,7 +784,7 @@ class ExpMetricsEngine:
       proj_10m_exp = 0
       proj_10m_str = "0"
     elif elapsed >= 600.0:
-      # At or past 10 minutes: prediction seamlessly equals 10-min accumulated actual
+      # At or past 10 minutes: projection equals 10-minute accumulated actual
       accum_10m_str = f"{accum_10m_exp:,d}"
       proj_10m_exp = accum_10m_exp
       proj_10m_str = f"{proj_10m_exp:,d}"
@@ -808,7 +808,7 @@ class ExpMetricsEngine:
       proj_60m_exp = 0
       proj_60m_str = "0"
     elif elapsed >= 3600.0:
-      # At or past 60 minutes: prediction seamlessly equals 60-min accumulated actual
+      # At or past 60 minutes: projection equals 60-minute accumulated actual
       accum_60m_str = f"{accum_60m_exp:,d}"
       proj_60m_exp = accum_60m_exp
       proj_60m_str = f"{proj_60m_exp:,d}"

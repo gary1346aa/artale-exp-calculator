@@ -1,7 +1,7 @@
 """macOS window and display capture utilizing CoreGraphics via ctypes.
 
 Complies with the Google Python Style Guide.
-Zero external package dependencies; uses native macOS frameworks.
+Uses native macOS frameworks via ctypes without external package dependencies.
 """
 
 import ctypes
@@ -162,7 +162,7 @@ def find_macos_window_by_title(target_title: str) -> Optional[int]:
         name_lower = name_str.lower()
         combined = f"{owner_str} {name_str}".lower()
 
-        # Robust substring matching across owner name, window title, and game aliases
+        # Substring matching across owner name, window title, and game aliases
         matches = False
         if (
             target_lower in owner_lower

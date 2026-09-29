@@ -1,7 +1,7 @@
 """Debug image exporter for visual inspection of OCR and template matching.
 
 Complies with the Google Python Style Guide.
-Gated strictly behind config.IS_DEV; lazy-imports cv2 on demand.
+Enabled only when config.IS_DEV is True; lazy-imports cv2 on demand.
 """
 
 import os

@@ -1,7 +1,7 @@
-"""Comprehensive code integrity and type-annotation tests.
+"""Code integrity and type-annotation tests.
 
 Complies with the Google Python Style Guide.
-Guarantees that:
+Verifies that:
 1. All modules can be imported without runtime or circular dependency errors.
 2. All type annotations across functions, methods, and classes evaluate eagerly
    without NameError or unresolved references (guarding against PEP 649 deferred

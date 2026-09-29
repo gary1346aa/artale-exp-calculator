@@ -20,7 +20,7 @@ class PythonExpEngineTest(unittest.TestCase):
     self.engine = python_engine.get_engine()
 
   def test_templates_loaded(self) -> None:
-    """Verifies that all 15 pristine character prototypes are loaded."""
+    """Verifies that all 15 character prototypes are loaded."""
     expected_chars = set('0123456789.[]%/')
     loaded_chars = set(self.engine.templates.keys())
     self.assertTrue(expected_chars.issubset(loaded_chars))
@@ -63,7 +63,7 @@ class PythonExpEngineTest(unittest.TestCase):
     self.assertEqual(raw_str, "772097[0.32%]")
 
   def test_bgra_zero_copy_and_static_skip_equivalence(self) -> None:
-    """Verifies 4-channel BGRA zero-copy buffer parsing and static-frame cold skip."""
+    """Verifies 4-channel BGRA buffer parsing and static-frame skip."""
     from core import engine as main_engine
 
     text = "772097[0.32%]"

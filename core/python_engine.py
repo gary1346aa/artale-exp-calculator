@@ -1,4 +1,4 @@
-"""Artale EXP Calculator - Reference Pure Python Recognition Engine.
+"""Artale EXP Calculator - Reference Python Recognition Engine.
 
 Provides the reference template-matching OCR engine used for verification,
 benchmarking, and parity testing against the native C++ SIMD engine.
@@ -15,14 +15,14 @@ import numpy as np
 
 import config
 
-# Load pristine 25px / 21px prototypes from package data
+# Load 25px / 21px character prototypes from package data
 PROTOS_PATH = config.get_resource_path(
     os.path.join("data", "pristine_font_protos.json")
 )
 
 
 class PythonExpEngine:
-  """Reference template-matching engine implemented in pure Python/NumPy."""
+  """Reference template-matching engine implemented in Python and NumPy."""
 
   def __init__(self, protos_path: str = PROTOS_PATH) -> None:
     """Initializes templates from JSON font prototypes."""
@@ -54,7 +54,7 @@ class PythonExpEngine:
     gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
     height, width = gray.shape
 
-    # 1 & 2. Robust multi-scale search using '[', '8', and '%'
+    # 1 & 2. Multi-scale search using '[', '8', and '%'
     best_combo = -1.0
     best_cs = 1.0
     best_by = 0
@@ -125,7 +125,7 @@ class PythonExpEngine:
         ]
         responses[ch] = np.maximum.reduce(r_list)
 
-    # 4. Strict grammar-constrained DP beam search: ^\d+\[\d{1,2}\.\d{1,2}%\]$
+    # 4. Grammar-constrained DP beam search: ^\d+\[\d{1,2}\.\d{1,2}%\]$
     # States:
     # 0: start (expecting first EXP digit 0-9 -> 1)
     # 1: EXP digits (0-9 -> 1, '[' -> 2)
@@ -158,7 +158,7 @@ class PythonExpEngine:
         if (x + 1, st) not in dp or dp[(x + 1, st)][0] < score:
           dp[(x + 1, st)] = (score, x, st, None, 0.0)
 
-        # Allowed transitions based on strict grammar
+        # Allowed state transitions based on grammar
         if st == 0:
           allowed = [(ch, 1) for ch in "0123456789"]
         elif st == 1:
@@ -235,7 +235,7 @@ class PythonExpEngine:
     t1 = time.perf_counter()
     dt_ms = (t1 - t0) * 1000.0
 
-    # Parse EXP value and percentage strictly
+    # Parse EXP value and percentage
     if "[" in raw_str:
       parts = raw_str.split("[", 1)
       exp_digits = parts[0]

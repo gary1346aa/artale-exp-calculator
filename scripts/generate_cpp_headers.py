@@ -1,4 +1,4 @@
-"""Exports pristine character prototypes and EXP logo into C++ header files.
+"""Exports character prototypes and EXP logo into C++ header files.
 
 This script converts data/pristine_font_protos.json and data/real_exp_logo.png
 into embedded C++ static arrays in src/cpp/src/ to avoid runtime filesystem
@@ -102,7 +102,7 @@ def generate_pristine_font_header(json_path: str, output_path: str) -> None:
   os.makedirs(os.path.dirname(output_path), exist_ok=True)
   with open(output_path, 'w', encoding='utf-8') as f:
     f.write('\n'.join(lines))
-  print(f'[SUCCESS] Wrote {len(proto_var_names)} pristine prototypes to {output_path}')
+  print(f'[SUCCESS] Wrote {len(proto_var_names)} character prototypes to {output_path}')
 
 
 def generate_exp_logo_header(image_path: str, output_path: str) -> None:

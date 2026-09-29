@@ -1,4 +1,4 @@
-"""Modern Floating HUD Overlay for Artale EXP Calculator (PyQt6).
+"""Floating HUD Overlay for Artale EXP Calculator (PyQt6).
 
 Complies with the Google Python Style Guide.
 Modularized UI layer interfacing with core.metrics and core.capture.
@@ -102,7 +102,7 @@ def init_application_fonts() -> None:
 
 
 class AppHotkeyFilter(QObject):
-  """Application-wide event filter to capture ⌘6~⌘9 (macOS) or F6~F9 (Windows)."""
+  """Application-wide event filter to capture ⌃6~⌃9 (macOS) or F6~F9 (Windows)."""
 
   def __init__(self, overlay):
     super().__init__()
@@ -197,7 +197,7 @@ class ArtaleExpOverlay(QWidget):
     self.ui_timer.timeout.connect(self._refresh_ui)
     self.ui_timer.start(1000)
 
-    # Global hotkey listener (F6~F9 on Windows, ⌘6~⌘9 on macOS)
+    # Global hotkey listener (F6~F9 on Windows, ⌃6~⌃9 on macOS)
     self.hotkey_worker = HotkeyWorker()
     self.hotkey_worker.f6_pressed.connect(self.on_f6)
     self.hotkey_worker.f7_pressed.connect(self.on_f7)
@@ -298,7 +298,7 @@ class ArtaleExpOverlay(QWidget):
     self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     self.setFixedWidth(int(340 * self.ui_scale))
 
-    # In-window keyboard shortcuts (F6~F9 on Windows, both F6~F9 and ⌘6~⌘9 on macOS)
+    # In-window keyboard shortcuts (F6~F9 on Windows, both F6~F9 and ⌃6~⌃9 on macOS)
     self.shortcuts = []
     shortcut_pairs = [
         (QKeySequence(Qt.Key.Key_F6), self.on_f6),
@@ -318,7 +318,7 @@ class ArtaleExpOverlay(QWidget):
       sc.activated.connect(handler)
       self.shortcuts.append(sc)
 
-    # Outer container with modern vector-smoothed dark glass styling
+    # Outer card container
     # (Note: Avoid QGraphicsDropShadowEffect here because on Windows layered translucent
     # windows, external shadow bounding boxes trigger negative/out-of-bounds dirty rects
     # resulting in 'UpdateLayeredWindowIndirect failed: The parameter is incorrect.')
@@ -343,7 +343,7 @@ class ArtaleExpOverlay(QWidget):
     # State Badge: [計時中] / [已暫停] / [待機中]
     self.lbl_state_badge = SmoothBadge("待機中", self.header_widget)
 
-    # Vector-smoothed Control buttons (F7, F8, F9, Settings, Close)
+    # Header control buttons (F7, F8, F9, Settings, Close)
     self.btn_f7 = SmoothButton(parent=self, icon_name="play")
     self.btn_f7.setToolTip(f"開始 / 暫停 [{config.HOTKEY_LABEL_START_PAUSE}]")
     self.btn_f7.setFixedSize(24, 24)
@@ -553,7 +553,7 @@ class ArtaleExpOverlay(QWidget):
     self.card_layout.addWidget(self.slider_panel)
     self.slider_panel.hide()
 
-    # 6. Footer Bar (strictly visible in Full Mode: Copyright centered)
+    # 6. Footer Bar (visible in Full Mode: Copyright centered)
     self.footer_widget = QWidget(self.outer_card)
     footer_layout = QHBoxLayout(self.footer_widget)
     footer_layout.setContentsMargins(0, 0, 0, 0)
@@ -826,34 +826,6 @@ class ArtaleExpOverlay(QWidget):
     ]:
       act_item = hk_menu.addAction(f"{act_label}\t{act_disp}")
       act_item.triggered.connect(handler)
-
-    menu.addSeparator()
-
-    # UI Scale submenu
-    cur_scale_pct = int(round(self.ui_scale * 100))
-    scale_menu = menu.addMenu(f"縮放大小 ({cur_scale_pct}%)")
-    for sc in [0.75, 0.85, 1.0, 1.15, 1.30, 1.50, 1.75]:
-      sc_pct = int(round(sc * 100))
-      label = f"{sc_pct}% (預設)" if sc == 1.0 else f"{sc_pct}%"
-      act_sc = scale_menu.addAction(label)
-      act_sc.setCheckable(True)
-      act_sc.setChecked(abs(self.ui_scale - sc) < 0.03)
-      act_sc.triggered.connect(lambda checked, s=sc: self.set_ui_scale(s))
-
-    # Opacity submenu
-    cur_opacity_pct = int(round(self.opacity_val * 100))
-    opacity_menu = menu.addMenu(f"透明度 ({cur_opacity_pct}%)")
-    for op in [1.0, 0.95, 0.85, 0.70, 0.55, 0.40]:
-      op_pct = int(round(op * 100))
-      label = (
-          f"{op_pct}% (預設)"
-          if op == 0.95
-          else (f"{op_pct}% (不透明)" if op == 1.0 else f"{op_pct}%")
-      )
-      act_op = opacity_menu.addAction(label)
-      act_op.setCheckable(True)
-      act_op.setChecked(abs(self.opacity_val - op) < 0.03)
-      act_op.triggered.connect(lambda checked, o=op: self.set_ui_opacity(o))
 
     if config.IS_DEV:
       menu.addSeparator()
@@ -1937,7 +1909,7 @@ def main(
 
   init_application_fonts()
 
-  # Configure strictly: Google Sans for Latin/numbers, PingFang TC for Chinese
+  # Configure font families: Google Sans for Latin/numbers, PingFang TC for Chinese
   font = QFont()
   font.setFamilies(["Google Sans", "PingFang TC", "sans-serif"])
   font.setPointSize(10)

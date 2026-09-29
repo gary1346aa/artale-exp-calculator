@@ -148,7 +148,7 @@ bool LocateExpLogo(const uint8_t* bgr_data, int width, int height, int stride, i
   ExtractGraySubRect(bgr_data, width, height, stride, bytes_per_px, 0, strip_y, strip_w, strip_h,
                      out_strip_gray->data());
 
-  // Lossless static-frame skip: if the bottom strip is byte-for-byte identical
+  // Static-frame skip: if the bottom strip is identical
   // to the previous failed cold-search strip, skip the 16-scale NCC search.
   if (last_failed_strip_gray != nullptr &&
       last_failed_strip_gray->size() == out_strip_gray->size() &&

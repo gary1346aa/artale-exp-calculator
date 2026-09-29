@@ -590,7 +590,7 @@ def draw_vector_icon(
     painter.drawLine(QPointF(cx - d, cy + d), QPointF(cx + d, cy - d))
 
   elif icon_name == "autostart":
-    # Auto Start icon: clean continuous circle with bold 'A' centered inside
+    # Auto Start icon: clean continuous circle with 'A' centered inside
     pen_w = max(1.15, size * 0.10)
     pen = QPen(
         color,
@@ -605,20 +605,22 @@ def draw_vector_icon(
     r = size * 0.42
     painter.drawEllipse(QPointF(cx, cy), r, r)
 
-    # Bold 'A' optically centered inside the circle with subpixel precision
-    font_sz = max(6.0, size * 0.48)
-    a_font = QFont("Arial", int(round(font_sz)), QFont.Weight.Bold)
-    painter.setFont(a_font)
-    painter.setPen(color)
-    fm = QFontMetricsF(a_font)
-    tight = fm.tightBoundingRect("A")
-    draw_x = cx - (tight.left() + tight.right()) / 2.0
-    draw_y = cy - (tight.top() + tight.bottom()) / 2.0
-    painter.drawText(QPointF(draw_x, draw_y), "A")
+    # Center 'A' inside the circle using DPI-independent pixel size and QPainterPath bounds
+    a_font = QFont("Arial")
+    a_font.setPixelSize(max(6, int(round(size * 0.56))))
+    a_font.setWeight(QFont.Weight.Normal)
+    a_font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
+    a_path = QPainterPath()
+    a_path.addText(QPointF(0.0, 0.0), a_font, "A")
+    a_br = a_path.boundingRect()
+    a_path.translate(cx - a_br.center().x(), cy - a_br.center().y())
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QBrush(color))
+    painter.drawPath(a_path)
 
 
 class SmoothButton(QPushButton):
-  """QPushButton with vector-smoothed anti-aliased background, vector icons, and hover states."""
+  """QPushButton with anti-aliased background, vector icons, and hover states."""
 
   def __init__(
       self,
@@ -731,7 +733,7 @@ class SmoothButton(QPushButton):
     cy = rect.center().y()
 
     if self.icon_name == "autostart" and self.text():
-      # Auto-start with automotive (A) symbol on left + vector-smoothed text (centered group)
+      # Auto-start with (A) symbol on left and text centered as a group
       ic_size = (
           self.custom_icon_size
           if self.custom_icon_size
@@ -739,10 +741,12 @@ class SmoothButton(QPushButton):
       )
       gap = max(4.0, ic_size * 0.45)
       f = QFont(self.font())
-      f.setWeight(QFont.Weight.Medium)
+      f.setWeight(QFont.Weight.Normal)
       f.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
-      fm = QFontMetricsF(f)
-      text_w = fm.horizontalAdvance(self.text())
+      path = QPainterPath()
+      path.addText(QPointF(0.0, 0.0), f, self.text())
+      br = path.boundingRect()
+      text_w = br.width()
       total_w = ic_size + gap + text_w
       start_x = rect.center().x() - total_w / 2.0
       ic_x = start_x + ic_size / 2.0
@@ -750,10 +754,7 @@ class SmoothButton(QPushButton):
       draw_vector_icon(painter, "autostart", ic_x, cy, fg, ic_size)
 
       text_x = start_x + ic_size + gap
-      tight_text = fm.tightBoundingRect(self.text())
-      draw_text_y = cy - (tight_text.top() + tight_text.bottom()) / 2.0
-      path = QPainterPath()
-      path.addText(QPointF(text_x, draw_text_y), f, self.text())
+      path.translate(text_x - br.left(), cy - br.center().y())
       painter.setPen(Qt.PenStyle.NoPen)
       painter.setBrush(QBrush(fg))
       painter.drawPath(path)
@@ -767,12 +768,14 @@ class SmoothButton(QPushButton):
       draw_vector_icon(painter, self.icon_name, cx, cy, fg, ic_size)
     else:
       painter.setPen(fg)
-      painter.setFont(self.font())
+      f = QFont(self.font())
+      f.setWeight(QFont.Weight.Normal)
+      painter.setFont(f)
       painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
 
 class SmoothBadge(QLabel):
-  """State badge widget with vector-smoothed anti-aliased border, fill, and glyph outlines."""
+  """State badge widget with anti-aliased border, fill, and text outlines."""
 
   def __init__(self, text: str = "", parent=None):
     super().__init__(text, parent)
@@ -832,13 +835,13 @@ class SmoothBadge(QLabel):
     painter.drawRoundedRect(rect, radius, radius)
 
     f = self.font()
-    fm = QFontMetricsF(f)
-    tight = fm.tightBoundingRect(self.text())
-    tx = rect.center().x() - fm.horizontalAdvance(self.text()) / 2.0
-    ty = rect.center().y() - (tight.top() + tight.bottom()) / 2.0
-
     path = QPainterPath()
-    path.addText(QPointF(tx, ty), f, self.text())
+    path.addText(QPointF(0.0, 0.0), f, self.text())
+    br = path.boundingRect()
+    path.translate(
+        rect.center().x() - br.center().x(),
+        rect.center().y() - br.center().y(),
+    )
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QBrush(self.text_color))
     painter.drawPath(path)

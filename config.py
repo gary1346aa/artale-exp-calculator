@@ -67,7 +67,7 @@ DEFAULT_TARGET_WINDOW: str = (
     else "MapleStory Worlds-Artale"
 )
 
-# Typography and fonts: strictly Google Sans for numbers/Latin, PingFang TC for Chinese
+# Typography and fonts: Google Sans for numbers/Latin, PingFang TC for Chinese
 FONT_FAMILY: str = "'PingFang TC'"
 FONT_LATIN: str = "'Google Sans'"
 FONT_CHINESE: str = "'PingFang TC'"
@@ -75,7 +75,7 @@ FONT_FALLBACK: str = "'PingFang TC'"
 
 # Application metadata & About info
 APP_NAME: str = "Artale EXP Calculator"
-APP_VERSION: str = "1.0.0-rc.32"
+APP_VERSION: str = "1.0.0"
 APP_AUTHOR: str = "G8G"
 APP_COPYRIGHT: str = "© 2026 By G8G"
 APP_DISCORD_ID: str = "garyhuang"
@@ -155,10 +155,10 @@ SIMPLE_METRIC_CONFIG: Dict[str, Dict[str, str]] = {
 }
 
 # Default hotkey descriptions
-HOTKEY_LABEL_AUTO_START: str = "⌘6" if sys.platform == "darwin" else "F6"
-HOTKEY_LABEL_START_PAUSE: str = "⌘7" if sys.platform == "darwin" else "F7"
-HOTKEY_LABEL_RESET: str = "⌘8" if sys.platform == "darwin" else "F8"
-HOTKEY_LABEL_SWITCH_MODE: str = "⌘9" if sys.platform == "darwin" else "F9"
+HOTKEY_LABEL_AUTO_START: str = "⌃6" if sys.platform == "darwin" else "F6"
+HOTKEY_LABEL_START_PAUSE: str = "⌃7" if sys.platform == "darwin" else "F7"
+HOTKEY_LABEL_RESET: str = "⌃8" if sys.platform == "darwin" else "F8"
+HOTKEY_LABEL_SWITCH_MODE: str = "⌃9" if sys.platform == "darwin" else "F9"
 
 # Default auto-pause configuration
 DEFAULT_AUTO_PAUSE_ENABLED: bool = True

@@ -118,6 +118,9 @@ coll = COLLECT(
 )
 
 if sys.platform == "darwin":
+  sys.path.insert(0, os.path.abspath("."))
+  import config as _app_cfg
+
   mac_icon = os.path.join("assets", "app_icon.icns")
   if not os.path.exists(mac_icon):
     mac_icon = None
@@ -129,8 +132,8 @@ if sys.platform == "darwin":
       info_plist={
           "CFBundleDisplayName": "Artale EXP Calculator",
           "CFBundleName": "Artale EXP Calculator",
-          "CFBundleShortVersionString": "1.0.0-rc.1",
-          "CFBundleVersion": "1.0.0-rc.1",
+          "CFBundleShortVersionString": _app_cfg.APP_VERSION,
+          "CFBundleVersion": _app_cfg.APP_VERSION,
           "NSHighResolutionCapable": "True",
       },
   )

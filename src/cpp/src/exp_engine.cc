@@ -92,12 +92,12 @@ void ExpEngine::InitializeTemplates() {
 }
 
 // Bilinear interpolation kernel for 8-bit grayscale images.
-// Matches OpenCV's cv2.INTER_LINEAR bit-for-bit:
+// Matches OpenCV's cv2.INTER_LINEAR:
 // 1. Uses 11-bit fixed-point weights (INTER_RESIZE_COEF_BITS = 11, scale =
 // 2048).
 // 2. Uses Banker's rounding (round-half-to-even) via CvRound/_mm_cvtss_si32.
 // 3. Vectorized with AVX2 dual-pipeline 16-pixel unrolling, using direct 16-bit
-//    word loads to eliminate serial VPINSRB dependency chains.
+//    word loads.
 void ExpEngine::ResizeGray(const uint8_t* src, int src_w, int src_h, int src_stride, uint8_t* dst,
                            int dst_w, int dst_h, int dst_stride) {
   if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return;
@@ -1157,7 +1157,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
   const PreparedTemplate& tpl_8 = prepared_templates_.at('8');
   const PreparedTemplate& tpl_pct = prepared_templates_.at('%');
 
-  // 1 & 2. Robust multi-scale search using '[', '8', and '%'
+  // 1 & 2. Multi-scale search using '[', '8', and '%'
   float expected_s = (height > 0) ? (38.0f / static_cast<float>(height)) : 1.0f;
   float s_min = std::max(0.35f, expected_s * 0.65f);
   float s_max = std::min(3.60f, std::max(expected_s * 1.25f, std::min(2.50f, expected_s * 1.45f)));
@@ -1293,7 +1293,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
     }
   }
 
-  // 4. Strict grammar-constrained DP beam search: ^\d+\[\d{1,2}\.\d{1,2}%\]$
+  // 4. Grammar-constrained DP beam search: ^\d+\[\d{1,2}\.\d{1,2}%\]$
   // States:
   // 0: start (expecting first EXP digit 0-9 -> 1)
   // 1: EXP digits (0-9 -> 1, '[' -> 2)
@@ -1327,7 +1327,7 @@ bool ExpEngine::ParseCrop(const uint8_t* gray_crop, int width, int height, int s
         next_blank.ncc = 0.0f;
       }
 
-      // Allowed transitions based on strict grammar
+      // Allowed state transitions based on grammar
       std::vector<std::pair<char, int>> allowed;
       if (st == 0) {
         for (char d = '0'; d <= '9'; ++d)

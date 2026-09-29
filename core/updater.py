@@ -47,7 +47,7 @@ def parse_version_tuple(version_str: str) -> Tuple[int, int, int, int, int]:
   - Official release (e.g. 1.0.0): (1, 0, 0, 1, 0)
   - Release candidate (e.g. 1.0.0-rc.1): (1, 0, 0, 0, 1)
   - Release candidate 2 (e.g. 1.0.0-rc.2): (1, 0, 0, 0, 2)
-  This guarantees: 1.0.0-rc.1 < 1.0.0-rc.2 < 1.0.0.
+  Ordering: 1.0.0-rc.1 < 1.0.0-rc.2 < 1.0.0.
   """
   v = version_str.lstrip("vV").strip()
   match = re.match(
@@ -80,11 +80,11 @@ def select_best_asset(
 
   is_arm = "arm" in machine or "aarch64" in machine
 
-  # Filter out non-archive assets (checksums, manifests, text files, signatures)
+  # Filter out non-archive assets (checksums, manifests, text files, manuals, signatures)
   archive_assets = [
       a for a in assets
       if not a.get("name", "").lower().endswith(
-          (".sha256", ".sha512", ".sha1", ".md5", ".txt", ".json", ".sig")
+          (".sha256", ".sha512", ".sha1", ".md5", ".txt", ".json", ".sig", ".pdf")
       )
   ]
   if not archive_assets:
@@ -193,7 +193,7 @@ def _safe_urlopen(
     timeout: int = 10,
     context: Optional[ssl.SSLContext] = None,
 ):
-  """Opens a URL with robust SSL certificate handling and graceful fallback.
+  """Opens a URL with SSL certificate verification and fallback context.
 
   Attempts to verify certificates first; if SSL certificate verification
   fails (e.g. on macOS without root CA bundles), automatically falls back
