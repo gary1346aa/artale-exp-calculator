@@ -167,11 +167,11 @@ jobs:
             release_date = (Get-Date -Format "yyyy-MM-dd")
             downloads = @{
               "win-x64" = @{
-                url = "https://github.com/${{ github.repository }}/releases/download/$tag/ArtaleExpCalculator-win-x64.zip"
+                url = "https://github.com/gary1346aa/artale-exp-calculator/releases/download/$tag/ArtaleExpCalculator-win-x64.zip"
                 sha256 = $winSha
               }
               "mac-arm64" = @{
-                url = "https://github.com/${{ github.repository }}/releases/download/$tag/ArtaleExpCalculator-mac-arm64.zip"
+                url = "https://github.com/gary1346aa/artale-exp-calculator/releases/download/$tag/ArtaleExpCalculator-mac-arm64.zip"
                 sha256 = $macSha
               }
             }
@@ -184,9 +184,11 @@ jobs:
           Set-Content -Path release_assets/checksums.txt -Value $checksums
           Get-Content release_assets/checksums.txt
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release in Public Repo
         uses: softprops/action-gh-release@v2
         with:
+          repository: gary1346aa/artale-exp-calculator
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           tag_name: ${{ github.ref_name }}
           name: Artale EXP Calculator ${{ github.ref_name }}
           draft: false
