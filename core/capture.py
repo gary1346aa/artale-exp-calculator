@@ -208,6 +208,7 @@ class CaptureWorker(QThread):
         else:
           self.status_changed.emit("搜尋經驗條中...", False)
       except Exception as e:
+        logger.error("Recognition exception occurred in GDI capture: %s", e, exc_info=True)
         self.status_changed.emit(f"辨識異常: {e}", False)
 
   def run(self) -> None:
@@ -257,6 +258,7 @@ class CaptureWorker(QThread):
         else:
           self.status_changed.emit("搜尋經驗條中...", False)
       except Exception as e:
+        logger.error("Recognition exception occurred in Windows Graphics Capture: %s", e, exc_info=True)
         self.status_changed.emit(f"辨識異常: {e}", False)
 
     def on_closed():

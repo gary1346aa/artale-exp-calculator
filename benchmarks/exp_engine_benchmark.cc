@@ -12,6 +12,11 @@
 
 #include "benchmark/benchmark.h"
 #include "src/cpp/src/exp_engine.h"
+#include "src/cpp/src/exp_engine_scalar.h"
+#if defined(__x86_64__) || defined(_M_X64)
+#include "src/cpp/src/exp_engine_avx2.h"
+#include "src/cpp/src/exp_engine_sse41.h"
+#endif
 #include "src/cpp/src/pristine_font_protos.h"
 
 namespace artale {
@@ -211,9 +216,9 @@ std::vector<uint8_t> CreateSampleExpStrip(int width, int height,
 }
 
 // =========================================================================
-// 1. Bilinear Resizing: C++ vs Python/OpenCV
+// 1. Bilinear Resizing: Scalar vs SSE4.1 vs AVX2 vs Python/OpenCV
 // =========================================================================
-static void BM_BilinearResize_Cpp(benchmark::State& state) {
+static void BM_BilinearResize_Scalar(benchmark::State& state) {
   constexpr int kSrcW = 350;
   constexpr int kSrcH = 38;
   constexpr int kDstW = 230;
@@ -222,11 +227,43 @@ static void BM_BilinearResize_Cpp(benchmark::State& state) {
   std::vector<uint8_t> dst(kDstW * kDstH, 0);
 
   for (auto _ : state) {
-    ExpEngine::ResizeGray(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW, kDstH, kDstW);
+    ExpEngine::ResizeGrayScalar(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW, kDstH, kDstW);
     benchmark::DoNotOptimize(dst.data());
   }
 }
-BENCHMARK(BM_BilinearResize_Cpp);
+BENCHMARK(BM_BilinearResize_Scalar);
+
+#if defined(__x86_64__) || defined(_M_X64)
+static void BM_BilinearResize_SSE41(benchmark::State& state) {
+  constexpr int kSrcW = 350;
+  constexpr int kSrcH = 38;
+  constexpr int kDstW = 230;
+  constexpr int kDstH = 25;
+  std::vector<uint8_t> src(kSrcW * kSrcH, 128);
+  std::vector<uint8_t> dst(kDstW * kDstH, 0);
+
+  for (auto _ : state) {
+    ResizeGraySSE41(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW, kDstH, kDstW);
+    benchmark::DoNotOptimize(dst.data());
+  }
+}
+BENCHMARK(BM_BilinearResize_SSE41);
+
+static void BM_BilinearResize_AVX2(benchmark::State& state) {
+  constexpr int kSrcW = 350;
+  constexpr int kSrcH = 38;
+  constexpr int kDstW = 230;
+  constexpr int kDstH = 25;
+  std::vector<uint8_t> src(kSrcW * kSrcH, 128);
+  std::vector<uint8_t> dst(kDstW * kDstH, 0);
+
+  for (auto _ : state) {
+    ResizeGrayAVX2(src.data(), kSrcW, kSrcH, kSrcW, dst.data(), kDstW, kDstH, kDstW);
+    benchmark::DoNotOptimize(dst.data());
+  }
+}
+BENCHMARK(BM_BilinearResize_AVX2);
+#endif
 
 static void BM_BilinearResize_Python(benchmark::State& state) {
   PythonHarness& harness = PythonHarness::Get();
@@ -241,9 +278,9 @@ static void BM_BilinearResize_Python(benchmark::State& state) {
 BENCHMARK(BM_BilinearResize_Python);
 
 // =========================================================================
-// 2. 2D Normalized Cross-Correlation: C++ vs Python/OpenCV
+// 2. 2D Normalized Cross-Correlation: Scalar vs SSE4.1 vs AVX2 vs Python
 // =========================================================================
-static void BM_MatchTemplateNcc_Cpp(benchmark::State& state) {
+static PreparedTemplate MakeTemplate8() {
   const PristinePrototype& proto_8 = kPristinePrototypes[8];
   PreparedTemplate pt;
   pt.character = '8';
@@ -262,7 +299,11 @@ static void BM_MatchTemplateNcc_Cpp(benchmark::State& state) {
     sum_sq += zm * zm;
   }
   pt.norm = static_cast<float>(std::sqrt(sum_sq));
+  return pt;
+}
 
+static void BM_MatchTemplateNcc_Scalar(benchmark::State& state) {
+  PreparedTemplate pt = MakeTemplate8();
   constexpr int kImgW = 230;
   constexpr int kImgH = 25;
   std::vector<float> image(kImgW * kImgH, 50.0f);
@@ -271,11 +312,45 @@ static void BM_MatchTemplateNcc_Cpp(benchmark::State& state) {
   std::vector<float> resp(out_w * out_h, 0.0f);
 
   for (auto _ : state) {
-    ExpEngine::MatchTemplateNcc(image.data(), kImgW, kImgH, kImgW, pt, resp.data());
+    ExpEngine::MatchTemplateNccScalar(image.data(), kImgW, kImgH, kImgW, pt, resp.data());
     benchmark::DoNotOptimize(resp.data());
   }
 }
-BENCHMARK(BM_MatchTemplateNcc_Cpp);
+BENCHMARK(BM_MatchTemplateNcc_Scalar);
+
+#if defined(__x86_64__) || defined(_M_X64)
+static void BM_MatchTemplateNcc_SSE41(benchmark::State& state) {
+  PreparedTemplate pt = MakeTemplate8();
+  constexpr int kImgW = 230;
+  constexpr int kImgH = 25;
+  std::vector<float> image(kImgW * kImgH, 50.0f);
+  int out_w = kImgW - pt.width + 1;
+  int out_h = kImgH - pt.height + 1;
+  std::vector<float> resp(out_w * out_h, 0.0f);
+
+  for (auto _ : state) {
+    MatchTemplateNccSSE41(image.data(), kImgW, kImgH, kImgW, pt, resp.data());
+    benchmark::DoNotOptimize(resp.data());
+  }
+}
+BENCHMARK(BM_MatchTemplateNcc_SSE41);
+
+static void BM_MatchTemplateNcc_AVX2(benchmark::State& state) {
+  PreparedTemplate pt = MakeTemplate8();
+  constexpr int kImgW = 230;
+  constexpr int kImgH = 25;
+  std::vector<float> image(kImgW * kImgH, 50.0f);
+  int out_w = kImgW - pt.width + 1;
+  int out_h = kImgH - pt.height + 1;
+  std::vector<float> resp(out_w * out_h, 0.0f);
+
+  for (auto _ : state) {
+    MatchTemplateNccAVX2(image.data(), kImgW, kImgH, kImgW, pt, resp.data());
+    benchmark::DoNotOptimize(resp.data());
+  }
+}
+BENCHMARK(BM_MatchTemplateNcc_AVX2);
+#endif
 
 static void BM_MatchTemplateNcc_Python(benchmark::State& state) {
   PythonHarness& harness = PythonHarness::Get();

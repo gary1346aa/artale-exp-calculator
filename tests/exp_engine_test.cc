@@ -2,6 +2,11 @@
 // Google C++ Style Guide compliant.
 
 #include "src/cpp/src/exp_engine.h"
+#include "src/cpp/src/exp_engine_scalar.h"
+#if defined(__x86_64__) || defined(_M_X64)
+#include "src/cpp/src/exp_engine_avx2.h"
+#include "src/cpp/src/exp_engine_sse41.h"
+#endif
 
 #if defined(__SSE2__) || defined(_M_X64) || defined(__x86_64__)
 #include <immintrin.h>
@@ -34,6 +39,34 @@ inline int TestCvRound(float value) {
   if (diff < 0.5f) return i;
   return (i % 2 == 0) ? i : i + 1;
 #endif
+}
+
+std::vector<uint8_t> CreateSampleExpStrip(int width, int height,
+                                          const std::string& text = "772097[0.32%]") {
+  std::vector<uint8_t> strip(width * height, 0);
+  int cur_x = 20;
+  int base_y = 6;
+
+  for (char ch : text) {
+    const PristinePrototype* found = nullptr;
+    for (size_t i = 0; i < kNumPristinePrototypes; ++i) {
+      if (kPristinePrototypes[i].character == ch) {
+        found = &kPristinePrototypes[i];
+        break;
+      }
+    }
+    if (!found) continue;
+
+    int char_y = (found->height == 25) ? base_y : (base_y + 2);
+    for (int y = 0; y < found->height; ++y) {
+      for (int x = 0; x < found->width; ++x) {
+        float val = found->float_map[y * found->width + x];
+        strip[(char_y + y) * width + (cur_x + x)] = static_cast<uint8_t>(std::round(val * 255.0f));
+      }
+    }
+    cur_x += (ch == '.') ? 6 : (found->width + 2);
+  }
+  return strip;
 }
 
 TEST(ExpEngineTest, ResizeGrayPreservesUniformValues) {
@@ -107,14 +140,6 @@ void ResizeGrayScalarReference(const uint8_t* src, int src_w, int src_h, int src
     float fy = static_cast<float>((dy + 0.5) * scale_y - 0.5);
     int sy = static_cast<int>(std::floor(fy));
     fy -= sy;
-    if (sy < 0) {
-      fy = 0.0f;
-      sy = 0;
-    }
-    if (sy >= src_h - 1) {
-      fy = 0.0f;
-      sy = src_h - 1;
-    }
     yofs[dy] = sy;
     float c0 = 1.0f - fy;
     float c1 = fy;
@@ -123,8 +148,9 @@ void ResizeGrayScalarReference(const uint8_t* src, int src_w, int src_h, int src
   }
 
   for (int dy = 0; dy < dst_h; ++dy) {
-    int sy0 = yofs[dy];
-    int sy1 = std::min(sy0 + 1, src_h - 1);
+    int sy = yofs[dy];
+    int sy0 = std::max(0, std::min(sy, src_h - 1));
+    int sy1 = std::max(0, std::min(sy + 1, src_h - 1));
     int32_t b0 = ibeta[dy * 2 + 0];
     int32_t b1 = ibeta[dy * 2 + 1];
 
@@ -983,6 +1009,86 @@ TEST(ExpEngineTest, NeonKernelsMatchScalarAndAvx2BitExact) {
     EXPECT_EQ(resp_avx2, resp_scalar)
         << "Scalar vs AVX2 NCC mismatch for char '" << kv.first << "'";
   }
+}
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64)
+TEST(ExpEngineTest, Sse41KernelsMatchScalarAndAvx2BitExact) {
+  // 1. Verify ResizeGray SSE4.1 vs AVX2 and Scalar across all 9 geometries
+  struct SizeCase { int sw, sh, dw, dh; };
+  const SizeCase kCases[] = {
+      {10, 10, 25, 25},   {15, 15, 19, 19},   {30, 20, 25, 17},
+      {33, 33, 49, 49},   {100, 38, 77, 25},  {230, 25, 180, 21},
+      {350, 38, 230, 25}, {416, 16, 988, 38}, {1247, 38, 1247, 38},
+  };
+  for (const auto& sc : kCases) {
+    std::vector<uint8_t> src(sc.sw * sc.sh);
+    for (size_t i = 0; i < src.size(); ++i) src[i] = static_cast<uint8_t>((i * 73 + 19) % 256);
+    std::vector<uint8_t> dst_avx2(sc.dw * sc.dh, 0);
+    std::vector<uint8_t> dst_sse41(sc.dw * sc.dh, 0);
+    std::vector<uint8_t> dst_scalar(sc.dw * sc.dh, 0);
+    ExpEngine::ResizeGray(src.data(), sc.sw, sc.sh, sc.sw, dst_avx2.data(), sc.dw, sc.dh, sc.dw);
+    ResizeGraySSE41(src.data(), sc.sw, sc.sh, sc.sw, dst_sse41.data(), sc.dw, sc.dh, sc.dw);
+    ExpEngine::ResizeGrayScalar(src.data(), sc.sw, sc.sh, sc.sw, dst_scalar.data(), sc.dw, sc.dh, sc.dw);
+    EXPECT_EQ(dst_avx2, dst_sse41) << "SSE4.1 vs AVX2 mismatch at size " << sc.sw << "x" << sc.sh
+                                   << " -> " << sc.dw << "x" << sc.dh;
+    EXPECT_EQ(dst_avx2, dst_scalar) << "Scalar vs AVX2 mismatch at size " << sc.sw << "x" << sc.sh
+                                     << " -> " << sc.dw << "x" << sc.dh;
+  }
+
+  // 2. Verify MatchTemplateNcc SSE4.1 vs AVX2 vs Scalar across all 15 character templates
+  ExpEngine engine;
+  constexpr int kImgW = 230;
+  constexpr int kImgH = 25;
+  std::vector<float> synth_img(kImgW * kImgH);
+  for (size_t i = 0; i < synth_img.size(); ++i) {
+    synth_img[i] = 20.0f + static_cast<float>((i * 97 + 13) % 200);
+  }
+  for (const auto& kv : engine.templates()) {
+    const PreparedTemplate& tpl = kv.second;
+    int out_w = kImgW - tpl.width + 1;
+    int out_h = kImgH - tpl.height + 1;
+    std::vector<float> resp_avx2(out_w * out_h, 0.0f);
+    std::vector<float> resp_sse41(out_w * out_h, 0.0f);
+    std::vector<float> resp_scalar(out_w * out_h, 0.0f);
+    ExpEngine::MatchTemplateNcc(synth_img.data(), kImgW, kImgH, kImgW, tpl, resp_avx2.data());
+    MatchTemplateNccSSE41(synth_img.data(), kImgW, kImgH, kImgW, tpl, resp_sse41.data());
+    ExpEngine::MatchTemplateNccScalar(synth_img.data(), kImgW, kImgH, kImgW, tpl, resp_scalar.data());
+    for (int i = 0; i < out_w * out_h; ++i) {
+      EXPECT_NEAR(resp_avx2[i], resp_sse41[i], 1e-5f)
+          << "SSE4.1 vs AVX2 NCC mismatch for char '" << kv.first << "' at index " << i;
+      EXPECT_EQ(resp_avx2[i], resp_scalar[i])
+          << "Scalar vs AVX2 NCC mismatch for char '" << kv.first << "' at index " << i;
+    }
+  }
+
+  // 3. Verify End-to-End ParseCrop bit-exact results across ISAs
+  // Canonical strip: 350x38 "772097[0.32%]"
+  std::vector<uint8_t> canonical = CreateSampleExpStrip(350, 38, "772097[0.32%]");
+  CropParseResult res_default;
+  ASSERT_TRUE(engine.ParseCrop(canonical.data(), 350, 38, 350, &res_default));
+  EXPECT_EQ(res_default.exp_value, 772097);
+  EXPECT_NEAR(res_default.exp_percent, 0.32, 1e-4);
+  EXPECT_EQ(res_default.raw_string, "772097[0.32%]");
+
+  // Low-Res 1920x720 downscaled strip: 210x19 "444444442[44.44%]"
+  std::vector<uint8_t> base_420 = CreateSampleExpStrip(420, 38, "444444442[44.44%]");
+  std::vector<uint8_t> low_res_avx2(210 * 19, 0);
+  std::vector<uint8_t> low_res_sse41(210 * 19, 0);
+  std::vector<uint8_t> low_res_scalar(210 * 19, 0);
+  ResizeGrayAVX2(base_420.data(), 420, 38, 420, low_res_avx2.data(), 210, 19, 210);
+  ResizeGraySSE41(base_420.data(), 420, 38, 420, low_res_sse41.data(), 210, 19, 210);
+  ExpEngine::ResizeGrayScalar(base_420.data(), 420, 38, 420, low_res_scalar.data(), 210, 19, 210);
+
+  // ResizeGray must be bit-exact
+  EXPECT_EQ(low_res_avx2, low_res_sse41);
+  EXPECT_EQ(low_res_avx2, low_res_scalar);
+
+  CropParseResult res_low_res;
+  ASSERT_TRUE(engine.ParseCrop(low_res_sse41.data(), 210, 19, 210, &res_low_res));
+  EXPECT_EQ(res_low_res.exp_value, 444444442);
+  EXPECT_NEAR(res_low_res.exp_percent, 44.44, 1e-4);
+  EXPECT_EQ(res_low_res.raw_string, "444444442[44.44%]");
 }
 #endif
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(artale_exp_core VERSION 1.0.0 LANGUAGES CXX)
+project(artale_exp_core VERSION 1.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,6 +15,11 @@ include_directories(
 )
 
 add_library(artale_exp_core SHARED
+    src/cpu_features.cc
+    src/exp_engine_scalar.cc
+    src/exp_engine_sse41.cc
+    src/exp_engine_avx2.cc
+    src/exp_engine_neon.cc
     src/exp_engine.cc
     src/artale_exp_core.cc
 )
@@ -22,7 +27,8 @@ add_library(artale_exp_core SHARED
 target_compile_definitions(artale_exp_core PRIVATE ARTALE_EXP_EXPORTS)
 
 if (MSVC)
-    target_compile_options(artale_exp_core PRIVATE /O2 /arch:AVX2)
+    target_compile_options(artale_exp_core PRIVATE /O2)
+    set_source_files_properties(src/exp_engine_avx2.cc PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
     set_target_properties(artale_exp_core PROPERTIES
         OUTPUT_NAME "artale_exp_core"
         PREFIX ""
@@ -33,7 +39,8 @@ elseif (APPLE)
     if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
         message(STATUS "Configuring for Apple Silicon ARM64 NEON")
     else()
-        target_compile_options(artale_exp_core PRIVATE -mavx2 -mfma)
+        set_source_files_properties(src/exp_engine_sse41.cc PROPERTIES COMPILE_OPTIONS "-msse4.1")
+        set_source_files_properties(src/exp_engine_avx2.cc PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
     endif()
     set_target_properties(artale_exp_core PROPERTIES
         OUTPUT_NAME "artale_exp_core"
@@ -41,7 +48,9 @@ elseif (APPLE)
     )
 else()
     # Linux / Windows GCC / Clang
-    target_compile_options(artale_exp_core PRIVATE -O3 -mavx2 -mfma -Wall)
+    target_compile_options(artale_exp_core PRIVATE -O3 -Wall)
+    set_source_files_properties(src/exp_engine_sse41.cc PROPERTIES COMPILE_OPTIONS "-msse4.1")
+    set_source_files_properties(src/exp_engine_avx2.cc PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
     if (WIN32)
         target_link_options(artale_exp_core PRIVATE -static)
         set_target_properties(artale_exp_core PROPERTIES

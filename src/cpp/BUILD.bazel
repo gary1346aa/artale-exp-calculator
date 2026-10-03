@@ -4,9 +4,21 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "exp_engine",
-    srcs = ["src/exp_engine.cc"],
+    srcs = [
+        "src/cpu_features.cc",
+        "src/exp_engine_scalar.cc",
+        "src/exp_engine_sse41.cc",
+        "src/exp_engine_avx2.cc",
+        "src/exp_engine_neon.cc",
+        "src/exp_engine.cc",
+    ],
     hdrs = [
+        "src/cpu_features.h",
         "src/exp_engine.h",
+        "src/exp_engine_scalar.h",
+        "src/exp_engine_sse41.h",
+        "src/exp_engine_avx2.h",
+        "src/exp_engine_neon.h",
         "src/pristine_font_protos.h",
         "src/real_exp_logo_data.h",
     ],

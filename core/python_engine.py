@@ -184,7 +184,7 @@ class PythonExpEngine:
           t = self.templates[ch]
           w = t["w"]
           min_ncc = 0.65 if ch in "1[]" else 0.55
-          min_adv = 4 if ch == "." else (6 if ch in "[]" else max(w, 11))
+          min_adv = 4 if ch == "." else (6 if ch in "[]" else (10 if ch == "1" else max(w, 11)))
           if x + w <= strip_w and x < len(responses[ch]):
             ncc = float(responses[ch][x])
             if ncc >= min_ncc:
@@ -225,7 +225,7 @@ class PythonExpEngine:
       cx, ch, _ = result_chars[i]
       nx, _, _ = result_chars[i + 1]
       w = self.templates[ch]["w"]
-      min_adv = 4 if ch == "." else (6 if ch in "[]" else max(w, 11))
+      min_adv = 4 if ch == "." else (6 if ch in "[]" else (10 if ch == "1" else max(w, 11)))
       gap = nx - (cx + min_adv)
       max_gap = 24 if ch == "%" else 8
       if gap > max_gap:

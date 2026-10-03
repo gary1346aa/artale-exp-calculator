@@ -302,6 +302,7 @@ def parse_frame(bgr_img: Optional[np.ndarray]) -> Optional[ParsedFrame]:
     ParsedFrame containing the recognition results, or None if no valid EXP
     reading was detected.
   """
+  global _use_cpp
   if bgr_img is None:
     return None
 
@@ -323,23 +324,33 @@ def parse_frame(bgr_img: Optional[np.ndarray]) -> Optional[ParsedFrame]:
       buf = np.ascontiguousarray(bgr_img, dtype=np.uint8)
       stride = w * c
 
-    ret = _core_dll.ParseExpFromBuffer(
-        buf.ctypes.data_as(ctypes.c_char_p),
-        w,
-        h,
-        stride,
-        c,
-        ctypes.byref(res),
-    )
-    if ret == 0 and res.success:
-      raw_str = res.exp_string.decode("utf-8", errors="ignore")
-      pct_val = res.exp_percent if res.exp_percent >= 0 else None
-      crop_box = (res.crop_x, res.crop_y, res.crop_w, res.crop_h)
-      logo_box = (res.logo_x, res.logo_y, res.logo_w, res.logo_h)
-      return ParsedFrame(
-          res.exp_value, pct_val, raw_str, res.parse_time_ms, crop_box, logo_box
+    try:
+      ret = _core_dll.ParseExpFromBuffer(
+          buf.ctypes.data_as(ctypes.c_char_p),
+          w,
+          h,
+          stride,
+          c,
+          ctypes.byref(res),
       )
-    return None
+      if ret == 0 and res.success:
+        raw_str = res.exp_string.decode("utf-8", errors="ignore")
+        pct_val = res.exp_percent if res.exp_percent >= 0 else None
+        crop_box = (res.crop_x, res.crop_y, res.crop_w, res.crop_h)
+        logo_box = (res.logo_x, res.logo_y, res.logo_w, res.logo_h)
+        return ParsedFrame(
+            res.exp_value, pct_val, raw_str, res.parse_time_ms, crop_box, logo_box
+        )
+      return None
+    except OSError as e:
+      import logging
+      logger = logging.getLogger(__name__)
+      logger.warning(
+          "Native C++ engine call failed with OSError (%s); disabling native engine and falling back to Python parser",
+          e,
+      )
+      _use_cpp = False
+      return _parse_frame_python(bgr_img)
 
   return _parse_frame_python(bgr_img)
 

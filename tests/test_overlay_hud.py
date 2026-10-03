@@ -659,7 +659,7 @@ class TestOverlayHud(unittest.TestCase):
     labels = [lbl.text() for lbl in dlg.findChildren(QLabel)]
     full_text = " ".join(labels)
     self.assertIn("G8G", full_text)
-    self.assertIn("1.0.0", full_text)
+    self.assertIn(config.APP_VERSION, full_text)
     self.assertIn(config.get_isa_display_name(), full_text)
     self.assertIn("Discord ID", full_text)
     self.assertIn("garyhuang", full_text)
