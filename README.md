@@ -50,7 +50,7 @@ Official release archives and files are available on the [GitHub Releases](https
 
 ## Features
 
-- **Non-Invasive Recognition**: Reads bottom HUD pixels at 1 FPS via Windows Graphics Capture (Windows) and CoreGraphics (macOS) without reading game memory or modifying game files.
+- **Pixel-Based Recognition**: Reads bottom HUD pixels at 1 FPS via Windows Graphics Capture (Windows) and CoreGraphics (macOS) without reading game memory or modifying game files.
 - **Mathematical EXP Table Validation**: Verifies readings against the official Artale Level 1–200 EXP table to prevent single-frame misreads.
 - **Auto-Start & Auto-Pause**: Automatically starts/resumes measurement upon EXP gain and pauses after a configurable idle threshold.
 - **Three HUD Modes**:
