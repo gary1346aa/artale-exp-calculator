@@ -32,26 +32,19 @@ Official release archives and files are available on the [GitHub Releases](https
 | Gesture | Action |
 | :--- | :--- |
 | **Left Double-Click** | **Cycle Display Modes**: Switches between Full Mode (`完整模式`), Game Mode (`遊戲模式`), and Minimal Mode (`極簡模式`). |
-| **Left Click & Drag** | Move the floating HUD window across screens. |
-| **Right-Click** | Open context menu (Reset baseline, Pause/Resume, Settings dialog, About/Update dialog, Quit). |
+| **Left Click & Drag** | Move the floating HUD window across screens (position automatically saved). |
+| **Right-Click** | Open context menu (Display modes, Settings, Hunting History & Characters, About & Update, Quit). |
+| **Ctrl + Wheel** | Adjust HUD scaling (50%–200%). |
+| **Shift/Alt + Wheel** | Adjust HUD background transparency (0%–80%). |
 
-### Keyboard Shortcuts (When HUD is Focused)
-
-| Shortcut | Action |
-| :--- | :--- |
-| `Space` | Toggle Pause / Resume measurement. |
-| `Ctrl+R` (Windows) / `Cmd+R` (macOS) | Reset tracking baseline. |
-| `Ctrl+M` (Windows) / `Cmd+M` (macOS) | Cycle display modes (alternative to Left Double-Click). |
-| `Ctrl+,` (Windows) / `Cmd+,` (macOS) | Open HUD Settings dialog. |
-
-### Global Hotkeys (Usable While in Game)
+### Global Keyboard Shortcuts (Usable While in Game)
 
 | Shortcut (Windows) | Shortcut (macOS) | Action |
-| :--- | :--- | :--- |
-| `Alt + 6` | `Opt + 6` / `Ctrl + 6` | Toggle Pause / Resume |
-| `Alt + 7` | `Opt + 7` / `Ctrl + 7` | Reset Baseline |
-| `Alt + 8` | `Opt + 8` / `Ctrl + 8` | Cycle Display Modes |
-| `Alt + 9` | `Opt + 9` / `Ctrl + 9` | Toggle HUD Visibility |
+| :--- | :---: | :--- |
+| `F6` | `⌃6` | Toggle Auto-Start timer mode |
+| `F7` | `⌃7` | Start / Pause active measurement |
+| `F8` | `⌃8` | Reset measurement baseline and finalize current hunting session |
+| `F9` | `⌃9` | Cycle Display Modes (`完整` $\to$ `遊戲` $\to$ `極簡`) |
 
 ---
 
@@ -64,6 +57,10 @@ Official release archives and files are available on the [GitHub Releases](https
   - **Full Mode (`完整模式`)**: Displays all 10 metrics, EXP progress bar, and controls.
   - **Game Mode (`遊戲模式`)**: Displays a customizable subset of metrics with auto-hidden header/controls.
   - **Minimal Mode (`極簡模式`)**: Horizontal compact capsule displaying duration, 10-minute projected rate, and accumulated EXP.
+- **Hunting History & Multi-Character Management**:
+  - Automatically records completed hunting sessions to a local SQLite database (`hunting_history.db`) in Write-Ahead Logging (WAL) mode.
+  - **Multi-Character Support**: Reverse-calculates player level directly from EXP points and percentages. Supports manual character profile creation, customization (ID, job, level), and atomic character merge.
+  - **Offline HTML Analytics Dashboard (`hunting_dashboard.html`)**: Interactive single-page report featuring monotone cubic spline charts, calendar filtering, and session telemetry breakdown.
 - **Integrated In-Place Updater**: Checks for updates from GitHub Releases and updates directly within the application.
 
 ---
